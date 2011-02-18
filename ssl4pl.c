@@ -569,7 +569,7 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   { return ssl_error("digest_lookup");
   }
   EVP_MD_CTX_init( &ctx);
-     
+
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
   if (digest_buffer == NULL)
@@ -596,7 +596,7 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   EVP_MD_CTX_cleanup(&ctx);
   PL_free(digest_buffer);
   return PL_unify_term(hash,
-                       PL_NCHARS, digest_length, digest);
+                       PL_NCHARS, (size_t)digest_length, digest);
 }
 
 static int
@@ -615,7 +615,7 @@ unify_name(term_t term, X509_NAME* name)
           PL_unify_term(item,
                         PL_FUNCTOR, FUNCTOR_equals2,
                         PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(e->object)),
-                        PL_NCHARS, entry_data->length, entry_data->data)
+                        PL_NCHARS, (size_t)entry_data->length, entry_data->data)
            ))
        return FALSE;
   }
@@ -649,7 +649,7 @@ unify_crl(term_t term, X509_CRL* crl)
                       PL_FUNCTOR, FUNCTOR_issuername1,
                       PL_TERM, issuer,
                       PL_FUNCTOR, FUNCTOR_signature1,
-                      PL_NCHARS, crl->signature->length, crl->signature->data,
+                      PL_NCHARS, (size_t)crl->signature->length, crl->signature->data,
                       PL_FUNCTOR, FUNCTOR_hash1,
                       PL_TERM, hash,
                       PL_FUNCTOR, FUNCTOR_revocations1,
@@ -668,7 +668,7 @@ unify_crl(term_t term, X509_CRL* crl)
                 unify_asn1_time(revocation_date, revoked->revocationDate) &&
                 PL_unify_term(item,
                               PL_FUNCTOR, FUNCTOR_revoked2,
-                              PL_NCHARS, n, p,
+                              PL_NCHARS, (size_t)n, p,
                               PL_TERM, revocation_date));
      if (BIO_reset(mem) != 1)
      {
@@ -728,7 +728,7 @@ unify_certificate(term_t cert, X509* data)
     {  if (!(PL_unify_list(list, item, list) &&
              PL_unify_term(item,
                            PL_FUNCTOR, FUNCTOR_serial1,
-                           PL_NCHARS, n, p)
+                           PL_NCHARS, (size_t)n, p)
               ))
           return FALSE;
     } else
@@ -754,7 +754,7 @@ unify_certificate(term_t cert, X509* data)
   if (!(PL_unify_list(list, item, list) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_signature1,
-                      PL_NCHARS, data->signature->length, data->signature->data)
+                      PL_NCHARS, (size_t)data->signature->length, data->signature->data)
          ))
      return FALSE;
 

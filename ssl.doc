@@ -196,18 +196,46 @@ if successful.
 \end{description}
 
 
-\section{Using SSL to provide HTTPS}
+\section{Using SSL to provide and access HTTPS}
 
 This packages installs the library \pllib{http/http_ssl_plugin.pl}
 alongside the http package. This library is a plugin for
-\pllib{http/thread_httpd.pl} that makes the threaded HTTP server support
-HTTPS, which is simply HTTP over an SSL socket.  The HTTP server is
-started in HTTPS mode by adding an option \const{ssl} to http_server/2.
-The argument of the \const{ssl} option is an option list passed to
-ssl_init/3. Here is an example that uses the demo certificates
-distributed with the SSL package.
+\pllib{http/thread_httpd.pl} and \pllib{http/http_open.pl} that enables
+these libraries to serve and access HTTPS services. Note that HTTPS is
+simply HTTP over an SSL socket.
+
+
+\subsection{Accessing an HTTPS server}
+
+Accessing an =|https://|= server can be achieved using the code skeleton
+below.  See ssl_context/3 for the \term{cert_verify_hook}{:Hook} option.
 
 \begin{code}
+:- use_module(library(http/http_open)).
+:- use_module(library(http/http_ssl_plugin)).
+
+cert_verify(_SSL, _ProblemCert, _AllCerts, _FirstCert, _Error) :-
+	format(user_error, 'Accepting certificate~n', []).
+
+	...,
+	http_open(HTTPS_url, In,
+		  [ cert_verify_hook(cert_verify)
+		  ]),
+	...
+\end{code}
+
+
+\subsection{Creating an HTTPS server}
+
+The HTTP server is started in HTTPS mode by adding an option \const{ssl}
+to http_server/2. The argument of the \const{ssl} option is an option
+list passed to ssl_init/3. Here is an example that uses the demo
+certificates distributed with the SSL package.
+
+\begin{code}
+:- use_module(library(http/thread_httpd)).
+:- use_module(library(http/http_ssl_plugin)).
+
 https_server(Port, Options) :-
         http_server(reply,
                     [ port(Port),
