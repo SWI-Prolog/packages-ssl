@@ -281,6 +281,12 @@ installed prior to building SWI-Prolog and \file{rules.mk} must
 be edited to reflect the position of the header and libraries if
 they are not in the standard search path.
 
+\section{Multithreading}
+OpenSSL is not intrinsically threadsafe, but can be made so by providing
+some callbacks for managing locking. These callbacks are installed when the 
+ssl4pl library is loaded, and will overwrite any existing callbacks.
+
+When the ssl4pl library is unloaded, the original callbacks will be restored.
 
 \section{Acknowledgments}
 
