@@ -903,20 +903,13 @@ ssl_lib_init(void)
     }
 #endif
 
+#ifdef _REENTRANT
+    ssl_thread_setup();
+#endif
+
     return 0;
 }
 
-int
-ssl_lib_exit(void)
-/*
- * One-time library exit calls
- */
-{
-#ifdef __SWI_PROLOG__
-    nbio_cleanup();
-#endif
-    return 0;
-}
 
 /*
  * BIO routines for SSL over streams
@@ -1198,6 +1191,8 @@ code is based on mttest.c distributed with the OpenSSL library.
 
 static pthread_mutex_t *lock_cs;
 static long *lock_count;
+static void (*old_locking_callback)(int, int, const char*, int) = NULL;
+static unsigned long (*old_id_callback)(void) = NULL;
 
 static void
 pthreads_locking_callback(int mode, int type, const char *file, int line)
@@ -1242,6 +1237,8 @@ ssl_thread_setup(void)
     pthread_mutex_init(&(lock_cs[i]), NULL);
   }
 
+  old_id_callback = CRYPTO_get_id_callback();
+  old_locking_callback = CRYPTO_get_locking_callback();
 #ifndef __WINDOWS__
   CRYPTO_set_id_callback(pthreads_thread_id);
 #endif
@@ -1258,6 +1255,30 @@ ssl_thread_init(void)
 }
 
 #endif /*_REENTRANT*/
+
+
+int
+ssl_lib_exit(void)
+/*
+ * One-time library exit calls
+ */
+{
+#ifdef __SWI_PROLOG__
+    nbio_cleanup();
+#endif
+
+/*
+ * If the module is being unloaded, we should remove callbacks pointing to 
+ * our address space
+ */
+#ifdef _REENTRANT
+#ifndef __WINDOWS__
+  CRYPTO_set_id_callback(old_id_callback);
+#endif
+  CRYPTO_set_locking_callback(old_locking_callback);
+#endif
+    return 0;
+}
 
 
 /***********************************************************************

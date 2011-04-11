@@ -1087,35 +1087,6 @@ pl_cert_verify_hook(PL_SSL *config,
 }
 
 
-		 /*******************************
-		 *	       INIT		*
-		 *******************************/
-
-static BOOL initialised  = FALSE;
-
-static int
-threads_init()
-{ LOCK();
-  if ( initialised )
-  { UNLOCK();
-    return TRUE;
-  }
-  initialised = TRUE;
-
-#ifdef _REENTRANT
-  if ( !ssl_thread_setup() )
-  { term_t o = PL_new_term_ref();
-
-    PL_put_atom_chars(o, "ssl");
-    return permission_error("setup_threads", "library", o);
-  }
-#endif
-
-  UNLOCK();
-  return TRUE;
-}
-
-
 static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options)
 { atom_t a;
@@ -1136,10 +1107,6 @@ pl_ssl_context(term_t role, term_t config, term_t options)
     r = PL_SSL_CLIENT;
   else
     return domain_error(a, "ssl_role");
-
- if ( !threads_init() )
-    return FALSE;
-
 
   if ( !(conf = ssl_init(r)) )
     return resource_error("memory");
