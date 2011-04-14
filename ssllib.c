@@ -123,7 +123,7 @@ static SSL_PL_STATUS
 ssl_inspect_status(SSL *ssl, int ssl_ret)
 {   int code;
 
-    if (ssl_ret >= 0) {
+    if (ssl_ret > 0) {
         return SSL_PL_OK;
     }
 
@@ -1135,6 +1135,8 @@ ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
 
     do {
         int rbytes = SSL_read(ssl, buf, size);
+        if (rbytes == 0) /* EOF - error, but we handle in prolog */
+          return 0;
         switch(ssl_inspect_status(ssl, rbytes)) {
             case SSL_PL_OK:
                 /* success */
@@ -1161,6 +1163,8 @@ ssl_write(PL_SSL_INSTANCE *instance, const char *buf, int size)
 
     do {
         int wbytes = SSL_write(ssl, buf, size);
+        if (wbytes == 0) /* EOF - error, but we handle in prolog */
+          return 0;
         switch(ssl_inspect_status(ssl, wbytes)) {
             case SSL_PL_OK:
                 /* success */
