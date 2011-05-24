@@ -1029,7 +1029,7 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
    */
 
   unify_conf(av+0, config);
-  if ( PL_call_predicate(NULL, PL_Q_NORMAL, pred, av) )
+  if ( PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) )
   { if ( PL_get_nchars(av+1, &len, &passwd, CVT_ALL) )
     { if ( len >= (unsigned int)size )
 	PL_warning("pem_passwd too long");
@@ -1070,7 +1070,7 @@ pl_cert_verify_hook(PL_SSL *config,
   val = ( unify_certificate(av+1, cert) &&
           unify_certificates(av+2, av+3, stack) &&
 	  PL_unify_atom_chars(av+4, error) &&
-	  PL_call_predicate(NULL, PL_Q_NORMAL, pred, av) );
+	  PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) );
 
   /* free any items still on stack, since X509_STORE_CTX_get1_chain returns a copy */
   sk_X509_pop_free(stack, X509_free);
