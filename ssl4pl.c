@@ -49,7 +49,6 @@ static atom_t ATOM_close_parent;
 
 static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_error2;
-static functor_t FUNCTOR_domain_error2;
 static functor_t FUNCTOR_resource_error1;
 static functor_t FUNCTOR_ssl_error1;
 static functor_t FUNCTOR_existence_error1;
@@ -70,23 +69,6 @@ static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
 static functor_t FUNCTOR_revoked2;
-
-static int
-domain_error(term_t val, const char *type)
-{ term_t ex;
-
-  if ( (ex=PL_new_term_ref()) &&
-       PL_unify_term(ex,
-		     PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_domain_error2,
-		         PL_TERM, val,
-		         PL_CHARS, type,
-		       PL_VARIABLE) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
-
 
 static int
 resource_error(const char *resource)
@@ -134,23 +116,6 @@ permission_error(const char *action, const char *type, term_t obj)
 
   return FALSE;
 }
-
-/* not used now
-static int
-existence_error(term_t resource)
-{ term_t ex;
-
-  if ( (ex=PL_new_term_ref()) &&
-       PL_unify_term(ex,
-		     PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_existence_error1,
-		         PL_TERM, resource,
-		       PL_VARIABLE) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
-*/
 
 static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
 {
@@ -1069,7 +1034,7 @@ pl_ssl_context(term_t role, term_t config, term_t options)
   else if ( a == ATOM_client )
     r = PL_SSL_CLIENT;
   else
-    return domain_error(a, "ssl_role");
+    return PL_domain_error("ssl_role", a);
 
   if ( !(conf = ssl_init(r)) )
     return resource_error("memory");
@@ -1472,7 +1437,6 @@ install_ssl4pl()
 
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
-  FUNCTOR_domain_error2   = PL_new_functor(PL_new_atom("domain_error"), 2);
   FUNCTOR_resource_error1 = PL_new_functor(PL_new_atom("resource_error"), 1);
   FUNCTOR_ssl_error1      = PL_new_functor(PL_new_atom("ssl_error"), 1);
   FUNCTOR_existence_error1 =PL_new_functor(PL_new_atom("existence_error"), 1);
