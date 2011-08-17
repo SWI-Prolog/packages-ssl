@@ -1151,12 +1151,12 @@ pl_ssl_context(term_t role, term_t config, term_t options)
 
       ssl_set_cb_cert_verify(conf, pl_cert_verify_hook, (void *)hook);
     } else if ( name == ATOM_close_parent && arity == 1 )
-    { char* s;
+    { int val;
 
-      if ( !get_char_arg(1, head, &s) )
+      if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
-      ssl_set_close_parent(conf, strcmp(s, "true") == 0);
+      ssl_set_close_parent(conf, val);
     } else
       continue;
   }
