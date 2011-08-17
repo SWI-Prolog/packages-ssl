@@ -53,7 +53,11 @@
 
 thread_httpd:make_socket_hook(Port, Options0, Options) :-
 	memberchk(ssl(SSLOptions), Options0), !,
-	ssl_init(SSL, server, [port(Port)|SSLOptions]),
+	ssl_init(SSL, server,
+		 [ port(Port),
+		   close_parent(true)
+		 | SSLOptions
+		 ]),
 	atom_concat('httpsd@', Port, Queue),
 	Options = [ queue(Queue),
 		    ssl_instance(SSL)
