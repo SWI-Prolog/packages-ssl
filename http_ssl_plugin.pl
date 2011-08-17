@@ -36,6 +36,17 @@
 :- use_module(library(option)).
 :- use_module(thread_httpd).
 
+/** <module> SSL plugin for HTTP libraries
+
+This  module  can  be   loaded    next   to   library(thread_httpd)  and
+library(http_open) to provide secure HTTP   (HTTPS)  services and client
+access.
+
+An example secure server using self-signed  certificates can be found in
+the <plbase>/doc/packages/examples/ssl/https.pl, where <plbase>   is the
+SWI-Prolog installation directory.
+*/
+
 :- multifile
 	thread_httpd:make_socket_hook/3,
 	thread_httpd:accept_hook/2,
