@@ -249,7 +249,7 @@ ssl_new(void)
         new->pl_ssl_role                = PL_SSL_NONE;
 
 	new->sock			= -1;
-        new->closeparent	       	= 0;
+        new->closeparent		= 0;
 
         new->pl_ssl_peer_cert           = NULL;
         new->pl_ssl_ctx                 = NULL;
@@ -269,7 +269,7 @@ ssl_new(void)
         new->pl_ssl_cb_cert_verify_data = NULL;
         new->pl_ssl_cb_pem_passwd       = NULL;
         new->pl_ssl_cb_pem_passwd_data  = NULL;
-	new->magic 		        = SSL_CONFIG_MAGIC;
+	new->magic		        = SSL_CONFIG_MAGIC;
     }
     ssl_deb(1, "Allocated config structure\n");
 
@@ -668,7 +668,7 @@ ssl_exit(PL_SSL *config)
 
       if (config->pl_ssl_ctx)
       { ssl_deb(1, "Calling SSL_CTX_free()\n");
-	SSL_CTX_free(config->pl_ssl_ctx); 	/* doesn't call free hook? */
+	SSL_CTX_free(config->pl_ssl_ctx);	/* doesn't call free hook? */
       }
       else
       { ssl_deb(1, "config without CTX encountered\n");
@@ -916,14 +916,32 @@ ssl_lib_init(void)
  */
 
 /*
- * Read function
+ * Read function.  To allow for setting a timeout on the SSL stream, we
+ * use the timeout of this stream if we do not have a timeout ourselves.
  */
 
 int bio_read(BIO* bio, char* buf, int len)
 {
-   IOSTREAM* stream;
-   stream  = BIO_get_ex_data(bio, 0);
-   return (int)Sfread(buf, sizeof(char), len, stream);
+   IOSTREAM *stream = BIO_get_ex_data(bio, 0);
+   IOSTREAM *ssl_stream = stream->upstream;
+   int rc;
+
+   if ( ssl_stream &&
+	stream->timeout < 0 &&
+	ssl_stream->timeout > 0 )
+   { stream->timeout = ssl_stream->timeout;
+     rc = (int)Sfread(buf, sizeof(char), len, stream);
+     stream->timeout = -1;
+   } else
+   { rc = (int)Sfread(buf, sizeof(char), len, stream);
+   }
+
+   if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
+   { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
+     rc = -1;
+   }
+
+   return rc;
 }
 
 /*
@@ -1272,7 +1290,7 @@ ssl_lib_exit(void)
 #endif
 
 /*
- * If the module is being unloaded, we should remove callbacks pointing to 
+ * If the module is being unloaded, we should remove callbacks pointing to
  * our address space
  */
 #ifdef _REENTRANT
