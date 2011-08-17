@@ -49,9 +49,7 @@ static atom_t ATOM_close_parent;
 
 static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_error2;
-static functor_t FUNCTOR_resource_error1;
 static functor_t FUNCTOR_ssl_error1;
-static functor_t FUNCTOR_existence_error1;
 static functor_t FUNCTOR_permission_error3;
 static functor_t FUNCTOR_ip4;
 static functor_t FUNCTOR_version1;
@@ -69,21 +67,6 @@ static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
 static functor_t FUNCTOR_revoked2;
-
-static int
-resource_error(const char *resource)
-{ term_t ex;
-
-  if ( (ex=PL_new_term_ref()) &&
-       PL_unify_term(ex,
-		     PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_resource_error1,
-		         PL_CHARS, resource,
-		       PL_VARIABLE) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
 
 static int
 ssl_error(const char *id)
@@ -502,7 +485,7 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
   if (digest_buffer == NULL)
-     return resource_error("memory");
+    return PL_resource_error("memory");
 
   /* i2d_X509_CINF will change the value of p. We need to pass in a copy */
   p = digest_buffer;
@@ -568,7 +551,7 @@ unify_crl(term_t term, X509_CRL* crl)
 
   mem = BIO_new(BIO_s_mem());
   if (mem == NULL)
-     return resource_error("memory");
+    return PL_resource_error("memory");
 
   i2a_ASN1_INTEGER(mem, crl->signature);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
@@ -603,7 +586,7 @@ unify_crl(term_t term, X509_CRL* crl)
      {
         BIO_free(mem);
         // The only reason I can imagine this would fail is out of memory
-        return resource_error("memory");
+        return PL_resource_error("memory");
      }
   }
   BIO_free(mem);
@@ -1037,7 +1020,7 @@ pl_ssl_context(term_t role, term_t config, term_t options)
     return PL_domain_error("ssl_role", a);
 
   if ( !(conf = ssl_init(r)) )
-    return resource_error("memory");
+    return PL_resource_error("memory");
   while( PL_get_list(tail, head, tail) )
   { atom_t name;
     int arity;
@@ -1437,9 +1420,7 @@ install_ssl4pl()
 
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
-  FUNCTOR_resource_error1 = PL_new_functor(PL_new_atom("resource_error"), 1);
   FUNCTOR_ssl_error1      = PL_new_functor(PL_new_atom("ssl_error"), 1);
-  FUNCTOR_existence_error1 =PL_new_functor(PL_new_atom("existence_error"), 1);
   FUNCTOR_permission_error3=PL_new_functor(PL_new_atom("permission_error"), 3);
   FUNCTOR_ip4		  = PL_new_functor(PL_new_atom("ip"), 4);
   FUNCTOR_version1	  = PL_new_functor(PL_new_atom("version"), 1);
