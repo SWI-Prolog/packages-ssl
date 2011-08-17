@@ -49,7 +49,6 @@ static atom_t ATOM_close_parent;
 
 static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_error2;
-static functor_t FUNCTOR_type_error2;
 static functor_t FUNCTOR_domain_error2;
 static functor_t FUNCTOR_resource_error1;
 static functor_t FUNCTOR_ssl_error1;
@@ -71,25 +70,6 @@ static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
 static functor_t FUNCTOR_revoked2;
-
-
-
-static int
-type_error(term_t val, const char *type)
-{ term_t ex;
-
-  if ( (ex=PL_new_term_ref()) &&
-       PL_unify_term(ex,
-		     PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_type_error2,
-		         PL_CHARS, type,
-		         PL_TERM, val,
-		       PL_VARIABLE) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
-
 
 static int
 domain_error(term_t val, const char *type)
@@ -183,21 +163,12 @@ static int i2d_X509_CINF_wrapper(void* i, unsigned char** d)
 }
 
 static int
-get_atom_ex(term_t t, atom_t *a)
-{ if ( !PL_get_atom(t, a) )
-    return type_error(t, "atom");
-
-  return TRUE;
-}
-
-
-static int
 get_char_arg(int a, term_t t, char **s)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_atom_chars(t2, s) )
-    return type_error(t2, "atom");
+  if ( !PL_get_chars(t2, s, CVT_ATOM|CVT_EXCEPTION) )
+    return FALSE;
 
   return TRUE;
 }
@@ -208,8 +179,8 @@ get_int_arg(int a, term_t t, int *i)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_integer(t2, i) )
-    return type_error(t2, "integer");
+  if ( !PL_get_integer_ex(t2, i) )
+    return FALSE;
 
   return TRUE;
 }
@@ -220,8 +191,8 @@ get_bool_arg(int a, term_t t, int *i)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_bool(t2, i) )
-    return type_error(t2, "boolean");
+  if ( !PL_get_bool_ex(t2, i) )
+    return FALSE;
 
   return TRUE;
 }
@@ -233,7 +204,7 @@ get_file_arg(int a, term_t t, char **f)
 
   _PL_get_arg(a, t, t2);
   if ( !PL_get_file_name(t2, f, PL_FILE_EXIST) )
-    return type_error(t2, "file");	/* TBD: check errors */
+    return FALSE;
 
   return TRUE;
 }
@@ -246,7 +217,7 @@ get_predicate_arg(int a, module_t m, term_t t, int arity, predicate_t *pred)
 
   _PL_get_arg(a, t, t2);
   PL_strip_module(t2, &m, t2);
-  if ( !get_atom_ex(t2, &name) )
+  if ( !PL_get_atom_ex(t2, &name) )
     return FALSE;
 
   *pred = PL_pred(PL_new_functor(name, arity), m);
@@ -265,11 +236,11 @@ recover_public_key(term_t public_t, RSA** rsa)
 
    if(!(PL_get_arg(1, public_t, n_t) &&
         PL_get_arg(2, public_t, e_t)))
-      return type_error(public_t, "public_key");
+      return PL_type_error("public_key", public_t);
 
    if (!(PL_get_atom_chars(n_t, &n) &&
          PL_get_atom_chars(e_t, &e)))
-      return type_error(public_t, "public_key");
+      return PL_type_error("public_key", public_t);
    *rsa = RSA_new();
    BN_hex2bn(&((*rsa)->n), n);
    BN_hex2bn(&((*rsa)->e), e);
@@ -298,7 +269,7 @@ recover_private_key(term_t private_t, RSA** rsa)
         PL_get_arg(6, private_t, dmp1_t) &&
         PL_get_arg(7, private_t, dmq1_t) &&
         PL_get_arg(8, private_t, iqmp_t)))
-      return type_error(private_t, "private_key");
+      return PL_type_error("private_key", private_t);
    ssl_deb(1, "Dismantling key");
    if (!(PL_get_atom_chars(n_t, &n) &&
          PL_get_atom_chars(e_t, &e) &&
@@ -308,7 +279,7 @@ recover_private_key(term_t private_t, RSA** rsa)
          PL_get_atom_chars(dmp1_t, &dmp1) &&
          PL_get_atom_chars(dmq1_t, &dmq1) &&
          PL_get_atom_chars(iqmp_t, &iqmp)))
-      return type_error(private_t, "private_key");
+      return PL_type_error("private_key", private_t);
    ssl_deb(1, "Assembling RSA");
    *rsa = RSA_new();
 
@@ -842,7 +813,7 @@ pl_load_public_key(term_t source, term_t key_t)
   int c;
 
   if ( !PL_get_stream_handle(source, &stream) )
-     return type_error(source, "stream");
+    return FALSE;
   bio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(bio, 0, stream);
 
@@ -888,10 +859,11 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
   char* password_chars;
   int c;
 
-  if (!PL_get_atom_chars(password, &password_chars))
-    return type_error(password, "atom");
+  if ( !PL_get_chars(password, &password_chars,
+		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+    return FALSE;
   if ( !PL_get_stream_handle(source, &stream) )
-     return type_error(source, "stream");
+    return FALSE;
   bio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(bio, 0, stream);
 
@@ -927,7 +899,7 @@ pl_load_crl(term_t source, term_t list)
   int c;
 
   if ( !PL_get_stream_handle(source, &stream) )
-     return type_error(source, "stream");
+    return FALSE;
 
   bio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(bio, 0, stream);
@@ -958,7 +930,7 @@ pl_load_certificate(term_t source, term_t cert)
   int c = 0;
 
   if ( !PL_get_stream_handle(source, &stream) )
-     return type_error(source, "stream");
+    return FALSE;
   bio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(bio, 0, stream);
   /* Determine format */
@@ -996,14 +968,12 @@ get_conf(term_t config, PL_SSL **conf)
   void *ptr;
   PL_SSL *ssl;
 
-  if ( !PL_is_functor(config, FUNCTOR_ssl1) )
-    return type_error(config, "ssl_config");
-  _PL_get_arg(1, config, a);
-  if ( !PL_get_pointer(a, &ptr) )
-    return type_error(config, "ssl_config");
-  ssl = ptr;
-  if ( ssl->magic != SSL_CONFIG_MAGIC )
-    return type_error(config, "ssl_config");
+  if ( !PL_is_functor(config, FUNCTOR_ssl1) ||
+       !PL_get_arg(1, config, a) ||
+       !PL_get_pointer(a, &ptr)	||
+       !(ssl = ptr) ||
+       ssl->magic != SSL_CONFIG_MAGIC )
+    return PL_type_error("ssl_config", config);
 
   *conf = ssl;
 
@@ -1092,7 +1062,7 @@ pl_ssl_context(term_t role, term_t config, term_t options)
   PL_strip_module(options, &module, options);
   tail = PL_copy_term_ref(options);
 
-  if ( !get_atom_ex(role, &a) )
+  if ( !PL_get_atom_ex(role, &a) )
     return FALSE;
   if ( a == ATOM_server )
     r = PL_SSL_SERVER;
@@ -1108,7 +1078,7 @@ pl_ssl_context(term_t role, term_t config, term_t options)
     int arity;
 
     if ( !PL_get_name_arity(head, &name, &arity) )
-      return type_error(head, "ssl_option");
+      return PL_type_error("ssl_option", head);
 
     if ( name == ATOM_password && arity == 1 )
     { char *s;
@@ -1191,8 +1161,8 @@ pl_ssl_context(term_t role, term_t config, term_t options)
       continue;
   }
 
-  if ( !PL_get_nil(tail) )
-    return type_error(tail, "list");
+  if ( !PL_get_nil_ex(tail) )
+    return FALSE;
 
   return unify_conf(config, conf);
 }
@@ -1330,10 +1300,11 @@ foreign_t pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain
   RSA* key;
   int retval;
 
-  if(!PL_get_atom_nchars(cipher_t, &cipher_length, (char**)&cipher))
-     return type_error(cipher_t, "atom");
-  if (!recover_private_key(private_t, &key))
-     return FALSE;
+  if( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
+		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+    return FALSE;
+  if ( !recover_private_key(private_t, &key) )
+    return FALSE;
 
   outsize = RSA_size(key);
   ssl_deb(1, "Output size is going to be %d", outsize);
@@ -1364,10 +1335,11 @@ foreign_t pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t
   RSA* key;
   int retval;
 
-  if(!PL_get_atom_nchars(cipher_t, &cipher_length, (char**)&cipher))
-     return type_error(cipher_t, "atom");
+  if ( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
+		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+    return FALSE;
   if (!recover_public_key(public_t, &key))
-     return FALSE;
+    return FALSE;
 
   outsize = RSA_size(key);
   ssl_deb(1, "Output size is going to be %d", outsize);
@@ -1400,8 +1372,9 @@ foreign_t pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t
 
   ssl_deb(1, "Generating terms");
   ssl_deb(1, "Collecting plaintext");
-  if(!PL_get_atom_nchars(plain_t, &plain_length, (char**)&plain))
-     return type_error(plain_t, "atom");
+  if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
+		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+     return FALSE;
   if (!recover_public_key(public_t, &key))
      return FALSE;
 
@@ -1434,10 +1407,11 @@ foreign_t pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher
   int outsize;
   RSA* key;
   int retval;
-  if(!PL_get_atom_nchars(plain_t, &plain_length, (char**)&plain))
-     return type_error(plain_t, "atom");
+  if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
+		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION))
+    return FALSE;
   if (!recover_private_key(private_t, &key))
-     return FALSE;
+    return FALSE;
 
   outsize = RSA_size(key);
   ssl_deb(1, "Output size is going to be %d", outsize);
@@ -1465,8 +1439,8 @@ static foreign_t
 pl_ssl_debug(term_t level)
 { int l;
 
-  if ( !PL_get_integer(level, &l) )
-    return type_error(level, "integer");
+  if ( !PL_get_integer_ex(level, &l) )
+    return FALSE;
 
   ssl_set_debug(l);
 
@@ -1499,7 +1473,6 @@ install_ssl4pl()
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_domain_error2   = PL_new_functor(PL_new_atom("domain_error"), 2);
-  FUNCTOR_type_error2     = PL_new_functor(PL_new_atom("type_error"), 2);
   FUNCTOR_resource_error1 = PL_new_functor(PL_new_atom("resource_error"), 1);
   FUNCTOR_ssl_error1      = PL_new_functor(PL_new_atom("ssl_error"), 1);
   FUNCTOR_existence_error1 =PL_new_functor(PL_new_atom("existence_error"), 1);
