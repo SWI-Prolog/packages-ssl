@@ -938,6 +938,9 @@ int bio_read(BIO* bio, char* buf, int len)
 
    if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
    { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
+#ifdef ETIMEDOUT
+     errno = ETIMEDOUT;
+#endif
      rc = -1;
    }
 
