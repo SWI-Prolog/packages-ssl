@@ -3,9 +3,10 @@
     Part of SWI-Prolog
 
     Author:        Jan Wielemaker
-    E-mail:        wielemak@science.uva.nl
+    E-mail:        J.Wielemaker@cs.vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 2007, University of Amsterdam
+    Copyright (C): 2007-2011, University of Amsterdam
+			      VU University Amsterdam
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License
@@ -31,6 +32,8 @@
 
 :- module(http_ssl_plugin, []).
 :- use_module(library(ssl)).
+:- use_module(library(debug)).
+:- use_module(library(option)).
 :- use_module(thread_httpd).
 
 :- multifile
@@ -39,6 +42,14 @@
 	thread_httpd:open_client_hook/5,
         http:http_protocol_hook/7.
 
+
+%%	thread_httpd:make_socket_hook(+Port, +OptionsIn, -OptionsOut)
+%%								is semidet.
+%
+%	Hook into http_server/2 to create an   SSL  server if the option
+%	ssl(SSLOptions) is provided.
+%
+%	@see thread_httpd:accept_hook/2 handles the corresponding accept
 
 thread_httpd:make_socket_hook(Port, Options0, Options) :-
 	memberchk(ssl(SSLOptions), Options0), !,
@@ -65,6 +76,15 @@ thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 			      Goal, In, Out,
 			      [peer(Peer), protocol(https)]) :-
 	ssl_open(SSL, Client, In, Out).
+
+
+%%	http:http_protocol_hook(+Scheme, +Parts, +PlainIn, +PlainOut,
+%%				-In, -Out, +Options) is semidet.
+%
+%	Hook for HTTP clients to connect   to  an HTTPS (SSL-based HTTP)
+%	server.
+%
+%	@see http_open/3
 
 http:http_protocol_hook(https, Parts, PlainIn, PlainOut, In, Out, Options):-
         memberchk(host(Host), Parts),
