@@ -1144,7 +1144,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
     return NULL;
 }
 
-int
+ssize_t
 ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
 /*
  * Perform read on SSL session
@@ -1172,7 +1172,7 @@ ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
     } while (1);
 }
 
-int
+ssize_t
 ssl_write(PL_SSL_INSTANCE *instance, const char *buf, int size)
 /*
  * Perform write on SSL session

@@ -123,10 +123,10 @@ int              ssl_close       (PL_SSL_INSTANCE *instance);
 
 int             ssl_accept       (PL_SSL *config, void *addr, socklen_t *addrlen);
 int             ssl_connect      (PL_SSL *config);
-int             ssl_read         ( PL_SSL_INSTANCE *instance
+ssize_t         ssl_read         ( PL_SSL_INSTANCE *instance
                                  , char *buf, int size
                                  ) ;
-int             ssl_write        ( PL_SSL_INSTANCE *instance
+ssize_t         ssl_write        ( PL_SSL_INSTANCE *instance
                                  , const char *buf, int size
                                  ) ;
 int		ssl_thread_setup (void);
