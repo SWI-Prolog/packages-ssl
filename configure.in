@@ -10,8 +10,9 @@ AC_SUBST(PLTARGETS)
 m4_include([../ac_swi_c.m4])
 
 case "$PLARCH" in
-    *-mingw32*)
-        LIBS="-lgdi32 $LIBS"
+    *-win32|*-win64)
+        AC_CHECK_LIB(ws2_32, main)
+        AC_CHECK_LIB(gdi32, main)
         ;;
 esac
 
