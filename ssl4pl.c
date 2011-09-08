@@ -1200,19 +1200,19 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   if ( !get_conf(config, &conf) )
     return FALSE;
   if ( !PL_get_stream_handle(org_in, &sorg_in) )
-     return FALSE;
+    return FALSE;
   if ( !PL_get_stream_handle(org_out, &sorg_out) )
-     return FALSE;
+    return FALSE;
   if ( !(instance = ssl_ssl_bio(conf, sorg_in, sorg_out)) )
-  {  PL_release_stream(sorg_in);
-     PL_release_stream(sorg_out);
-     return FALSE;			/* TBD: error */
+  { PL_release_stream(sorg_in);
+    PL_release_stream(sorg_out);
+    return ssl_error("ssl_verify");
   }
 
   if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
-  {  PL_release_stream(sorg_in);
-     PL_release_stream(sorg_out);
-    return FALSE;
+  { PL_release_stream(sorg_in);
+    PL_release_stream(sorg_out);
+    return PL_resource_error("memory");
   }
   instance->close_needed++;
   if ( !PL_unify_stream(in, i) )
@@ -1224,8 +1224,8 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   Sset_filter(sorg_in, i);
   PL_release_stream(sorg_in);
   if ( !(o=Snew(instance, SIO_OUTPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
-  {  PL_release_stream(sorg_out);
-    return FALSE;
+  { PL_release_stream(sorg_out);
+    return PL_resource_error("memory");
   }
   instance->close_needed++;
   if ( !PL_unify_stream(out, o) )
