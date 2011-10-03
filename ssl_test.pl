@@ -39,6 +39,7 @@
 :- use_module(library(readutil)).
 
 %:- debug(connection).
+%:- debug(data).
 %:- debug(_).
 
 :- dynamic
@@ -81,7 +82,7 @@ make_server(SSL) :-
 		   cacert_file('etc/demoCA/cacert.pem'),
 		   certificate_file('etc/server/server-cert.pem'),
 		   key_file('etc/server/server-key.pem'),
-               	   cert_verify_hook(get_cert_verify),
+		   cert_verify_hook(get_cert_verify),
 %		   password('apenoot1'),
 		   pem_password_hook(get_server_pwd)
 		 ]).
@@ -107,7 +108,9 @@ copy_client(In, Out) :-
 	read_line_to_codes(In, Line),
 	(   Line == end_of_file
 	->  true
-	;   debug(data, 'Got ~s~n', [Line]),
+	;   debug(data, 'SERVER: Got ~s~n', [Line]),
+	    sleep(1.5),
+	    debug(data, 'SERVER: writing ~s~n', [Line]),
 	    format(Out, '~s~n', [Line]),
 	    flush_output(Out),
 	    (	Line = "bye"
@@ -146,32 +149,41 @@ client :-
 
 client_loop(SSL) :-
 	ssl_open(SSL, In, Out),
+        set_stream(In, timeout(1)),
 	Message = 'Hello world',
-	write_server(Message, In, Out),
 	write_server(Message, In, Out),
 	(   option(timeout(T))
 	->  Wait is T*2,
 	    sleep(Wait)
 	;   true
 	),
-	numlist(1, 10000, L),
-	term_to_atom(L, Long),
-	write_server(Long, In, Out),
 	write_server(bye, In, Out),
 	close(In),
 	close(Out).
 
 write_server(Message, In, Out) :-
+	debug(data, 'CLIENT: writing: ~q~n', [Message]),
 	write(Out, Message), nl(Out),
-        flush_output(Out),
+	flush_output(Out),
+	sleep(0.1),
+	catch(read_from_server(In, Message),
+	      E,
+	      debug(data, 'CLIENT: exception: ~q~n', [E])),
+	(   var(E)
+	->  true
+	;   read_from_server(In, Message)
+        ).
+
+read_from_server(In, Message) :-
+	debug(data, 'CLIENT: attempting to read reply from stream~n', []),
 	read_line_to_codes(In, Line),
 	(   Line == end_of_file
 	->  true
 	;   atom_codes(Reply, Line),
-	    debug(data, 'Got ~q~n', [Reply]),
+	    debug(data, 'CLIENT: Got ~q~n', [Reply]),
 	    (	Reply == Message
 	    ->	true
-	    ;	format(user_error, 'ERROR: Sent ~q, Got ~q~n',
+	    ;	format(user_error, 'CLIENT: ERROR: Sent ~q, Got ~q~n',
 		       [Message, Reply])
 	    )
 	).

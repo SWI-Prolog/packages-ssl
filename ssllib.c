@@ -918,6 +918,12 @@ ssl_lib_init(void)
 /*
  * Read function.  To allow for setting a timeout on the SSL stream, we
  * use the timeout of this stream if we do not have a timeout ourselves.
+ *
+ * Note that if the underlying stream received a timeout, we lift this
+ * error to the ssl stream and clear the error on the underlying stream.
+ * This way, the normal timeout-reset in pl-stream.c correctly resets
+ * a possible timeout.  See also test_ssl.c.  Patch and analysis by
+ * Keri Harris.
  */
 
 int bio_read(BIO* bio, char* buf, int len)
@@ -938,10 +944,7 @@ int bio_read(BIO* bio, char* buf, int len)
 
    if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
    { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
-#ifdef ETIMEDOUT
-     errno = ETIMEDOUT;
-#endif
-     rc = -1;
+     Sclearerr(stream);
    }
 
    return rc;
