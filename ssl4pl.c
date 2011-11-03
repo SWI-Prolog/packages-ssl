@@ -62,6 +62,7 @@ static functor_t FUNCTOR_public_key5;
 static functor_t FUNCTOR_private_key8;
 static functor_t FUNCTOR_key1;
 static functor_t FUNCTOR_hash1;
+static functor_t FUNCTOR_next_update1;
 static functor_t FUNCTOR_signature1;
 static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
@@ -454,10 +455,10 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
   time_tm.tm_yday = 0;
   time_tm.tm_isdst = 0;  /* No DST adjustment requested, though mktime might do it anyway */
   result = mktime(&time_tm);
+  /* mktime assumes that the time_tm contains information for localtime. Convert back to UTC: */
   if ((time_t)-1 != result)
-  { if (time_tm.tm_isdst != 0)
-        result -= 3600; /* if mktime has adjusted the time for DST, adjust it back 1 hour*/
-     result += lSecondsFromUTC; /* Add in the UTC offset, or should we return UTC time? */
+  { result += lSecondsFromUTC; /* Add in the UTC offset of the original value */
+    result -= timezone; /* Adjust for localtime */
   } else
   { ssl_deb(2, "mktime() failed");
     return FALSE;
@@ -543,6 +544,8 @@ unify_crl(term_t term, X509_CRL* crl)
   term_t issuer = PL_new_term_ref();
   term_t revocations = PL_new_term_ref();
   term_t list = PL_copy_term_ref(revocations);
+  term_t next_update = PL_new_term_ref();
+
   int result = 1;
   long n;
   unsigned char* p;
@@ -556,23 +559,26 @@ unify_crl(term_t term, X509_CRL* crl)
   i2a_ASN1_INTEGER(mem, crl->signature);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
         unify_hash(hash, crl->sig_alg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
+        unify_asn1_time(next_update, X509_CRL_get_nextUpdate(crl)) &&
         PL_unify_term(term,
-                      PL_LIST, 4,
+                      PL_LIST, 5,
                       PL_FUNCTOR, FUNCTOR_issuername1,
                       PL_TERM, issuer,
                       PL_FUNCTOR, FUNCTOR_signature1,
                       PL_NCHARS, (size_t)crl->signature->length, crl->signature->data,
                       PL_FUNCTOR, FUNCTOR_hash1,
                       PL_TERM, hash,
+                      PL_FUNCTOR, FUNCTOR_next_update1,
+                      PL_TERM, next_update,
                       PL_FUNCTOR, FUNCTOR_revocations1,
                       PL_TERM, revocations)))
   {
      return FALSE;
   }
-
   for (i = 0; i < sk_X509_REVOKED_num(info->revoked); i++)
   {
      X509_REVOKED* revoked = sk_X509_REVOKED_value(info->revoked, i);
+     BIO_reset(mem);
      i2a_ASN1_INTEGER(mem, revoked->serialNumber);
      result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
                 PL_unify_list(list, item, list) &&
@@ -1433,6 +1439,7 @@ install_ssl4pl()
   FUNCTOR_public_key5     = PL_new_functor(PL_new_atom("public_key"), 5);
   FUNCTOR_private_key8    = PL_new_functor(PL_new_atom("private_key"), 8);
   FUNCTOR_hash1	          = PL_new_functor(PL_new_atom("hash"), 1);
+  FUNCTOR_next_update1    = PL_new_functor(PL_new_atom("next_update"), 1);
   FUNCTOR_signature1      = PL_new_functor(PL_new_atom("signature"), 1);
   FUNCTOR_equals2         = PL_new_functor(PL_new_atom("="), 2);
   FUNCTOR_crl1            = PL_new_functor(PL_new_atom("crl"), 1);
