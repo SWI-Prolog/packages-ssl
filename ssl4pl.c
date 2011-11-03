@@ -578,7 +578,7 @@ unify_crl(term_t term, X509_CRL* crl)
   for (i = 0; i < sk_X509_REVOKED_num(info->revoked); i++)
   {
      X509_REVOKED* revoked = sk_X509_REVOKED_value(info->revoked, i);
-     BIO_reset(mem);
+     (void)BIO_reset(mem);
      i2a_ASN1_INTEGER(mem, revoked->serialNumber);
      result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
                 PL_unify_list(list, item, list) &&
