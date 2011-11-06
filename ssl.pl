@@ -3,9 +3,10 @@
     Part of SWI-Prolog
 
     Author:        Jan Wielemaker
-    E-mail:        jan@swi.psy.uva.nl
+    E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 2004, SWI-Prolog Foundation
+    Copyright (C): 2004-2011, SWI-Prolog Foundation
+			      VU University Amsterdam
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License
@@ -56,8 +57,25 @@
 	ssl_init(-, +, :),
 	ssl_context(+, -, :).
 
+:- predicate_options(ssl_context/3, 3,
+		     [ host(atom),
+		       port(integer),
+		       certificate_file(atom),
+		       key_file(atom),
+		       password(any),
+		       pem_password_hook(callable),
+		       cacert_file(atom),
+		       cert_verify_hook(callable),
+		       cert(boolean),
+		       peer_cert(boolean),
+		       close_parent(boolean)
+		     ]).
+:- predicate_options(ssl_init/3, 3, [pass_to(ssl_context/3, 3)]).
 
-ssl_context(Role, SSL, Options) :-
+/** <module> Secure Socket Layer library
+*/
+
+ssl_context(Role, SSL, Options) :-	% Prolog to exploit meta-predicate
 	'_ssl_context'(Role, SSL, Options).
 
 /*

@@ -96,7 +96,7 @@ What follows is a description of each of these functions and the
 arguments they accept.
 
 \begin{description}
-    \predicate{ssl_context}{3}{+Role, +Options, -SSL}
+    \predicate{ssl_context}{3}{+Role, -SSL, +Options}
 Role with legal values \const{server} or \const{client} denotes
 whether the SSL instance will have a server or client role in the
 established connection. With \arg{Options} various properties of the
@@ -151,6 +151,9 @@ some by both server as client (marked CS).
         Trigger the request of our peer's certificate while establishing
         the SSL layer. This option is automatically turned on in a client
 	SSL socket.
+    \termitem{close_parent}{+Boolean}
+	If \const{true}, close the raw streams if the SSL streams are
+	closed.
 \end{description}
 
     \predicate{ssl_negotiate}{5}{+SSL, +PlainRead, +PlainWrite, -SSLRead, -SSLWrite}
@@ -283,7 +286,7 @@ they are not in the standard search path.
 
 \section{Multithreading}
 OpenSSL is not intrinsically threadsafe, but can be made so by providing
-some callbacks for managing locking. These callbacks are installed when the 
+some callbacks for managing locking. These callbacks are installed when the
 ssl4pl library is loaded, and will overwrite any existing callbacks.
 
 When the ssl4pl library is unloaded, the original callbacks will be restored.
