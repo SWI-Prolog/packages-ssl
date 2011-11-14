@@ -978,12 +978,28 @@ int bio_gets(BIO* bio, char* buf, int len)
 
 int bio_write(BIO* bio, const char* buf, int len)
 {
-   IOSTREAM* stream;
+   IOSTREAM* stream = BIO_get_ex_data(bio, 0);
+   IOSTREAM* ssl_stream = stream->upstream;
    int r;
-   stream  = BIO_get_ex_data(bio, 0);
-   r = (int)Sfwrite(buf, sizeof(char), len, stream);
-   /* OpenSSL expects there to be no buffering when it writes. Flush here */
-   Sflush(stream);
+
+   if ( ssl_stream &&
+	stream->timeout < 0 &&
+	ssl_stream->timeout > 0 )
+   { stream->timeout = ssl_stream->timeout;
+     r = (int)Sfwrite(buf, sizeof(char), len, stream);
+     /* OpenSSL expects there to be no buffering when it writes. Flush here */
+     Sflush(stream);
+     stream->timeout = -1;
+   } else
+   { r = (int)Sfwrite(buf, sizeof(char), len, stream);
+     Sflush(stream);
+   }
+
+   if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
+   { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
+     Sclearerr(stream);
+   }
+
    return r;
 }
 

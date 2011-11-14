@@ -1136,20 +1136,40 @@ pl_ssl_close(PL_SSL_INSTANCE *instance)
 static int
 pl_ssl_control(PL_SSL_INSTANCE *instance, int action, void *data)
 { switch(action)
-  { case SIO_GETFILENO:
-    { if (instance->sread != NULL)
-    {  SOCKET fd = Sfileno(instance->sread);
-       SOCKET *fdp = data;
-       *fdp = fd;
-       return 0;
-    } else if (instance->swrite != NULL)
-    {  SOCKET fd = Sfileno(instance->swrite);
-       SOCKET *fdp = data;
-       *fdp = fd;
-       return 0;
-    }
-    }
-    return -1;
+  {
+#ifdef __WINDOWS__
+    case SIO_GETFILENO:
+      return -1;
+    case SIO_GETWINSOCK:
+      { if (instance->sread != NULL)
+        { (*instance->sread->functions->control)(instance->sread->handle,
+                                                 SIO_GETWINSOCK,
+                                                 data);
+          return 0;
+        } else if (instance->swrite != NULL)
+        { (*instance->swrite->functions->control)(instance->swrite->handle,
+                                                  SIO_GETWINSOCK,
+                                                  data);
+          return 0;
+        }
+      }
+      return -1;
+#else
+    case SIO_GETFILENO:
+      { if (instance->sread != NULL)
+        {  SOCKET fd = Sfileno(instance->sread);
+           SOCKET *fdp = data;
+           *fdp = fd;
+           return 0;
+        } else if (instance->swrite != NULL)
+        {  SOCKET fd = Sfileno(instance->swrite);
+           SOCKET *fdp = data;
+           *fdp = fd;
+           return 0;
+        }
+      }
+      return -1;
+#endif
     case SIO_SETENCODING:
     case SIO_FLUSHOUTPUT:
       return 0;
