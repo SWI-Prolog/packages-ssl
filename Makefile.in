@@ -35,7 +35,7 @@ install:	$(TARGETS) $(LIBPL)
 		  $(INSTALL_PROGRAM) $$f $(DESTDIR)$(SOLIBDIR); \
 		done
 		for f in $(LIBPL); do \
-		  $(INSTALL_DATA) $$f $(PLLIBDIR); \
+		  $(INSTALL_DATA) $$f $(DESTDIR)$(PLLIBDIR); \
 		done
 		mkdir -p $(DESTDIR)$(PLLIBDIR)/http
 		$(INSTALL_DATA) http_ssl_plugin.pl $(DESTDIR)$(PLLIBDIR)/http
