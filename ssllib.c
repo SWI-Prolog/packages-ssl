@@ -794,7 +794,7 @@ ssl_debug(PL_SSL *config)
     return 0;
 }
 
-static int
+int
 ssl_config(PL_SSL *config)
 /*
  * Initialize various SSL layer parameters using the supplied
@@ -1088,12 +1088,6 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
 
     if ((instance = ssl_instance_new(config, sread, swrite)) == NULL) {
         ssl_deb(1, "ssl instance malloc failed\n");
-        return NULL;
-    }
-    /*
-     * Configure SSL behaviour with install configuration parameters
-     */
-    if (ssl_config(config) < 0) {
         return NULL;
     }
 

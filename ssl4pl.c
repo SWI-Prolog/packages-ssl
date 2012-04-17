@@ -1118,6 +1118,9 @@ pl_ssl_context(term_t role, term_t config, term_t options)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
+  if ( ssl_config(conf) < 0 )
+    return FALSE;
+
   return unify_conf(config, conf);
 }
 

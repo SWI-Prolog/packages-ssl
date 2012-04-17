@@ -115,6 +115,7 @@ typedef struct ssl_instance {
 int              ssl_lib_init    (void);
 int              ssl_lib_exit    (void);
 PL_SSL *         ssl_init        (PL_SSL_ROLE role);
+int              ssl_config      (PL_SSL *config);
 int              ssl_socket      (PL_SSL *config);
 PL_SSL_INSTANCE *ssl_ssl_bio	 (PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite);
 PL_SSL_INSTANCE *ssl_ssl         (PL_SSL *config, int sock);
