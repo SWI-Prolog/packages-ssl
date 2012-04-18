@@ -537,14 +537,15 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
             char  issuer [256];
             int   depth;
 
-            depth = X509_STORE_CTX_get_error_depth (ctx);
-            X509_NAME_oneline( X509_get_subject_name(cert)
-                             , subject, sizeof(subject));
-            X509_NAME_oneline( X509_get_issuer_name (cert)
-                             , issuer, sizeof(issuer));
-            ssl_deb(1,  "error:%s\n", error);
+            depth = X509_STORE_CTX_get_error_depth(ctx);
+            X509_NAME_oneline(X509_get_subject_name(cert),
+			      subject, sizeof(subject));
+            X509_NAME_oneline(X509_get_issuer_name (cert),
+			      issuer, sizeof(issuer));
+            ssl_deb(1,   "depth:%d\n", depth);
+            ssl_deb(1,   "error:%s\n", error);
             ssl_deb(1, "subject:%s\n", subject);
-            ssl_deb(1, "issuer:%s\n", issuer);
+            ssl_deb(1,  "issuer:%s\n", issuer);
         }
         ssl_deb(1, "Certificate preverified not ok\n");
     } else {
@@ -705,28 +706,9 @@ ssl_init(PL_SSL_ROLE role)
  * Create SSL context.
  */
 {
-    PL_SSL      * config     = NULL;
-    SSL_METHOD  * ssl_method = NULL;
-    SSL_CTX     * ssl_ctx    = NULL;
-
-#if 0
-    switch (role) {
-        case PL_SSL_SERVER:
-            ssl_method = SSLv23_server_method();
-            break;
-        case PL_SSL_NONE:
-        case PL_SSL_CLIENT:
-            /*
-             * Either v2 or v3, we choose v3 to make the shutdown more
-             * controlled and clean (see util.c)
-             */
-            ssl_method = SSLv3_client_method();
-            break;
-    }
-#else
-    ssl_method = SSLv23_method();
-#endif
-    ssl_ctx = SSL_CTX_new(ssl_method);
+    PL_SSL           * config    = NULL;
+    const SSL_METHOD *ssl_method = SSLv23_method();
+    SSL_CTX          *ssl_ctx    = SSL_CTX_new(ssl_method);
 
     if (!ssl_ctx) {
         ERR_print_errors_pl();
