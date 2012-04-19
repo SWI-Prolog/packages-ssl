@@ -463,7 +463,7 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
   { ssl_deb(2, "mktime() failed");
     return FALSE;
   }
-  return PL_unify_integer(term, result);
+  return PL_unify_int64(term, result);
 }
 
 static int
