@@ -27,7 +27,7 @@ SSLOBJ=		ssl4pl.o ssllib.o ../clib/nonblockio.o ../clib/error.o
 all:		$(TARGETS)
 
 ssl4pl.@SO@:	$(SSLOBJ)
-		$(LD) $(LDSOFLAGS) -o $@ $(SSLOBJ) $(LIBS)
+		$(LD) $(LDSOFLAGS) -o $@ $(SSLOBJ) $(LIBS) $(LIBPLSO)
 
 install:	$(TARGETS) $(LIBPL)
 		mkdir -p $(DESTDIR)$(SOLIBDIR)
