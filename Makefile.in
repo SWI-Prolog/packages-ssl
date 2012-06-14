@@ -58,9 +58,9 @@ pdf-install:	install-examples
 		$(INSTALL) -m 644 $(DOC).pdf $(DESTDIR)$(PKGDOCDIR)
 
 install-examples::
-		mkdir -p $(DESTDIR)$(PKGEXDIR)
-		$(INSTALL_DATA) $(EXAMPLES) $(DESTDIR)$(PKGEXDIR)
-		cp -r etc $(DESTDIR)$(PKGEXDIR)
+		mkdir -p $(DESTDIR)$(PKGEXDIR)/ssl
+		$(INSTALL_DATA) $(EXAMPLES) $(DESTDIR)$(PKGEXDIR)/ssl
+		cp -r etc $(DESTDIR)$(PKGEXDIR)/ssl
 
 uninstall::
 		(cd $(SOLIBDIR) && rm -f $(TARGETS))
