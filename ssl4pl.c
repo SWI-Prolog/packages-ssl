@@ -68,6 +68,11 @@ static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
 static functor_t FUNCTOR_revoked2;
+static functor_t FUNCTOR_session_key1;
+static functor_t FUNCTOR_master_key1;
+static functor_t FUNCTOR_session_id1;
+static functor_t FUNCTOR_client_random1;
+static functor_t FUNCTOR_server_random1;
 
 static int
 ssl_error(const char *id)
@@ -1425,6 +1430,80 @@ pl_ssl_debug(term_t level)
 }
 
 
+static foreign_t
+pl_ssl_session(term_t stream_t, term_t session_t)
+{ IOSTREAM* stream;
+  PL_SSL_INSTANCE* instance;
+  SSL* ssl;
+  SSL_SESSION* session;
+  term_t list_t = PL_copy_term_ref(session_t);
+  term_t node_t = PL_new_term_ref();
+
+  if ( !PL_get_stream_handle(stream_t, &stream) )
+     return FALSE;
+  if ( stream->functions != &ssl_funcs )
+  { PL_release_stream(stream);
+    return PL_domain_error("ssl_stream", stream_t);
+  }
+
+  instance = stream->handle;
+  PL_release_stream(stream);
+
+  if ( !(ssl = instance->ssl) ||
+       !(session = SSL_get_session(ssl)) )
+    return PL_existence_error("ssl_session", stream_t);
+
+  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+    return FALSE;
+  if ( !PL_unify_term(node_t,
+		      PL_FUNCTOR, FUNCTOR_version1,
+		        PL_INTEGER, (int)session->ssl_version))
+     return FALSE;
+
+  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+    return FALSE;
+  if ( !PL_unify_term(node_t,
+		      PL_FUNCTOR, FUNCTOR_session_key1,
+		        PL_NCHARS, session->key_arg_length, session->key_arg))
+    return FALSE;
+
+  if ( !PL_unify_list_ex(list_t, node_t, list_t))
+    return FALSE;
+  if ( !PL_unify_term(node_t,
+		      PL_FUNCTOR, FUNCTOR_master_key1,
+		        PL_NCHARS, session->master_key_length,
+		                   session->master_key))
+     return FALSE;
+
+  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+    return FALSE;
+  if ( !PL_unify_term(node_t,
+                     PL_FUNCTOR, FUNCTOR_session_id1,
+		       PL_NCHARS, session->session_id_length,
+		                  session->session_id) )
+    return FALSE;
+  if ( ssl->s3 != NULL ) /* If the connection is SSLv2?! */
+  { if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+      return FALSE;
+    if ( !PL_unify_term(node_t,
+			PL_FUNCTOR, FUNCTOR_client_random1,
+			  PL_NCHARS, SSL3_RANDOM_SIZE, ssl->s3->client_random) )
+      return FALSE;
+
+    if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+      return FALSE;
+    if ( !PL_unify_term(node_t,
+			PL_FUNCTOR, FUNCTOR_server_random1,
+			  PL_NCHARS, SSL3_RANDOM_SIZE, ssl->s3->server_random) )
+      return FALSE;
+  }
+
+  return PL_unify_nil_ex(list_t);
+}
+
+
+
+
 
 		 /*******************************
 		 *	     INSTALL		*
@@ -1468,6 +1547,11 @@ install_ssl4pl()
   FUNCTOR_crl1            = PL_new_functor(PL_new_atom("crl"), 1);
   FUNCTOR_revoked2        = PL_new_functor(PL_new_atom("revoked"), 2);
   FUNCTOR_revocations1    = PL_new_functor(PL_new_atom("revocations"), 1);
+  FUNCTOR_session_key1    = PL_new_functor(PL_new_atom("session_key"), 1);
+  FUNCTOR_master_key1     = PL_new_functor(PL_new_atom("master_key"), 1);
+  FUNCTOR_session_id1     = PL_new_functor(PL_new_atom("session_id"), 1);
+  FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
+  FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
 
   PL_register_foreign("_ssl_context",	3, pl_ssl_context,    0);
   PL_register_foreign("ssl_exit",	1, pl_ssl_exit,	      0);
@@ -1475,6 +1559,7 @@ install_ssl4pl()
   PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
+  PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
   PL_register_foreign("load_crl",       2, pl_load_crl,      0);
   PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);

@@ -156,23 +156,54 @@ some by both server as client (marked CS).
 	closed.
 \end{description}
 
-    \predicate{ssl_negotiate}{5}{+SSL, +PlainRead, +PlainWrite, -SSLRead, -SSLWrite}
-Once a connection is established and a read/write stream pair is available,
-(\arg{PlainRead} and \arg{PlainWrite}), this predicate can be called to
-negotiate an SSL session over the streams. If the negotiation is successful,
- \arg{SSLRead} and \arg{SSLWrite} are returned.
+    \predicate{ssl_negotiate}{5}{+SSL, +PlainRead, +PlainWrite,
+				 -SSLRead, -SSLWrite}
+Once a connection is established and a read/write stream pair is
+available, (\arg{PlainRead} and \arg{PlainWrite}), this predicate can be
+called to negotiate an SSL session over the streams. If the negotiation
+is successful, \arg{SSLRead} and \arg{SSLWrite} are returned.
 
     \predicate{ssl_exit}{1}{+SSL}
 Clean up all resources related to the SSLinstance.
 
+    \predicate{ssl_session}{2}{+Stream, -Session}
+Retrieves (debugging) properties from the SSL context associated with
+\arg{Stream}. If \arg{Stream} is not an SSL stream, the predicate
+raises a domain error. \arg{Session} is a list of properties,
+containing the following members:
+
+    \begin{description}
+	\termitem{ssl_version}{Version}
+	The negotiated version of the session.
+	\termitem{session_key}{Key}
+	The key material used in SSLv2 connections (if present).
+	\termitem{master_key}{Key}
+	The key material comprising the master secret. This is generated
+	from the server_random, client_random and pre-master key.
+	\termitem{client_random}{Random}
+	The random data selected by the client during handshaking.
+	\termitem{server_random}{Random}
+	The random data selected by the server during handshaking.
+	\termitem{session_id}{SessionId}
+	The SSLv3 session ID. Note that if ECDHE is being used
+	(which is the default for newer versions of OpenSSL),
+	this data will not actually be sent to the server.
+    \end{description}
+
     \predicate{load_certificate}{2}{+Stream, -Certificate}
-Loads a certificate from a PEM- or DER-encoded stream, returning a term which will unify with the same certificate if presented in cert_verify_hook. A certificate is a list containing the following terms: issuer_name/1, hash/1, signature/1, version/1, notbefore/1, notafter/1, serial/1, subject/1 and key/1. subject/1 and issuer_name are both lists of =/2 terms representing the name.
+Loads a certificate from a PEM- or DER-encoded stream, returning a term
+which will unify with the same certificate if presented in
+cert_verify_hook. A certificate is a list containing the following
+terms: issuer_name/1, hash/1, signature/1, version/1, notbefore/1,
+notafter/1, serial/1, subject/1 and key/1. subject/1 and issuer_name are
+both lists of =/2 terms representing the name.
 
     \predicate{load_crl}{2}{+Stream, -CRL}
-Loads a CRL from a PEM- or DER-encoded stream, returning a term containing terms hash/1, signature/1, issuer_name/1 and revocations/1, which is a list of revoked/2 terms. Each revoked/2 term is of the form revoked(+Serial, DateOfRevocation)
-
+Loads a CRL from a PEM- or DER-encoded stream, returning a term
+containing terms hash/1, signature/1, issuer_name/1 and revocations/1,
+which is a list of revoked/2 terms. Each revoked/2 term is of the form
+revoked(+Serial, DateOfRevocation)
 \end{description}
-
 
 
 \section{Backward compatibility}

@@ -45,7 +45,8 @@
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite, -SSLRead, -SSLWrite
-	    ssl_exit/1			% +Config
+	    ssl_exit/1,			% +Config
+            ssl_session/2               % +Stream, -Session
 	  ]).
 :- use_module(library(socket)).
 :- use_module(library(error)).
