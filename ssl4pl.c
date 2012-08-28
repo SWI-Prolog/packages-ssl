@@ -1399,7 +1399,7 @@ foreign_t pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher
   ssl_deb(1, "Output size is going to be %d", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext", outsize);
-  if ((outsize = RSA_public_encrypt((int)plain_length, plain, cipher, key, RSA_PKCS1_PADDING)) <= 0)
+  if ((outsize = RSA_private_encrypt((int)plain_length, plain, cipher, key, RSA_PKCS1_PADDING)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(plain);
     RSA_free(key);
