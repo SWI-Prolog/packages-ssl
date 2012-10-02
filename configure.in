@@ -47,6 +47,8 @@ AC_TRY_COMPILE(
    AC_MSG_RESULT(yes),
    AC_MSG_RESULT(no))
 
+AC_CHECK_FUNCS(timegm)
+
 PLTARGETS=`echo $TARGETS | sed "s/4pl\.$SO/.pl/g"`
 
 AC_OUTPUT(Makefile)

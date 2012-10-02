@@ -459,6 +459,16 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
   time_tm.tm_wday = 0;
   time_tm.tm_yday = 0;
   time_tm.tm_isdst = 0;  /* No DST adjustment requested, though mktime might do it anyway */
+
+#ifdef HAVE_TIMEGM
+  result = timegm(&time_tm);
+  if ((time_t)-1 != result)
+  { result += lSecondsFromUTC;
+  } else
+  { ssl_deb(2, "timegm() failed");
+    return FALSE;
+  }
+#else
   result = mktime(&time_tm);
   /* mktime assumes that the time_tm contains information for localtime. Convert back to UTC: */
   if ((time_t)-1 != result)
@@ -468,6 +478,8 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
   { ssl_deb(2, "mktime() failed");
     return FALSE;
   }
+#endif
+
   return PL_unify_int64(term, result);
 }
 
