@@ -293,7 +293,7 @@ https_server(Port, Options) :-
 
 
 \section{Example code}
-\label{sec:examples}
+\label{sec:ssl-examples}
 
 Examples of a simple server and client (\file{server.pl} and
 \file{client.pl} as well as a simple HTTPS server (\file{https.pl}) can
