@@ -39,6 +39,7 @@ data exchange between Prolog processes over the network.
 
 
 \section{Introduction}
+\label{sec:ssl-intro}
 
 Raw TCP/IP networking is dangerous for two reasons.  It is hard to tell
 whether the body you think you are talking to is indeed the right one and
@@ -55,6 +56,7 @@ and client sockets.
 
 
 \section{About SSL}
+\label{sec:ssl-about}
 
 The SWI-Prolog SSL interface is built on top of the
 \url[OpenSSL]{http://www.openssl.org/} library. This library is commonly
@@ -67,6 +69,7 @@ found at \url{http://www.tldp.org/HOWTO/SSL-Certificates-HOWTO/}
 
 
 \section{Overview of the Prolog API}
+\label{sec:ssl-prolog-api}
 
 An SSL server and client can be built with the following (abstracted)
 predicate calls:
@@ -207,6 +210,7 @@ revoked(+Serial, DateOfRevocation)
 
 
 \section{Backward compatibility}
+\label{sec:ssl-compatibility}
 
 There are some predicates included to provide an API similar to the one
 exposed by a previous version of the library.
@@ -231,6 +235,7 @@ if successful.
 
 
 \section{Using SSL to provide and access HTTPS}
+\label{sec:ssl-https}
 
 This packages installs the library \pllib{http/http_ssl_plugin.pl}
 alongside the http package. This library is a plugin for
@@ -240,6 +245,7 @@ simply HTTP over an SSL socket.
 
 
 \subsection{Accessing an HTTPS server}
+\label{sec:ssl-https-client}
 
 Accessing an =|https://|= server can be achieved using the code skeleton
 below.  See ssl_context/3 for the \term{cert_verify_hook}{:Hook} option.
@@ -260,6 +266,7 @@ cert_verify(_SSL, _ProblemCert, _AllCerts, _FirstCert, _Error) :-
 
 
 \subsection{Creating an HTTPS server}
+\label{sec:ssl-https-server}
 
 The HTTP server is started in HTTPS mode by adding an option \const{ssl}
 to http_server/2. The argument of the \const{ssl} option is an option
@@ -298,6 +305,7 @@ tools.
 
 
 \section{Installation}
+\label{sec:ssl-install}
 
 The OpenSSL libraries are \emph{not} part of the SWI-Prolog distribution
 and on systems using packagers with dependency checking, dependency on
@@ -316,6 +324,8 @@ be edited to reflect the position of the header and libraries if
 they are not in the standard search path.
 
 \section{Multithreading}
+\label{sec:ssl-thread-safety}
+
 OpenSSL is not intrinsically threadsafe, but can be made so by providing
 some callbacks for managing locking. These callbacks are installed when the
 ssl4pl library is loaded, and will overwrite any existing callbacks.
@@ -323,6 +333,7 @@ ssl4pl library is loaded, and will overwrite any existing callbacks.
 When the ssl4pl library is unloaded, the original callbacks will be restored.
 
 \section{Acknowledgments}
+\label{sec:ssl-acknowledgments}
 
 The development of the SWI-Prolog SSL interface has been sponsored by
 \url[Scientific Software and Systems Limited]{http://www.sss.co.nz}.
