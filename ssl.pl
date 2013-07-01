@@ -95,7 +95,10 @@ ssl_init2(server, SSL, Options) :-
 	tcp_setopt(Socket, reuseaddr),
         tcp_bind(Socket, Port),
         tcp_listen(Socket, 5),
-        ssl_context(server, SSL, Options),
+        catch(ssl_context(server, SSL, Options),
+              Exception,
+              ( tcp_close_socket(Socket),
+                throw(Exception))),
         Socket = '$socket'(S),
         ssl_put_socket(SSL, S).
 ssl_init2(client, SSL, Options) :-
@@ -105,7 +108,10 @@ ssl_init2(client, SSL, Options) :-
         tcp_socket(Socket),
 	tcp_setopt(Socket, reuseaddr),
         tcp_connect(Socket, Host:Port),
-        ssl_context(client, SSL, Options),
+        catch(ssl_context(client, SSL, Options),
+              Exception,
+              ( tcp_close_socket(Socket),
+                throw(Exception))),
         Socket = '$socket'(S),
         ssl_put_socket(SSL, S).
 

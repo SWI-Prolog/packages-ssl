@@ -806,17 +806,14 @@ ssl_config(PL_SSL *config)
         if (SSL_CTX_use_certificate_file( config->pl_ssl_ctx
                                         , config->pl_ssl_certf
                                         , SSL_FILETYPE_PEM) <= 0) {
-            ERR_print_errors_pl();
             return -2;
         }
         if (SSL_CTX_use_PrivateKey_file( config->pl_ssl_ctx
                                        , config->pl_ssl_keyf
                                        , SSL_FILETYPE_PEM) <= 0) {
-            ERR_print_errors_pl();
             return -3;
         }
         if (SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0) {
-            ERR_print_errors_pl();
             ssl_err("Private key does not match certificate public key\n");
             return -4;
         }

@@ -74,6 +74,7 @@ static functor_t FUNCTOR_session_id1;
 static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 
+
 static int
 ssl_error(const char *id)
 { term_t ex;
@@ -88,6 +89,15 @@ ssl_error(const char *id)
 
   return FALSE;
 }
+
+static int
+raise_last_ssl_error()
+{ char errmsg[1024];
+
+  ERR_error_string_n(ERR_get_error(), errmsg, sizeof(errmsg));
+  return ssl_error(errmsg);
+}
+
 
 static int
 permission_error(const char *action, const char *type, term_t obj)
@@ -1025,7 +1035,7 @@ static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options)
 { atom_t a;
   PL_SSL *conf;
-  int r;
+  int r, rc;
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
@@ -1135,9 +1145,11 @@ pl_ssl_context(term_t role, term_t config, term_t options)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
-  if ( ssl_config(conf) < 0 )
-    return FALSE;
-
+  if ( ( rc = ssl_config(conf) ) < 0 )
+  { if ( rc == -1 )
+      return ssl_error("certificate and private key required but not set\n");
+    return raise_last_ssl_error();
+  }
   return unify_conf(config, conf);
 }
 
