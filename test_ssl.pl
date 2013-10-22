@@ -29,6 +29,14 @@
     the GNU General Public License.
 */
 
+/* doesn't work when called from ../swipl.sh??
+:- module(test_ssl,
+	  [ test_ssl/0,
+	    test_ssl/1,
+	    ssl_server/0
+	  ]).
+*/
+
 :- asserta(user:file_search_path(library, '.')).
 :- asserta(user:file_search_path(library, '../clib')).
 :- asserta(user:file_search_path(foreign, '.')).
@@ -46,23 +54,22 @@
 	option/1,			% Options to test
 	copy_error/1.
 
-test :-
+test_ssl :-
 	make_server(SSL),
 	thread_create(server_loop(SSL), Id, []),
 	client,
 	thread_join(Id, Status),
 	Status == true.
 
-test(N) :-
+test_ssl(N) :-
 	(   between(1, N, _),
-	    test,
+	    test_ssl,
 	    put('.'), flush_output,
 	    fail
 	;   true
 	).
 
-
-server :-
+ssl_server :-
 	make_server(SSL),
         server_loop(SSL).
 

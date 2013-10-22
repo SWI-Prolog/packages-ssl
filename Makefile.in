@@ -84,7 +84,7 @@ clientcert:
 ################################################################
 
 check::
-		$(PL) -q -f ssl_test.pl -F none -g test,halt -t 'halt(1)'
+		$(PL) -q -f test_ssl.pl -F none -g test_ssl,halt -t 'halt(1)'
 
 ################################################################
 # Clean
