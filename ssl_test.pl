@@ -113,7 +113,7 @@ copy_client(In, Out) :-
 	    debug(data, 'SERVER: writing ~s~n', [Line]),
 	    format(Out, '~s~n', [Line]),
 	    flush_output(Out),
-	    (	Line = "bye"
+	    (	atom_codes(bye, Line)
 	    ->	assert(stop_server)
 	    ;	true
 	    ),
