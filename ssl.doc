@@ -223,12 +223,12 @@ Analogous to ssl_context/3.
 Blocks until a connection is made to the host on the port specified by
 the SSL object. \arg{Socket} and \arg{Peer} are then returned.
 
-    \predicate{ssl_open/3}{3}{+SSL, -Read, -Write} (Client)
+    \predicate{ssl_open}{3}{+SSL, -Read, -Write} (Client)
 Connect to the host and port specified by the SSL object, negotiate an
 SSL connection and return Read and Write streams if successful
 
-    \predicate{ssl_open/4}{3}{+SSL, +Socket -Read, -Write} (Server)
-Given the \arg{Socket} returned from \predicate{ssl_accept/3}, negotiate
+    \predicate{ssl_open}{3}{+SSL, +Socket -Read, -Write} (Server)
+Given the \arg{Socket} returned from ssl_accept/3, negotiate
 the connection on the accepted socket and return Read and Write streams
 if successful.
 \end{description}
