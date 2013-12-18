@@ -250,6 +250,7 @@ ssl_new(void)
 
 	new->sock			= -1;
         new->closeparent		= 0;
+        new->atom		        = 0;
 
         new->pl_ssl_peer_cert           = NULL;
         new->pl_ssl_ctx                 = NULL;
@@ -629,28 +630,30 @@ ssl_close(PL_SSL_INSTANCE *instance)
            instance->sock = -1;
         }
 
-        if (instance->sread != NULL) {
-           /* Indicate we are no longer filtering the stream */
-           Sset_filter(instance->sread, NULL);
-           /* Close the stream if requested */
-           if (instance->config->closeparent)
-              Sclose(instance->sread);
-        }
-
         if (instance->swrite != NULL) {
            /* Indicate we are no longer filtering the stream */
            Sset_filter(instance->swrite, NULL);
            /* Close the stream if requested */
-           if (instance->config->closeparent)
-              Sclose(instance->swrite);
+	   if (instance->config->closeparent)
+	     Sclose(instance->swrite);
         }
+
+        if (instance->sread != NULL) {
+           /* Indicate we are no longer filtering the stream */
+           Sset_filter(instance->sread, NULL);
+           /* Close the stream if requested */
+	   if (instance->config->closeparent)
+	     Sclose(instance->sread);
+        }
+        /* Decrease reference count on the context */
+        ssl_deb(4, "Decreasing atom count on %d\n", instance->config->atom);
+        PL_unregister_atom(instance->config->atom);
 
         free(instance);
     }
     ERR_free_strings();
 
     ssl_deb(1, "Controlled close\n");
-
     return ret;
 }
 
@@ -1242,6 +1245,12 @@ pthreads_thread_id(void)
 }
 #endif
 
+// FIXME: ERR_remove_state() is deprecated, but at least some version of OpenSSL (such as my one) do not have ERR_remove_thread_state() yet.
+// For now, I think ERR_remove_state() is the safest bet; ideally we could change the autoconf rules to work out which one to use.
+void
+ssl_thread_exit(void* ignored)
+{ ERR_remove_state(0);
+}
 
 int
 ssl_thread_setup(void)
@@ -1260,7 +1269,7 @@ ssl_thread_setup(void)
   CRYPTO_set_id_callback(pthreads_thread_id);
 #endif
   CRYPTO_set_locking_callback(pthreads_locking_callback);
-
+  PL_thread_at_exit(ssl_thread_exit, NULL, TRUE);
   return TRUE;
 }
 

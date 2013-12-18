@@ -1,11 +1,10 @@
-/*  $Id$
+/*  Part of SWI-Prolog
 
-    Part of SWI-Prolog
-
-    Author:        Jan van der Steen and Jan Wielemaker
-    E-mail:        wielemake@science.uva.nl
+    Author:        Jan van der Steen, Jan Wielemaker and Matt Lilley
+    E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 1985-2007, SWI-Prolog Foundation
+    Copyright (C): 1985-2013, SWI-Prolog Foundation
+			      VU University Amsterdam
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -74,6 +73,7 @@ static functor_t FUNCTOR_session_id1;
 static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 
+static PL_blob_t ssl_context_type;
 
 static int
 ssl_error(const char *id)
@@ -675,11 +675,14 @@ unify_certificate(term_t cert, X509* data)
                            PL_FUNCTOR, FUNCTOR_serial1,
                            PL_NCHARS, (size_t)n, p)
               ))
+        { BIO_vfree(mem);
           return FALSE;
+        }
     } else
       Sdprintf("Failed to print serial - continuing without serial\n");
   } else
     Sdprintf("Failed to allocate BIO for printing - continuing without serial\n");
+  BIO_vfree(mem);
 
   if (!(PL_unify_list(list, item, list) &&
         (subject = PL_new_term_ref()) &&
@@ -712,14 +715,18 @@ unify_certificate(term_t cert, X509* data)
      )
      return FALSE;
 
-  /* X509_extract_key returns a reference to the existing key, not a copy */
+  /* X509_extract_key returns a copy of the existing key */
   key = X509_extract_key(data);
 
-  /* EVP_PKEY_get1_RSA returns a reference to the existing key, not a copy */
+  /* EVP_PKEY_get1_RSA returns a copy of the existing key */
   rsa = EVP_PKEY_get1_RSA(key);
+  EVP_PKEY_free(key);
   if (!(PL_unify_list(list, item, list) &&
         unify_public_key(item, rsa)))
-     return FALSE;
+    { RSA_free(rsa);
+      return FALSE;
+    }
+  RSA_free(rsa);
 
   /* If the cert has a CRL distribution point, return that. If it does not,
      it is not an error
@@ -733,10 +740,11 @@ unify_certificate(term_t cert, X509* data)
     term_t crl_list;
     term_t crl_item;
 
-    distpoints = X509_get_ext_d2i(data, NID_crl_distribution_points, NULL, NULL);
-    /* Loop through the CRL points, putting them into a list */
     if (!PL_unify_list(list, item, list))
        return FALSE;
+
+    distpoints = X509_get_ext_d2i(data, NID_crl_distribution_points, NULL, NULL);
+    /* Loop through the CRL points, putting them into a list */
     crl = PL_new_term_ref();
     crl_list = PL_copy_term_ref(crl);
     crl_item = PL_new_term_ref();
@@ -752,11 +760,15 @@ unify_certificate(term_t cert, X509* data)
           if (name != NULL && name->type == GEN_URI)
           { if (!(PL_unify_list(crl_list, crl_item, crl_list) &&
                   PL_unify_atom_chars(crl_item, (const char *)name->d.ia5->data)))
-                return FALSE;
+            {
+              CRL_DIST_POINTS_free(distpoints);
+              return FALSE;
+            }
           }
         }
       }
     }
+    CRL_DIST_POINTS_free(distpoints);
     if (!PL_unify_nil(crl_list))
        return FALSE;
     if (!PL_unify_term(item,
@@ -936,10 +948,21 @@ pl_load_certificate(term_t source, term_t cert)
 }
 
 static int
-unify_conf(term_t config, PL_SSL *conf)
-{ return PL_unify_term(config,
-		       PL_FUNCTOR, FUNCTOR_ssl1,
-		         PL_POINTER, conf);
+put_conf(term_t config, PL_SSL *conf)
+{  return PL_unify_term(config,
+                        PL_FUNCTOR, FUNCTOR_ssl1,
+                        PL_ATOM, conf->atom);
+}
+
+static int
+register_conf(term_t config, PL_SSL *conf)
+{
+  term_t blob = PL_new_term_ref();
+  PL_put_blob(blob, conf, sizeof(void*), &ssl_context_type);
+  if (!PL_get_atom(blob, &conf->atom))
+     return FALSE;
+  ssl_deb(4, "Atom created: %d\n", conf->atom);
+  return put_conf(config, conf);
 }
 
 
@@ -951,7 +974,7 @@ get_conf(term_t config, PL_SSL **conf)
 
   if ( !PL_is_functor(config, FUNCTOR_ssl1) ||
        !PL_get_arg(1, config, a) ||
-       !PL_get_pointer(a, &ptr)	||
+       !PL_get_blob(a, &ptr, NULL, NULL) ||
        !(ssl = ptr) ||
        ssl->magic != SSL_CONFIG_MAGIC )
     return PL_type_error("ssl_config", config);
@@ -979,7 +1002,7 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
    * hook(+SSL, -Passwd)
    */
 
-  unify_conf(av+0, config);
+  put_conf(av+0, config);
   if ( PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) )
   { if ( PL_get_nchars(av+1, &len, &passwd, CVT_ALL) )
     { if ( len >= (unsigned int)size )
@@ -1016,7 +1039,7 @@ pl_cert_verify_hook(PL_SSL *config,
    * hook(+SSL, +Certificate, +Error)
    */
 
-  unify_conf(av+0, config);
+  put_conf(av+0, config);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
   val = ( unify_certificate(av+1, cert) &&
           unify_certificates(av+2, av+3, stack) &&
@@ -1150,7 +1173,7 @@ pl_ssl_context(term_t role, term_t config, term_t options)
       return ssl_error("certificate and private key required but not set\n");
     return raise_last_ssl_error();
   }
-  return unify_conf(config, conf);
+  return register_conf(config, conf);
 }
 
 
@@ -1211,16 +1234,31 @@ pl_ssl_control(PL_SSL_INSTANCE *instance, int action, void *data)
 }
 
 
+
 static foreign_t
 pl_ssl_exit(term_t config)
-{ PL_SSL *conf;
+{
+  /* This is now handled by GC and this predicate does nothing.
+     See release_ssl()
+  */
+  PL_succeed;
+}
 
-  if ( !get_conf(config, &conf) )
-    return FALSE;
+static
+void acquire_ssl(atom_t atom)
+{
+   ssl_deb(4, "Acquire on atom %d\n", atom);
+}
 
-  ssl_exit(conf);
-
-  return TRUE;
+static int release_ssl(atom_t atom)
+{
+   PL_SSL* conf;
+   size_t size;
+   ssl_deb(4, "Releasing SSL from %d\n", atom);
+   conf = PL_blob_data(atom, &size, NULL);
+   ssl_exit(conf);
+   /* conf is freed by an internal call from OpenSSL via ssl_config_free() */
+   return TRUE;
 }
 
 
@@ -1255,12 +1293,14 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   IOSTREAM *sorg_in, *sorg_out;
   IOSTREAM *i, *o;
   PL_SSL_INSTANCE * instance = NULL;
+
   if ( !get_conf(config, &conf) )
     return FALSE;
   if ( !PL_get_stream_handle(org_in, &sorg_in) )
     return FALSE;
   if ( !PL_get_stream_handle(org_out, &sorg_out) )
     return FALSE;
+
   if ( !(instance = ssl_ssl_bio(conf, sorg_in, sorg_out)) )
   { PL_release_stream(sorg_in);
     PL_release_stream(sorg_out);
@@ -1295,6 +1335,9 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   }
   Sset_filter(sorg_out, o);
   PL_release_stream(sorg_out);
+  /* Increase atom reference count so that the context is not GCd until this session is complete */
+  ssl_deb(4, "Increasing count on %d\n", conf->atom);
+  PL_register_atom(conf->atom);
   return TRUE;
 }
 
@@ -1390,7 +1433,7 @@ foreign_t pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t
   ssl_deb(1, "Allocated %d bytes for ciphertext\n", outsize);
   if ((outsize = RSA_public_encrypt((int)plain_length, plain, cipher, key, RSA_PKCS1_PADDING)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
-    PL_free(plain);
+    PL_free(cipher);
     RSA_free(key);
     return FALSE;
   }
@@ -1425,7 +1468,7 @@ foreign_t pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher
   ssl_deb(1, "Allocated %d bytes for ciphertext", outsize);
   if ((outsize = RSA_private_encrypt((int)plain_length, plain, cipher, key, RSA_PKCS1_PADDING)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
-    PL_free(plain);
+    PL_free(cipher);
     RSA_free(key);
     return FALSE;
   }
@@ -1576,6 +1619,14 @@ install_ssl4pl()
   FUNCTOR_session_id1     = PL_new_functor(PL_new_atom("session_id"), 1);
   FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
+
+  memset(&ssl_context_type, 0, sizeof(ssl_context_type));
+  ssl_context_type.magic = PL_BLOB_MAGIC;
+  ssl_context_type.flags = PL_BLOB_UNIQUE | PL_BLOB_NOCOPY;
+  ssl_context_type.name = "SSL Context";
+  ssl_context_type.release = release_ssl;
+  ssl_context_type.acquire = acquire_ssl;
+
 
   PL_register_foreign("_ssl_context",	3, pl_ssl_context,    0);
   PL_register_foreign("ssl_exit",	1, pl_ssl_exit,	      0);

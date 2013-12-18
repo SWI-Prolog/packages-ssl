@@ -56,6 +56,7 @@ typedef struct pl_ssl {
 
     int			sock;		/* the listening/connected socket */
     int                 closeparent;
+    atom_t              atom;
     /*
      * Context, Certificate, SSL info
      */
