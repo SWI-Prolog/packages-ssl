@@ -1073,7 +1073,7 @@ pl_ssl_context(term_t role, term_t config, term_t options)
   else if ( a == ATOM_client )
     r = PL_SSL_CLIENT;
   else
-    return PL_domain_error("ssl_role", a);
+    return PL_domain_error("ssl_role", role);
 
   if ( !(conf = ssl_init(r)) )
     return PL_resource_error("memory");
