@@ -1084,6 +1084,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
      * Prepare SSL layer
      */
     if ((instance->ssl = SSL_new(config->pl_ssl_ctx)) == NULL) {
+        free(instance);
         return NULL;
     }
     ssl_deb(1, "allocated ssl layer\n");
@@ -1109,7 +1110,9 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
                         continue;
 
                     case SSL_PL_ERROR:
-                       return NULL;
+                        SSL_free(instance->ssl);
+                        free(instance);
+                        return NULL;
                 }
             } while (1);
             break;
@@ -1131,6 +1134,8 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
 	         case SSL_PL_ERROR:
                     Sdprintf("Unrecoverable error: %d\n", SSL_get_error(instance->ssl, ssl_ret));
                     Sdprintf("Additionally, get_error returned %d\n", ERR_get_error());
+                    SSL_free(instance->ssl);
+                    free(instance);
                     return NULL;
                     }
 	   } while (1);
