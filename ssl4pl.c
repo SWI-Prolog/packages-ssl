@@ -551,13 +551,21 @@ unify_name(term_t term, X509_NAME* name)
   for (ni = 0; ni < X509_NAME_entry_count(name); ni++)
   { X509_NAME_ENTRY* e = X509_NAME_get_entry(name, ni);
     ASN1_STRING* entry_data = X509_NAME_ENTRY_get_data(e);
-    if (!(PL_unify_list(list, item, list) &&
-          PL_unify_term(item,
-                        PL_FUNCTOR, FUNCTOR_equals2,
-                        PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(e->object)),
-                        PL_NCHARS, (size_t)entry_data->length, entry_data->data)
-           ))
-       return FALSE;
+    unsigned char *utf8_data;
+    int rc;
+
+    if ( ASN1_STRING_to_UTF8(&utf8_data, entry_data) < 0 )
+      return PL_resource_error("memory");
+
+    rc = ( PL_unify_list(list, item, list) &&
+	   PL_unify_term(item,
+			 PL_FUNCTOR, FUNCTOR_equals2,
+			 PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(e->object)),
+			 PL_UTF8_CHARS, utf8_data)
+	 );
+    OPENSSL_free(utf8_data);
+    if ( !rc )
+      return FALSE;
   }
   return PL_unify_nil(list);
 }
