@@ -418,6 +418,7 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
      memcpy(pbuffer, source, 10);
      pbuffer += 10;
      source += 10;
+     length -= 10;
   } else
   { if (length < 13)
      {  ssl_deb(2, "Unable to parse time - expected at least 13 chars, not %d", length);
@@ -427,6 +428,7 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
      memcpy(pbuffer, source, 10);
      pbuffer += 10;
      source += 10;
+     length -= 10;
   }
   /* Next find end of string */
   if ((*source == 'Z') || (*source == '-') || (*source == '+'))
@@ -448,7 +450,7 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
   if (*source == 'Z')
      lSecondsFromUTC = 0;
   else
-  { if ((*source != '+') && (source[5] != '-'))
+  { if ( length < 6 || (*source != '+' && source[5] != '-') )
      {  ssl_deb(2, "Unable to parse time. Missing UTC offset");
         return FALSE;
      }
