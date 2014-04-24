@@ -1,11 +1,9 @@
-/*  $Id$
+/*  Part of SWI-Prolog
 
-    Part of SWI-Prolog
-
-    Author:        Jan Wielemaker
+    Author:        Jan van der Steen, Matt Lilley and Jan Wielemaker,
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 2004-2011, SWI-Prolog Foundation
+    Copyright (C): 2004-2014, SWI-Prolog Foundation
 			      VU University Amsterdam
 
     This program is free software; you can redistribute it and/or
@@ -44,7 +42,8 @@
             ssl_accept/3,               % +Config, -Socket, -Peer
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
-            ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite, -SSLRead, -SSLWrite
+            ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
+					%          -SSLRead,   -SSLWrite
 	    ssl_exit/1,			% +Config
             ssl_session/2               % +Stream, -Session
 	  ]).
