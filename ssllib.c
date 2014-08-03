@@ -721,10 +721,12 @@ ssl_init(PL_SSL_ROLE role, char* method)
     const SSL_METHOD *ssl_method = NULL;
     SSL_CTX          *ssl_ctx    = NULL;
 
-    if (strcmp(method, "sslv2") == 0)
-      ssl_method = SSLv2_method();
-    else if (strcmp(method, "sslv3") == 0)
+    if (strcmp(method, "sslv3") == 0)
       ssl_method = SSLv3_method();
+#ifdef HAVE_SSLV2_METHOD
+    else if (strcmp(method, "sslv2") == 0)
+      ssl_method = SSLv2_method();
+#endif
 #ifdef SSL_OP_NO_TLSv1
     else if (strcmp(method, "tlsv1") == 0)
       ssl_method = TLSv1_method();
