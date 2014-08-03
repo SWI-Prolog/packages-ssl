@@ -115,7 +115,7 @@ typedef struct ssl_instance {
  */
 int              ssl_lib_init    (void);
 int              ssl_lib_exit    (void);
-PL_SSL *         ssl_init        (PL_SSL_ROLE role);
+PL_SSL *         ssl_init        (PL_SSL_ROLE role, char *method);
 int              ssl_config      (PL_SSL *config);
 int              ssl_socket      (PL_SSL *config);
 PL_SSL_INSTANCE *ssl_ssl_bio	 (PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite);
@@ -144,6 +144,7 @@ BOOL		ssl_set_reuseaddr(PL_SSL *config, BOOL reuse);
 BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
 BOOL		ssl_set_close_parent(PL_SSL *config, int closeparent);
+void            ssl_set_method_options(PL_SSL *config, int options);
 
 BOOL            ssl_set_cb_cert_verify
                                  ( PL_SSL *config

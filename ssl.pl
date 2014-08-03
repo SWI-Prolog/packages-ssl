@@ -75,8 +75,11 @@
 /** <module> Secure Socket Layer library
 */
 
-ssl_context(Role, SSL, Options) :-	% Prolog to exploit meta-predicate
-	'_ssl_context'(Role, SSL, Options).
+%%	ssl_context(+Role, -Config, :Options)
+
+ssl_context(Role, SSL, Module:Options) :-	% Prolog to exploit meta-predicate
+	select_option(method(Method), Options, O1, sslv23),
+	'_ssl_context'(Role, SSL, Module:O1, Method).
 
 /*
   These predicates are here to support backward compatability with the previous
