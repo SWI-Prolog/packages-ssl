@@ -708,7 +708,7 @@ ERR_print_errors_pl()
 
 
 PL_SSL *
-ssl_init(PL_SSL_ROLE role, char* method)
+ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 /*
  * Allocate the holder for our parameters which will specify the
  * configuration parameters and any other statefull parameter.
@@ -718,29 +718,9 @@ ssl_init(PL_SSL_ROLE role, char* method)
  */
 {
     PL_SSL           * config    = NULL;
-    const SSL_METHOD *ssl_method = NULL;
     SSL_CTX          *ssl_ctx    = NULL;
 
-    if (strcmp(method, "sslv3") == 0)
-      ssl_method = SSLv3_method();
-#ifdef HAVE_SSLV2_METHOD
-    else if (strcmp(method, "sslv2") == 0)
-      ssl_method = SSLv2_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1
-    else if (strcmp(method, "tlsv1") == 0)
-      ssl_method = TLSv1_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1_1
-    else if (strcmp(method, "tlsv1_1") == 0)
-      ssl_method = TLSv1_1_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1_2
-    else if (strcmp(method, "tlsv1_2") == 0)
-      ssl_method = TLSv1_2_method();
-#endif
-    else
-      ssl_method = SSLv23_method();
+
     ssl_ctx = SSL_CTX_new(ssl_method);
     if (!ssl_ctx) {
         ERR_print_errors_pl();

@@ -48,6 +48,7 @@ static atom_t ATOM_close_parent;
 static atom_t ATOM_disable_methods;
 
 static atom_t ATOM_sslv2;
+static atom_t ATOM_sslv23;
 static atom_t ATOM_sslv3;
 static atom_t ATOM_tlsv1;
 static atom_t ATOM_tlsv1_1;
@@ -1079,7 +1080,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
-  char* method_name;
+  atom_t method_name;
+  const SSL_METHOD *ssl_method = NULL;
 
   PL_strip_module(options, &module, options);
   tail = PL_copy_term_ref(options);
@@ -1093,10 +1095,32 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   else
     return PL_domain_error("ssl_role", role);
 
-  if (!PL_get_atom_chars(method, &method_name))
+  if (!PL_get_atom(method, &method_name))
      return PL_domain_error("method", method);
+  if (method_name == ATOM_sslv3)
+    ssl_method = SSLv3_method();
+#ifdef HAVE_SSLV2_METHOD
+  else if (method_name == ATOM_sslv2)
+    ssl_method = SSLv2_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1
+  else if (method_name == ATOM_tlsv1)
+    ssl_method = TLSv1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_1
+  else if (method_name == ATOM_tlsv1_1)
+    ssl_method = TLSv1_1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+  else if (method_name == ATOM_tlsv1_2)
+    ssl_method = TLSv1_2_method();
+#endif
+  else if (method_name == ATOM_sslv23)
+    ssl_method = SSLv23_method();
+  else
+    return PL_domain_error("method", method);
 
-  if ( !(conf = ssl_init(r, method_name)) )
+  if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
   while( PL_get_list(tail, head, tail) )
   { atom_t name;
@@ -1193,6 +1217,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
             return FALSE;
          if (option_name == ATOM_sslv2)
             options |= SSL_OP_NO_SSLv2;
+         else if (option_name == ATOM_sslv23)
+            options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;         
          else if (option_name == ATOM_sslv3)
             options |= SSL_OP_NO_SSLv3;
          else if (option_name == ATOM_tlsv1)
@@ -1637,6 +1663,7 @@ install_ssl4pl()
   ATOM_close_parent       = PL_new_atom("close_parent");
   ATOM_disable_methods    = PL_new_atom("disable_methods");
   ATOM_sslv2              = PL_new_atom("sslv2");
+  ATOM_sslv23             = PL_new_atom("sslv23");
   ATOM_sslv3              = PL_new_atom("sslv3");
   ATOM_tlsv1              = PL_new_atom("tlsv1");
   ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
