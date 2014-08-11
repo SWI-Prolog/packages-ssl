@@ -604,6 +604,14 @@ ssl_set_close_parent(PL_SSL *config, int closeparent)
     return config->closeparent = closeparent;
 }
 
+void
+ssl_set_method_options(PL_SSL *config, int options)
+/*
+ * Disable the given options
+ */
+{   SSL_CTX_set_options(config->pl_ssl_ctx, options);
+}
+
 
 int
 ssl_close(PL_SSL_INSTANCE *instance)
@@ -700,7 +708,7 @@ ERR_print_errors_pl()
 
 
 PL_SSL *
-ssl_init(PL_SSL_ROLE role)
+ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 /*
  * Allocate the holder for our parameters which will specify the
  * configuration parameters and any other statefull parameter.
@@ -710,9 +718,10 @@ ssl_init(PL_SSL_ROLE role)
  */
 {
     PL_SSL           * config    = NULL;
-    const SSL_METHOD *ssl_method = SSLv23_method();
-    SSL_CTX          *ssl_ctx    = SSL_CTX_new(ssl_method);
+    SSL_CTX          *ssl_ctx    = NULL;
 
+
+    ssl_ctx = SSL_CTX_new(ssl_method);
     if (!ssl_ctx) {
         ERR_print_errors_pl();
     } else {

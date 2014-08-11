@@ -155,6 +155,17 @@ some by both server as client (marked CS).
     \termitem{close_parent}{+Boolean}
 	If \const{true}, close the raw streams if the SSL streams are
 	closed.
+    \termitem{disable_methods}{+List}
+	A list of methods to disable. Unsupported methods will be ignored. Methods include:
+           \item sslv2
+           \item sslv3
+           \item sslv23 (Which is a comibination of both v2 and v3. Disabling this disables both)
+           \item tlsv1
+           \item tlsv1_1
+           \item tlsv1_2
+    \termitem{method}{+Atom}
+        Specify the explicit method to use when negotiating. For allowed values, see the list for disable_methods above.
+        If not specivied, sslv23 is used.
 
 \end{description}
 

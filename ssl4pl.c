@@ -45,6 +45,14 @@ static atom_t ATOM_key_file;
 static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
+static atom_t ATOM_disable_methods;
+
+static atom_t ATOM_sslv2;
+static atom_t ATOM_sslv23;
+static atom_t ATOM_sslv3;
+static atom_t ATOM_tlsv1;
+static atom_t ATOM_tlsv1_1;
+static atom_t ATOM_tlsv1_2;
 
 static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_error2;
@@ -1065,13 +1073,15 @@ pl_cert_verify_hook(PL_SSL *config,
 
 
 static foreign_t
-pl_ssl_context(term_t role, term_t config, term_t options)
+pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 { atom_t a;
   PL_SSL *conf;
   int r, rc;
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
+  atom_t method_name;
+  const SSL_METHOD *ssl_method = NULL;
 
   PL_strip_module(options, &module, options);
   tail = PL_copy_term_ref(options);
@@ -1085,7 +1095,32 @@ pl_ssl_context(term_t role, term_t config, term_t options)
   else
     return PL_domain_error("ssl_role", role);
 
-  if ( !(conf = ssl_init(r)) )
+  if (!PL_get_atom(method, &method_name))
+     return PL_domain_error("method", method);
+  if (method_name == ATOM_sslv3)
+    ssl_method = SSLv3_method();
+#ifdef HAVE_SSLV2_METHOD
+  else if (method_name == ATOM_sslv2)
+    ssl_method = SSLv2_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1
+  else if (method_name == ATOM_tlsv1)
+    ssl_method = TLSv1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_1
+  else if (method_name == ATOM_tlsv1_1)
+    ssl_method = TLSv1_1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+  else if (method_name == ATOM_tlsv1_2)
+    ssl_method = TLSv1_2_method();
+#endif
+  else if (method_name == ATOM_sslv23)
+    ssl_method = SSLv23_method();
+  else
+    return PL_domain_error("method", method);
+
+  if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
   while( PL_get_list(tail, head, tail) )
   { atom_t name;
@@ -1171,6 +1206,30 @@ pl_ssl_context(term_t role, term_t config, term_t options)
 	return FALSE;
 
       ssl_set_close_parent(conf, val);
+    } else if ( name == ATOM_disable_methods && arity == 1 )
+    { term_t opt_head = PL_new_term_ref();
+      term_t opt_tail = PL_new_term_ref();
+      int options = 0;
+      _PL_get_arg(1, head, opt_tail);
+      while( PL_get_list(opt_tail, opt_head, opt_tail) )
+      {  atom_t option_name;
+         if (!PL_get_atom(opt_head, &option_name))
+            return FALSE;
+         if (option_name == ATOM_sslv2)
+            options |= SSL_OP_NO_SSLv2;
+         else if (option_name == ATOM_sslv23)
+            options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;         
+         else if (option_name == ATOM_sslv3)
+            options |= SSL_OP_NO_SSLv3;
+         else if (option_name == ATOM_tlsv1)
+            options |= SSL_OP_NO_TLSv1;
+         else if (option_name == ATOM_tlsv1_1)
+            options |= SSL_OP_NO_TLSv1_1;
+         else if (option_name == ATOM_tlsv1_2)
+            options |= SSL_OP_NO_TLSv1_2;
+      }
+
+      ssl_set_method_options(conf, options);
     } else
       continue;
   }
@@ -1602,6 +1661,14 @@ install_ssl4pl()
   ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
+  ATOM_disable_methods    = PL_new_atom("disable_methods");
+  ATOM_sslv2              = PL_new_atom("sslv2");
+  ATOM_sslv23             = PL_new_atom("sslv23");
+  ATOM_sslv3              = PL_new_atom("sslv3");
+  ATOM_tlsv1              = PL_new_atom("tlsv1");
+  ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
+  ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
+
 
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
@@ -1638,7 +1705,7 @@ install_ssl4pl()
   ssl_context_type.acquire = acquire_ssl;
 
 
-  PL_register_foreign("_ssl_context",	3, pl_ssl_context,    0);
+  PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
   PL_register_foreign("ssl_exit",	1, pl_ssl_exit,	      0);
   PL_register_foreign("ssl_put_socket",	2, pl_ssl_put_socket, 0);
   PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
