@@ -78,7 +78,7 @@
 %%	ssl_context(+Role, -Config, :Options)
 
 ssl_context(Role, SSL, Module:Options) :-	% Prolog to exploit meta-predicate
-	select_option(method(Method), Options, O1, sslv23),
+	select_option(ssl_method(Method), Options, O1, sslv23),
 	'_ssl_context'(Role, SSL, Module:O1, Method).
 
 /*

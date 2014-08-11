@@ -45,7 +45,7 @@ static atom_t ATOM_key_file;
 static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
-static atom_t ATOM_disable_methods;
+static atom_t ATOM_disable_ssl_methods;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -1096,7 +1096,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
     return PL_domain_error("ssl_role", role);
 
   if (!PL_get_atom(method, &method_name))
-     return PL_domain_error("method", method);
+     return PL_domain_error("ssl_method", method);
   if (method_name == ATOM_sslv3)
     ssl_method = SSLv3_method();
 #ifdef HAVE_SSLV2_METHOD
@@ -1118,7 +1118,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   else if (method_name == ATOM_sslv23)
     ssl_method = SSLv23_method();
   else
-    return PL_domain_error("method", method);
+    return PL_domain_error("ssl_method", method);
 
   if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
@@ -1206,7 +1206,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_close_parent(conf, val);
-    } else if ( name == ATOM_disable_methods && arity == 1 )
+    } else if ( name == ATOM_disable_ssl_methods && arity == 1 )
     { term_t opt_head = PL_new_term_ref();
       term_t opt_tail = PL_new_term_ref();
       int options = 0;
@@ -1661,7 +1661,7 @@ install_ssl4pl()
   ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
-  ATOM_disable_methods    = PL_new_atom("disable_methods");
+  ATOM_disable_ssl_methods= PL_new_atom("disable_ssl_methods");
   ATOM_sslv2              = PL_new_atom("sslv2");
   ATOM_sslv23             = PL_new_atom("sslv23");
   ATOM_sslv3              = PL_new_atom("sslv3");
