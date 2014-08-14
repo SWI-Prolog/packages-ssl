@@ -269,7 +269,7 @@ recover_private_key(term_t private_t, RSA** rsa)
 
 
 static int
-unify_private_key(term_t item, RSA* rsa)
+unify_private_rsa(term_t item, RSA* rsa)
 { term_t n_t, d_t, e_t, p_t, q_t, dmp1_t, dmq1_t, iqmp_t;
   char* hex;
   int retval = 1;
@@ -347,7 +347,7 @@ unify_private_key(term_t item, RSA* rsa)
 }
 
 static int
-unify_public_key(term_t item, RSA* rsa)
+unify_public_rsa(term_t item, RSA* rsa)
 { term_t n_t, e_t, dmp1_t, dmq1_t, iqmp_t, key_t;
   char* hex;
   int retval = 1;
@@ -644,6 +644,103 @@ unify_crl(term_t term, X509_CRL* crl)
   return result && PL_unify_nil(list);
 }
 
+int unify_public_key(EVP_PKEY* key, term_t item)
+{
+ /* EVP_PKEY_get1_* returns a copy of the existing key */
+  switch (EVP_PKEY_type(key->type))
+  {
+    case EVP_PKEY_RSA:
+    { RSA* rsa;
+      rsa = EVP_PKEY_get1_RSA(key);
+      if (!unify_public_rsa(item, rsa))
+      { RSA_free(rsa);
+        return FALSE;
+      }
+      break;
+    }
+    case EVP_PKEY_EC:
+    { EC_KEY* ec;
+      ec = EVP_PKEY_get1_EC_KEY(key);
+      if (!PL_unify_atom_chars(item, "<ec key>"))
+      { EC_KEY_free(ec);
+        return FALSE;
+      }
+      break;
+    }
+   case EVP_PKEY_DH:
+   { DH* dh;
+      dh = EVP_PKEY_get1_DH(key);
+      if (!PL_unify_atom_chars(item, "<dh key>"))
+      { DH_free(dh);
+        return FALSE;
+      }
+      break;
+    }
+    case EVP_PKEY_DSA:
+    { DSA* dsa;
+      dsa = EVP_PKEY_get1_DSA(key);
+      if (!PL_unify_atom_chars(item, "<dsa key>"))
+      { DSA_free(dsa);
+        return FALSE;
+      }
+      break;
+    }
+  default:
+    /* Unknown key type */
+    return FALSE;
+  }
+  return TRUE;
+}
+
+int unify_private_key(EVP_PKEY* key, term_t item)
+{
+ /* EVP_PKEY_get1_* returns a copy of the existing key */
+  switch (EVP_PKEY_type(key->type))
+  {
+    case EVP_PKEY_RSA:
+    { RSA* rsa;
+      rsa = EVP_PKEY_get1_RSA(key);
+      if (!unify_private_rsa(item, rsa))
+      { RSA_free(rsa);
+        return FALSE;
+      }
+      break;
+    }
+    case EVP_PKEY_EC:
+    { EC_KEY* ec;
+      ec = EVP_PKEY_get1_EC_KEY(key);
+      if (!PL_unify_atom_chars(item, "<ec key>"))
+      { EC_KEY_free(ec);
+        return FALSE;
+      }
+      break;
+    }
+   case EVP_PKEY_DH:
+   { DH* dh;
+      dh = EVP_PKEY_get1_DH(key);
+      if (!PL_unify_atom_chars(item, "<dh key>"))
+      { DH_free(dh);
+        return FALSE;
+      }
+      break;
+    }
+    case EVP_PKEY_DSA:
+    { DSA* dsa;
+      dsa = EVP_PKEY_get1_DSA(key);
+      if (!PL_unify_atom_chars(item, "<dsa key>"))
+      { DSA_free(dsa);
+        return FALSE;
+      }
+      break;
+    }
+  default:
+    /* Unknown key type */
+    return FALSE;
+  }
+  return TRUE;
+}
+
+
 static int
 unify_certificate(term_t cert, X509* data)
 { term_t list = PL_copy_term_ref(cert);
@@ -651,7 +748,6 @@ unify_certificate(term_t cert, X509* data)
   BIO * mem = NULL;
   long n;
   EVP_PKEY *key;
-  RSA* rsa;
   term_t issuername;
   term_t subject;
   term_t hash;
@@ -733,18 +829,14 @@ unify_certificate(term_t cert, X509* data)
      )
      return FALSE;
 
+  if (!PL_unify_list(list, item, list))
+    return FALSE;
   /* X509_extract_key returns a copy of the existing key */
   key = X509_extract_key(data);
-
-  /* EVP_PKEY_get1_RSA returns a copy of the existing key */
-  rsa = EVP_PKEY_get1_RSA(key);
+  if (!unify_public_key(key, item))
+    return FALSE;
   EVP_PKEY_free(key);
-  if (!(PL_unify_list(list, item, list) &&
-        unify_public_key(item, rsa)))
-    { RSA_free(rsa);
-      return FALSE;
-    }
-  RSA_free(rsa);
+
 
   /* If the cert has a CRL distribution point, return that. If it does not,
      it is not an error
@@ -818,7 +910,6 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 foreign_t
 pl_load_public_key(term_t source, term_t key_t)
 { EVP_PKEY* key;
-  RSA* rsa;
   BIO* bio;
   IOSTREAM* stream;
   int c;
@@ -840,16 +931,14 @@ pl_load_public_key(term_t source, term_t key_t)
   PL_release_stream(stream);
   if (key == NULL)
      return permission_error("read", "key", source);
-  rsa = EVP_PKEY_get1_RSA(key);
-  EVP_PKEY_free(key);
-  if (unify_public_key(key_t, rsa))
-  { RSA_free(rsa);
-    PL_succeed;
-  } else
-  { RSA_free(rsa);
+  if (!unify_public_key(key, key_t))
+  { EVP_PKEY_free(key);
     PL_fail;
   }
+  EVP_PKEY_free(key);
+  PL_succeed;
 }
+
 
 int private_password_callback(char *buf, int bufsiz, int verify, void* pw)
 { int res;
@@ -864,7 +953,6 @@ int private_password_callback(char *buf, int bufsiz, int verify, void* pw)
 foreign_t
 pl_load_private_key(term_t source, term_t password, term_t key_t)
 { EVP_PKEY* key;
-  RSA* rsa;
   BIO* bio;
   IOSTREAM* stream;
   char* password_chars;
@@ -890,15 +978,12 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
   PL_release_stream(stream);
   if (key == NULL)
      return permission_error("read", "key", source);
-  rsa = EVP_PKEY_get1_RSA(key);
-  EVP_PKEY_free(key);
-  if (unify_private_key(key_t, rsa))
-  { RSA_free(rsa);
-    PL_succeed;
-  } else
-  { RSA_free(rsa);
+  if (!unify_private_key(key, key_t))
+  { EVP_PKEY_free(key);
     PL_fail;
   }
+  EVP_PKEY_free(key);
+  PL_succeed;
 }
 
 foreign_t
@@ -1218,7 +1303,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
          if (option_name == ATOM_sslv2)
             options |= SSL_OP_NO_SSLv2;
          else if (option_name == ATOM_sslv23)
-            options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;         
+            options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;
          else if (option_name == ATOM_sslv3)
             options |= SSL_OP_NO_SSLv3;
          else if (option_name == ATOM_tlsv1)
