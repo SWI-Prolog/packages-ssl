@@ -1306,12 +1306,18 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
             options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;
          else if (option_name == ATOM_sslv3)
             options |= SSL_OP_NO_SSLv3;
+#ifdef SSL_OP_NO_TLSv1
          else if (option_name == ATOM_tlsv1)
             options |= SSL_OP_NO_TLSv1;
+#endif
+#ifdef SSL_OP_NO_TLSv1_1
          else if (option_name == ATOM_tlsv1_1)
             options |= SSL_OP_NO_TLSv1_1;
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
          else if (option_name == ATOM_tlsv1_2)
             options |= SSL_OP_NO_TLSv1_2;
+#endif
       }
 
       ssl_set_method_options(conf, options);
