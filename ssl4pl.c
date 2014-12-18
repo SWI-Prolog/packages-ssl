@@ -649,6 +649,7 @@ int unify_public_key(EVP_PKEY* key, term_t item)
  /* EVP_PKEY_get1_* returns a copy of the existing key */
   switch (EVP_PKEY_type(key->type))
   {
+#ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
     { RSA* rsa;
       rsa = EVP_PKEY_get1_RSA(key);
@@ -658,6 +659,8 @@ int unify_public_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
+#ifndef OPENSSL_NO_EC
     case EVP_PKEY_EC:
     { EC_KEY* ec;
       ec = EVP_PKEY_get1_EC_KEY(key);
@@ -667,6 +670,8 @@ int unify_public_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
+#ifndef OPENSSL_NO_DH
    case EVP_PKEY_DH:
    { DH* dh;
       dh = EVP_PKEY_get1_DH(key);
@@ -676,6 +681,8 @@ int unify_public_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
+#ifndef OPENSSL_NO_DSA
     case EVP_PKEY_DSA:
     { DSA* dsa;
       dsa = EVP_PKEY_get1_DSA(key);
@@ -685,6 +692,7 @@ int unify_public_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
   default:
     /* Unknown key type */
     return FALSE;
@@ -697,6 +705,7 @@ int unify_private_key(EVP_PKEY* key, term_t item)
  /* EVP_PKEY_get1_* returns a copy of the existing key */
   switch (EVP_PKEY_type(key->type))
   {
+#ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
     { RSA* rsa;
       rsa = EVP_PKEY_get1_RSA(key);
@@ -706,6 +715,8 @@ int unify_private_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
+#ifndef OPENSSL_NO_EC
     case EVP_PKEY_EC:
     { EC_KEY* ec;
       ec = EVP_PKEY_get1_EC_KEY(key);
@@ -715,6 +726,8 @@ int unify_private_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
+#ifndef OPENSSL_NO_DH
    case EVP_PKEY_DH:
    { DH* dh;
       dh = EVP_PKEY_get1_DH(key);
@@ -724,6 +737,8 @@ int unify_private_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
+#ifndef OPENSSL_NO_DSA
     case EVP_PKEY_DSA:
     { DSA* dsa;
       dsa = EVP_PKEY_get1_DSA(key);
@@ -733,6 +748,7 @@ int unify_private_key(EVP_PKEY* key, term_t item)
       }
       break;
     }
+#endif
   default:
     /* Unknown key type */
     return FALSE;
