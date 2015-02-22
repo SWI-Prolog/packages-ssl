@@ -27,6 +27,7 @@
 #include "../clib/nonblockio.h"
 
 #define SSL_CONFIG_MAGIC 0x539dbe3a
+#define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
 
 typedef int BOOL;
 #ifndef TRUE
@@ -48,7 +49,7 @@ typedef enum
 #include <openssl/err.h>
 
 typedef struct pl_ssl {
-    long 	        magic;
+    long	        magic;
     /*
      * Are we server or client
      */

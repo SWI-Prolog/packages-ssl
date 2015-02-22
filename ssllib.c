@@ -822,11 +822,11 @@ ssl_system_verify_locations(PL_SSL *config)
   }
 
 #else
-
+#ifdef SYSTEM_CACERT_FILENAME
   SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
-				NULL,
+				SYSTEM_CACERT_FILENAME,
 				NULL);
-
+#endif
 #endif
 }
 
