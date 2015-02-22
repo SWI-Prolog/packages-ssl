@@ -1,11 +1,9 @@
-/*  $Id$
-
-    Part of SWI-Prolog
+/*  Part of SWI-Prolog
 
     Author:        Jan van der Steen and Jan Wielemaker
-    E-mail:        J.van.der.Steen@diff.nl and jan@swi.psy.uva.nl
+    E-mail:        J.van.der.Steen@diff.nl and jan@swi-prolog.org
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 1985-2002, SWI-Prolog Foundation
+    Copyright (C): 1985-2015, SWI-Prolog Foundation
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -31,6 +29,11 @@
 #ifdef __SWI_PROLOG__
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
+
+#ifdef __WINDOWS__
+#include <windows.h>
+#include <wincrypt.h>
+#endif
 
 #define perror(x) Sdprintf("%s: %s\n", x, strerror(errno));
 
@@ -788,18 +791,69 @@ ssl_debug(PL_SSL *config)
     return 0;
 }
 
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ssl_system_verify_locations() adds trusted  root   certificates  from OS
+dependent locations if cacert_file('SYSTEM') is passed.
+
+The code is written after this StackOverflow message
+http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trusted-ca-certificates
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+static void
+ssl_system_verify_locations(PL_SSL *config)
+{
+#ifdef __WINDOWS__
+  HCERTSTORE hSystemStore;
+
+  if ( (hSystemStore = CertOpenSystemStore(0, "ROOT")) )
+  { PCCERT_CONTEXT pCertCtx = NULL;
+
+    while( (pCertCtx=CertEnumCertificatesInStore(hSystemStore, pCertCtx)) )
+    { const unsigned char *ce = (unsigned char*)pCertCtx->pbCertEncoded;
+
+      X509 *cert = d2i_X509(NULL, &ce, (int)pCertCtx->cbCertEncoded);
+      if ( cert )
+      { X509_STORE_add_cert(SSL_CTX_get_cert_store(config->pl_ssl_ctx), cert);
+      }
+    }
+
+    CertCloseStore(hSystemStore, 0);
+  }
+
+#else
+
+  SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
+				NULL,
+				NULL);
+
+#endif
+}
+
+
+static void
+ssl_init_verify_locations(PL_SSL *config)
+{ if ( config->pl_ssl_cacert )
+  { if ( strcmp(config->pl_ssl_cacert, "SYSTEM") == 0 )
+    { ssl_system_verify_locations(config);
+    } else if ( config->pl_ssl_cacert )
+    { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
+				    config->pl_ssl_cacert,
+				    NULL);
+    }
+
+    ssl_deb(1, "certificate authority(s) installed (public keys loaded)\n");
+  }
+}
+
+
 int
 ssl_config(PL_SSL *config)
 /*
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
  */
-{
-    SSL_CTX_load_verify_locations( config->pl_ssl_ctx
-                                 , config->pl_ssl_cacert
-                                 , NULL
-                                 ) ;
-    ssl_deb(1, "certificate authority(s) installed (public keys loaded)\n");
+{   ssl_init_verify_locations(config);
 
     SSL_CTX_set_default_passwd_cb_userdata( config->pl_ssl_ctx
                                           , config

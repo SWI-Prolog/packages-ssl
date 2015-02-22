@@ -46,6 +46,7 @@ static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
 static atom_t ATOM_disable_ssl_methods;
+static atom_t ATOM_SYSTEM;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -171,10 +172,17 @@ get_bool_arg(int a, term_t t, int *i)
 
 
 static int
-get_file_arg(int a, term_t t, char **f)
+get_file_arg(int a, term_t t, char **f, int system)
 { term_t t2 = PL_new_term_ref();
+  atom_t atom;
 
   _PL_get_arg(a, t, t2);
+
+  if ( system && PL_get_atom(t2, &atom) && atom == ATOM_SYSTEM )
+  { *f = "SYSTEM";
+    return TRUE;
+  }
+
   if ( !PL_get_file_name(t2, f, PL_FILE_EXIST) )
     return FALSE;
 
@@ -1268,21 +1276,21 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
     } else if ( name == ATOM_cacert_file && arity == 1 )
     { char *file;
 
-      if ( !get_file_arg(1, head, &file) )
+      if ( !get_file_arg(1, head, &file, TRUE) )
 	return FALSE;
 
       ssl_set_cacert(conf, file);
     } else if ( name == ATOM_certificate_file && arity == 1 )
     { char *file;
 
-      if ( !get_file_arg(1, head, &file) )
+      if ( !get_file_arg(1, head, &file, FALSE) )
 	return FALSE;
 
       ssl_set_certf(conf, file);
     } else if ( name == ATOM_key_file && arity == 1 )
     { char *file;
 
-      if ( !get_file_arg(1, head, &file) )
+      if ( !get_file_arg(1, head, &file, FALSE) )
 	return FALSE;
 
       ssl_set_keyf(conf, file);
@@ -1775,6 +1783,7 @@ install_ssl4pl()
   ATOM_tlsv1              = PL_new_atom("tlsv1");
   ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
   ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
+  ATOM_SYSTEM             = PL_new_atom("SYSTEM");
 
 
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);

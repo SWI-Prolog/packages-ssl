@@ -13,6 +13,7 @@ case "$PLARCH" in
     *-win32|*-win64)
         AC_CHECK_LIB(ws2_32, main)
         AC_CHECK_LIB(gdi32, main)
+	AC_CHECK_LIB(crypt32, main)
         ;;
 esac
 

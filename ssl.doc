@@ -135,9 +135,15 @@ some by both server as client (marked CS).
         has the following prototype: \term{function}{+SSL, -Password}
     \termitem{cacert_file}{+FileName}
         Specify a file containing certificate keys which will thus
-        automatically be verified as trusted. You can also install
-        an application defined handler to verify certificates (see
-        next option).
+        automatically be verified as trusted.  Using FileName
+	\const{'SYSTEM'} starts an OS specific process to obtain the
+	system's trusted root certificates.\footnote{Currently
+	implemented for Windows based on CertOpenSystemStore().}
+
+	It is also possible to install an application defined handler
+	for verifying certificates using the option
+	\const{cert_verify_hook}.
+
     \termitem{cert_verify_hook}{:PredicateName}
         In case a certificate cannot be verified or has some properties
         which makes it invalid (invalid validity date for example) the
