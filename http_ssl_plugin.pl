@@ -1,11 +1,9 @@
-/*  $Id$
-
-    Part of SWI-Prolog
+/*  Part of SWI-Prolog
 
     Author:        Jan Wielemaker
-    E-mail:        J.Wielemaker@cs.vu.nl
+    E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 2007-2011, University of Amsterdam
+    Copyright (C): 2007-2015, University of Amsterdam
 			      VU University Amsterdam
 
     This program is free software; you can redistribute it and/or
@@ -34,7 +32,7 @@
 :- use_module(library(ssl)).
 :- use_module(library(debug)).
 :- use_module(library(option)).
-:- use_module(thread_httpd).
+:- use_module(library(http/thread_httpd)).
 
 /** <module> SSL plugin for HTTP libraries
 
@@ -51,8 +49,13 @@ SWI-Prolog installation directory.
 	thread_httpd:make_socket_hook/3,
 	thread_httpd:accept_hook/2,
 	thread_httpd:open_client_hook/5,
-        http:http_protocol_hook/7.
+        http:http_protocol_hook/7,
+	http:open_options/2.
 
+
+		 /*******************************
+		 *	    SERVER HOOKS	*
+		 *******************************/
 
 %%	thread_httpd:make_socket_hook(+Port, +OptionsIn, -OptionsOut)
 %%								is semidet.
@@ -93,6 +96,10 @@ thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 	ssl_open(SSL, Client, In, Out).
 
 
+		 /*******************************
+		 *	   CLIENT HOOKS		*
+		 *******************************/
+
 %%	http:http_protocol_hook(+Scheme, +Parts, +PlainIn, +PlainOut,
 %%				-In, -Out, +Options) is semidet.
 %
@@ -102,6 +109,9 @@ thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 %	@see http_open/3
 
 http:http_protocol_hook(https, Parts, PlainIn, PlainOut, In, Out, Options):-
+	ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options).
+
+ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options) :-
         memberchk(host(Host), Parts),
         option(port(Port), Parts, 443),
 	ssl_context(client, SSL, [ host(Host),
@@ -112,3 +122,14 @@ http:http_protocol_hook(https, Parts, PlainIn, PlainOut, In, Out, Options):-
         catch(ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
               Exception,
               ( ssl_exit(SSL), throw(Exception)) ).
+
+%%	http:open_options(Parts, Options) is nondet.
+%
+%	Implementation of the multifile hook http:open_options/2 used by
+%	library(http/http_open). By default, we use   the system trusted
+%	root certificate database for validating an SSL certificate.
+
+http:open_options(Parts, Options) :-
+	memberchk(scheme(https), Parts),
+	Options = [cacert_file('SYSTEM')].
+
