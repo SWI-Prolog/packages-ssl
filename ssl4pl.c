@@ -35,8 +35,6 @@
 static atom_t ATOM_server;
 static atom_t ATOM_client;
 static atom_t ATOM_password;
-static atom_t ATOM_host;
-static atom_t ATOM_port;
 static atom_t ATOM_cert;
 static atom_t ATOM_peer_cert;
 static atom_t ATOM_cacert_file;
@@ -142,18 +140,6 @@ get_char_arg(int a, term_t t, char **s)
 
   _PL_get_arg(a, t, t2);
   if ( !PL_get_chars(t2, s, CVT_ATOM|CVT_EXCEPTION) )
-    return FALSE;
-
-  return TRUE;
-}
-
-
-static int
-get_int_arg(int a, term_t t, int *i)
-{ term_t t2 = PL_new_term_ref();
-
-  _PL_get_arg(a, t, t2);
-  if ( !PL_get_integer_ex(t2, i) )
     return FALSE;
 
   return TRUE;
@@ -1239,20 +1225,6 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_password(conf, s);
-    } else if ( name == ATOM_host && arity == 1 )
-    { char *s;
-
-      if ( !get_char_arg(1, head, &s) )
-	return FALSE;
-
-      ssl_set_host(conf, s);
-    } else if ( name == ATOM_port && arity == 1 )
-    { int p;
-
-      if ( !get_int_arg(1, head, &p) )
-	return FALSE;
-
-      ssl_set_port(conf, p);
     } else if ( name == ATOM_cert && arity == 1 )
     { int val;
 
@@ -1772,8 +1744,6 @@ install_ssl4pl()
 { ATOM_server             = PL_new_atom("server");
   ATOM_client             = PL_new_atom("client");
   ATOM_password           = PL_new_atom("password");
-  ATOM_host               = PL_new_atom("host");
-  ATOM_port               = PL_new_atom("port");
   ATOM_cert               = PL_new_atom("cert");
   ATOM_peer_cert          = PL_new_atom("peer_cert");
   ATOM_cacert_file        = PL_new_atom("cacert_file");

@@ -67,14 +67,6 @@ typedef struct pl_ssl {
     X509 *              pl_ssl_peer_cert;
 
     /*
-     * In case of the server the hosts we're accepting (NULL for any),
-     * in case of the client the host we're connecting to.
-     * We also store the socket file descriptor.
-     */
-    char *              pl_ssl_host;
-    int                 pl_ssl_port;
-
-    /*
      * Various parameters affecting the SSL layer
      */
     char *              pl_ssl_cacert;
@@ -83,7 +75,6 @@ typedef struct pl_ssl {
     char *              pl_ssl_password;
     BOOL                pl_ssl_cert_required;
     BOOL                pl_ssl_peer_cert_required;
-    BOOL		pl_ssl_reuseaddr;
 
     /*
      * Application defined handlers
@@ -134,14 +125,10 @@ ssize_t         ssl_write        ( PL_SSL_INSTANCE *instance
                                  ) ;
 int		ssl_thread_setup (void);
 
-char *          ssl_set_host     (PL_SSL *config, const char *host);
-int             ssl_set_port     (PL_SSL *config, int port);
-
 char *          ssl_set_cacert   (PL_SSL *config, const char *cacert);
 char *          ssl_set_certf    (PL_SSL *config, const char *certf);
 char *          ssl_set_keyf     (PL_SSL *config, const char *keyf);
 char *          ssl_set_password (PL_SSL *config, const char *password);
-BOOL		ssl_set_reuseaddr(PL_SSL *config, BOOL reuse);
 BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
 BOOL		ssl_set_close_parent(PL_SSL *config, int closeparent);

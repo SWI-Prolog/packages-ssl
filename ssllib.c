@@ -260,10 +260,6 @@ ssl_new(void)
         new->pl_ssl_idx                 = -1;
         new->pl_ssl_password            = NULL;
 
-        new->pl_ssl_host                = NULL;
-        new->pl_ssl_port                = -1;
-	new->pl_ssl_reuseaddr		= TRUE;
-
         new->pl_ssl_cacert              = NULL;
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
@@ -289,7 +285,6 @@ ssl_free(PL_SSL *config)
     if (config) {
         if ( config->magic == SSL_CONFIG_MAGIC ) {
 	    config->magic = 0;
-	    free(config->pl_ssl_host);
 	    free(config->pl_ssl_cacert);
 	    free(config->pl_ssl_certf);
 	    free(config->pl_ssl_keyf);
@@ -417,28 +412,6 @@ ssl_set_password(PL_SSL *config, const char *password)
     return config->pl_ssl_password;
 }
 
-char *
-ssl_set_host(PL_SSL *config, const char *host)
-/*
- * Store supplied host in config storage
- */
-{
-    if (host) {
-        if (config->pl_ssl_host) free(config->pl_ssl_host);
-        config->pl_ssl_host = ssl_strdup(host);
-    }
-    return config->pl_ssl_host;
-}
-
-int
-ssl_set_port(PL_SSL *config, int port)
-/*
- * Store supplied port in config storage
- */
-{
-    return config->pl_ssl_port = port;
-}
-
 BOOL
 ssl_set_cert(PL_SSL *config, BOOL required)
 /*
@@ -447,12 +420,6 @@ ssl_set_cert(PL_SSL *config, BOOL required)
 {
     return config->pl_ssl_cert_required = required;
 }
-
-BOOL
-ssl_set_reuseaddr(PL_SSL *config, BOOL reuse)
-{ return config->pl_ssl_reuseaddr = reuse;
-}
-
 
 BOOL
 ssl_set_peer_cert(PL_SSL *config, BOOL required)

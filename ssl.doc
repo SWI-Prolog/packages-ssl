@@ -110,14 +110,6 @@ required by the client (C), some are required by the server (marked S),
 some by both server as client (marked CS).
 
 \begin{description}
-    \termitem{host}{+HostName} [C]
-        The host to connect to by the client or identified by the server.
-        Both IP addresses and hostnames can be supplied here. This option
-        is required for the client and optionally for the server.
-    \termitem{port}{+Integer} [CS]
-        The port to connect or listen to. This option is required since
-        no default port can sensibly be defined for an abstract layer.
-	The webserver \jargon{https} protocol uses port 443.
     \termitem{certificate_file}{+FileName} [S]
         Specify where the certificate file can be found. This can be the
         same as the key file (see next option).
