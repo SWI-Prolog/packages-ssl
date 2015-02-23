@@ -16,7 +16,7 @@ case "$PLARCH" in
 	AC_CHECK_LIB(crypt32, main)
         ;;
     *darwin*)
-	LIBS=$LIBS -framework CoreFoundation -framework Security
+	LIBS="$LIBS -framework CoreFoundation -framework Security"
 	;;
 esac
 
