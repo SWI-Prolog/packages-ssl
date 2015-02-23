@@ -332,25 +332,6 @@ as well as a \file{README} on the creation of certificates using OpenSSL
 tools.
 
 
-\section{Installation}
-\label{sec:ssl-install}
-
-The OpenSSL libraries are \emph{not} part of the SWI-Prolog distribution
-and on systems using packagers with dependency checking, dependency on
-OpenSSL is deliberatly avoided. This implies that OpenSSL must be
-installed seperatly before using SSL with a binary distribution of
-SWI-Prolog. Most modern Linux distributions have an SSL package. An
-installer for MS-Windows is available from
-\url{http://www.slproweb.com/products/Win32OpenSSL.html} The SWI-Prolog
-SSL interface is currently built using OpenSSL 0.97b.
-
-When installing from the source, the package configuration
-automatically builds the ssl library if a suitable OpenSSL
-implementation is found.  On Windows systems, OpenSSL must be
-installed prior to building SWI-Prolog and \file{rules.mk} must
-be edited to reflect the position of the header and libraries if
-they are not in the standard search path.
-
 \section{Multithreading}
 \label{sec:ssl-thread-safety}
 
