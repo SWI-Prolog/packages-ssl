@@ -15,6 +15,9 @@ case "$PLARCH" in
         AC_CHECK_LIB(gdi32, main)
 	AC_CHECK_LIB(crypt32, main)
         ;;
+    *darwin*)
+	LIBS=$LIBS -framework CoreFoundation -framework Security
+	;;
 esac
 
 AC_CHECK_HEADERS(unistd.h fcntl.h)
