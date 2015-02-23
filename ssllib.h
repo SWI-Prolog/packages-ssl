@@ -69,6 +69,7 @@ typedef struct pl_ssl {
     /*
      * Various parameters affecting the SSL layer
      */
+    int                 use_system_cacert;
     char *              pl_ssl_cacert;
     char *              pl_ssl_certf;
     char *              pl_ssl_keyf;
@@ -126,6 +127,7 @@ ssize_t         ssl_write        ( PL_SSL_INSTANCE *instance
 int		ssl_thread_setup (void);
 
 char *          ssl_set_cacert   (PL_SSL *config, const char *cacert);
+int             ssl_set_use_system_cacert(PL_SSL *config, int use_system_cacert);
 char *          ssl_set_certf    (PL_SSL *config, const char *certf);
 char *          ssl_set_keyf     (PL_SSL *config, const char *keyf);
 char *          ssl_set_password (PL_SSL *config, const char *password);

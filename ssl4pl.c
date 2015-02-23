@@ -54,6 +54,7 @@ static atom_t ATOM_tlsv1_1;
 static atom_t ATOM_tlsv1_2;
 
 static functor_t FUNCTOR_ssl1;
+static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_error2;
 static functor_t FUNCTOR_ssl_error1;
 static functor_t FUNCTOR_permission_error3;
@@ -1251,13 +1252,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	if ( !PL_get_atom_ex(val, &a) )
 	  return FALSE;
 	if ( a == ATOM_root_certificates )
-	  file = CA_SYSTEM_ROOT_CERTIFICATES;
+	  ssl_set_use_system_cacert(conf, TRUE);
 	else
-	  return PL_domain_error("system_cacert_file", val);
-      } else if ( !PL_get_file_name(val, &file, PL_FILE_EXIST) )
+	  return PL_domain_error("system_cacert", val);
+      } else if ( PL_get_file_name(val, &file, PL_FILE_EXIST) )
+      { ssl_set_cacert(conf, file);
+      } else
 	return FALSE;
-
-      ssl_set_cacert(conf, file);
     } else if ( name == ATOM_certificate_file && arity == 1 )
     { char *file;
 

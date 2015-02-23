@@ -34,7 +34,9 @@
 #include <windows.h>
 #include <wincrypt.h>
 #endif
-
+#ifdef __APPLE__
+#include <Security/Security.h>
+#endif
 #define perror(x) Sdprintf("%s: %s\n", x, strerror(errno));
 
 /*
@@ -260,6 +262,7 @@ ssl_new(void)
         new->pl_ssl_idx                 = -1;
         new->pl_ssl_password            = NULL;
 
+        new->use_system_cacert          = 0;
         new->pl_ssl_cacert              = NULL;
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
@@ -372,6 +375,17 @@ ssl_set_cacert(PL_SSL *config, const char *cacert)
     }
     return config->pl_ssl_cacert;
 }
+
+int
+ssl_set_use_system_cacert(PL_SSL *config, int use_system_cacert)
+/*
+ * Store that we want to use the system certificate authority in config storage
+ */
+{
+  config->use_system_cacert = use_system_cacert;
+  return config->use_system_cacert;
+}
+
 
 char *
 ssl_set_certf(PL_SSL *config, const char *certf)
@@ -782,10 +796,57 @@ ssl_system_verify_locations(PL_SSL *config)
       X509 *cert = d2i_X509(NULL, &ce, (int)pCertCtx->cbCertEncoded);
       if ( cert )
       { X509_STORE_add_cert(SSL_CTX_get_cert_store(config->pl_ssl_ctx), cert);
+        X509_free(cert);
       }
     }
 
     CertCloseStore(hSystemStore, 0);
+  }
+#elif defined(__APPLE__)
+  SecKeychainRef keychain = NULL;
+  OSStatus status;
+
+  status = SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &keychain);
+  if ( status == errSecSuccess )
+  { CFDictionaryRef query = NULL;
+    CFArrayRef certs = NULL;
+    CFArrayRef keychainSingleton = CFArrayCreate(NULL, (const void **)&keychain, 1, &kCFTypeArrayCallBacks);
+    const void *keys[] =   {kSecClass,            kSecMatchSearchList,  kSecMatchTrustedOnly, kSecReturnRef,  kSecMatchLimit,    kSecMatchValidOnDate};
+    const void *values[] = {kSecClassCertificate, keychainSingleton,    kCFBooleanTrue,       kCFBooleanTrue, kSecMatchLimitAll, kCFNull};
+    CFIndex i;
+    CFIndex count;
+    query = CFDictionaryCreate(NULL,
+                               keys,
+                               values,
+                               6,
+                               &kCFTypeDictionaryKeyCallBacks,
+                               &kCFTypeDictionaryValueCallBacks);
+    status = SecItemCopyMatching(query, (CFTypeRef *)&certs);
+    if (status == errSecSuccess)
+    { count = CFArrayGetCount(certs);
+      for (i = 0; i < count; i++)
+      { const void *cert = CFArrayGetValueAtIndex(certs, i);
+        CFDataRef cert_data = NULL;
+        const unsigned char *der;
+        unsigned long cert_data_length;
+        X509 *x509 = NULL;
+
+        cert_data = SecCertificateCopyData((SecCertificateRef)cert);
+        der = CFDataGetBytePtr(cert_data);
+        cert_data_length = CFDataGetLength(cert_data);
+        x509 = d2i_X509(NULL, &der, cert_data_length);
+        CFRelease(cert_data);
+        if ( x509 == NULL )
+        { continue;
+        }
+        X509_STORE_add_cert(SSL_CTX_get_cert_store(config->pl_ssl_ctx), x509);
+        X509_free(x509);
+      }
+      CFRelease(certs);
+    }
+    CFRelease(query);
+    CFRelease(keychainSingleton);
+    CFRelease(keychain);
   }
 
 #else
@@ -800,15 +861,13 @@ ssl_system_verify_locations(PL_SSL *config)
 
 static void
 ssl_init_verify_locations(PL_SSL *config)
-{ if ( config->pl_ssl_cacert )
-  { if ( strcmp(config->pl_ssl_cacert, CA_SYSTEM_ROOT_CERTIFICATES) == 0 )
-    { ssl_system_verify_locations(config);
-    } else if ( config->pl_ssl_cacert )
-    { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
-				    config->pl_ssl_cacert,
-				    NULL);
-    }
-
+{ if ( config->use_system_cacert == 1 )
+  { ssl_system_verify_locations(config);
+    ssl_deb(1, "System certificate authority(s) installed (public keys loaded)\n");
+  } else if ( config->pl_ssl_cacert )
+  { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
+                                  config->pl_ssl_cacert,
+                                  NULL);
     ssl_deb(1, "certificate authority(s) installed (public keys loaded)\n");
   }
 }
