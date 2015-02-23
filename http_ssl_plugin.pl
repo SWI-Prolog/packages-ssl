@@ -131,5 +131,5 @@ ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options) :-
 
 http:open_options(Parts, Options) :-
 	memberchk(scheme(https), Parts),
-	Options = [cacert_file('SYSTEM')].
+	Options = [cacert_file(system(root_certificates))].
 

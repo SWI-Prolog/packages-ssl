@@ -794,7 +794,7 @@ ssl_debug(PL_SSL *config)
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ssl_system_verify_locations() adds trusted  root   certificates  from OS
-dependent locations if cacert_file('SYSTEM') is passed.
+dependent locations if cacert_file(system(root_certificates)) is passed.
 
 The code is written after this StackOverflow message
 http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trusted-ca-certificates
@@ -834,7 +834,7 @@ ssl_system_verify_locations(PL_SSL *config)
 static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->pl_ssl_cacert )
-  { if ( strcmp(config->pl_ssl_cacert, "SYSTEM") == 0 )
+  { if ( strcmp(config->pl_ssl_cacert, CA_SYSTEM_ROOT_CERTIFICATES) == 0 )
     { ssl_system_verify_locations(config);
     } else if ( config->pl_ssl_cacert )
     { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,

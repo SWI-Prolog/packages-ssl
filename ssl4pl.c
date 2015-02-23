@@ -3,7 +3,7 @@
     Author:        Jan van der Steen, Jan Wielemaker and Matt Lilley
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 1985-2013, SWI-Prolog Foundation
+    Copyright (C): 1985-2015, SWI-Prolog Foundation
 			      VU University Amsterdam
 
     This library is free software; you can redistribute it and/or
@@ -46,7 +46,7 @@ static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
 static atom_t ATOM_disable_ssl_methods;
-static atom_t ATOM_SYSTEM;
+static atom_t ATOM_root_certificates;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -81,6 +81,7 @@ static functor_t FUNCTOR_master_key1;
 static functor_t FUNCTOR_session_id1;
 static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
+static functor_t FUNCTOR_system1;
 
 static PL_blob_t ssl_context_type;
 
@@ -172,17 +173,10 @@ get_bool_arg(int a, term_t t, int *i)
 
 
 static int
-get_file_arg(int a, term_t t, char **f, int system)
+get_file_arg(int a, term_t t, char **f)
 { term_t t2 = PL_new_term_ref();
-  atom_t atom;
 
   _PL_get_arg(a, t, t2);
-
-  if ( system && PL_get_atom(t2, &atom) && atom == ATOM_SYSTEM )
-  { *f = "SYSTEM";
-    return TRUE;
-  }
-
   if ( !PL_get_file_name(t2, f, PL_FILE_EXIST) )
     return FALSE;
 
@@ -1274,23 +1268,35 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       ssl_set_peer_cert(conf, val);
     } else if ( name == ATOM_cacert_file && arity == 1 )
-    { char *file;
+    { term_t val = PL_new_term_ref();
+      char *file;
 
-      if ( !get_file_arg(1, head, &file, TRUE) )
+      _PL_get_arg(1, head, val);
+      if ( PL_is_functor(val, FUNCTOR_system1) )
+      { _PL_get_arg(1, val, val);
+	atom_t a;
+
+	if ( !PL_get_atom_ex(val, &a) )
+	  return FALSE;
+	if ( a == ATOM_root_certificates )
+	  file = CA_SYSTEM_ROOT_CERTIFICATES;
+	else
+	  return PL_domain_error("system_cacert_file", val);
+      } else if ( !PL_get_file_name(val, &file, PL_FILE_EXIST) )
 	return FALSE;
 
       ssl_set_cacert(conf, file);
     } else if ( name == ATOM_certificate_file && arity == 1 )
     { char *file;
 
-      if ( !get_file_arg(1, head, &file, FALSE) )
+      if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
       ssl_set_certf(conf, file);
     } else if ( name == ATOM_key_file && arity == 1 )
     { char *file;
 
-      if ( !get_file_arg(1, head, &file, FALSE) )
+      if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
       ssl_set_keyf(conf, file);
@@ -1777,13 +1783,13 @@ install_ssl4pl()
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
   ATOM_disable_ssl_methods= PL_new_atom("disable_ssl_methods");
+  ATOM_root_certificates  = PL_new_atom("root_certificates");
   ATOM_sslv2              = PL_new_atom("sslv2");
   ATOM_sslv23             = PL_new_atom("sslv23");
   ATOM_sslv3              = PL_new_atom("sslv3");
   ATOM_tlsv1              = PL_new_atom("tlsv1");
   ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
   ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
-  ATOM_SYSTEM             = PL_new_atom("SYSTEM");
 
 
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
@@ -1812,6 +1818,7 @@ install_ssl4pl()
   FUNCTOR_session_id1     = PL_new_functor(PL_new_atom("session_id"), 1);
   FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
+  FUNCTOR_system1         = PL_new_functor(PL_new_atom("system"), 1);
 
   memset(&ssl_context_type, 0, sizeof(ssl_context_type));
   ssl_context_type.magic = PL_BLOB_MAGIC;

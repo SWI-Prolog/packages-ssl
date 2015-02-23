@@ -136,9 +136,9 @@ some by both server as client (marked CS).
     \termitem{cacert_file}{+FileName}
         Specify a file containing certificate keys which will thus
         automatically be verified as trusted.  Using FileName
-	\const{'SYSTEM'} starts an OS specific process to obtain the
-	system's trusted root certificates.  Current implementation
-	for \const{'SYSTEM'}:
+	\const{system(root_certificates)} starts an OS specific process
+	to obtain the system's trusted root certificates. Current
+	implementation for \const{system(root_certificates)}:
 
 	\begin{itemize}
 	\item On Windows, CertOpenSystemStore() is used to import

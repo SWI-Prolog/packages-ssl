@@ -1,11 +1,10 @@
-/*  $Id$
-
-    Part of SWI-Prolog
+/*  Part of SWI-Prolog
 
     Author:        Jan van der Steen and Jan Wielemaker
     E-mail:        J.van.der.Steen@diff.nl and jan@swi.psy.uva.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 1985-2002, SWI-Prolog Foundation
+    Copyright (C): 1985-2015, SWI-Prolog Foundation
+			      VU University Amsterdam
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -28,6 +27,7 @@
 
 #define SSL_CONFIG_MAGIC 0x539dbe3a
 #define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
+#define CA_SYSTEM_ROOT_CERTIFICATES "system://root certificates"
 
 typedef int BOOL;
 #ifndef TRUE
