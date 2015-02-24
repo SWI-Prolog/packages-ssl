@@ -33,6 +33,9 @@
             load_private_key/3,         % +Stream, +Password, -Key
             load_public_key/2,          % +Stream, -Key
             load_crl/2,                 % +Stream, -Crl
+	    cert_accept_any/5,		% +SSL, +ProblemCertificate,
+					% +AllCertificates, +FirstCertificate,
+					% +Error
             rsa_private_decrypt/3,      % +Key, +Ciphertext, -Plaintext
             rsa_private_encrypt/3,      % +Key, +Plaintext, -Ciphertext
             rsa_public_decrypt/3,       % +Key, +Ciphertext, -Plaintext
@@ -132,3 +135,21 @@ ssl_open(SSL, In, Out):-
         ssl_get_socket(SSL, S),
         tcp_open_socket('$socket'(S), Read, Write),
         ssl_negotiate(SSL, Read, Write, In, Out).
+
+%%	cert_accept_any(+SSL,
+%%			+ProblemCertificate, +AllCertificates, +FirstCertificate,
+%%			+Error) is det.
+%
+%	Implementation  for  the  hook   `cert_verify_hook(:Hook)`  that
+%	accepts _any_ certificate. This is   intended for http_open/3 if
+%	no certificate verification is desired as illustrated below.
+%
+%	  ==
+%	    http_open('https:/...', In,
+%	              [ cert_verify_hook(cert_accept_any)
+%	              ])
+%	  ==
+
+cert_accept_any(_SSL,
+		_ProblemCertificate, _AllCertificates, _FirstCertificate,
+		_Error).
