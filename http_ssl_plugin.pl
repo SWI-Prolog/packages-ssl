@@ -111,12 +111,8 @@ thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 http:http_protocol_hook(https, Parts, PlainIn, PlainOut, In, Out, Options):-
 	ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options).
 
-ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options) :-
-        memberchk(host(Host), Parts),
-        option(port(Port), Parts, 443),
-	ssl_context(client, SSL, [ host(Host),
-				   port(Port),
-				   close_parent(true)
+ssl_protocol_hook(_Parts, PlainIn, PlainOut, In, Out, Options) :-
+	ssl_context(client, SSL, [ close_parent(true)
 				 | Options
 				 ]),
         catch(ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
