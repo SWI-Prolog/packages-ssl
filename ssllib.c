@@ -63,8 +63,6 @@ typedef enum
 } SSL_PL_STATUS;
 
 #define SSL_CERT_VERIFY_MORE 0
-#define SSL_WAIT_CHILD       1
-#define SSL_TCP_QUEUE_MAX    5
 
 #ifndef DEBUG
 #define DEBUG 1
