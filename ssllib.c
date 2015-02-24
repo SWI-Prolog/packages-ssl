@@ -851,9 +851,14 @@ ssl_system_verify_locations(X509_STORE *store)
   }
 #else
 #ifdef SYSTEM_CACERT_FILENAME
-  SSL_CTX_load_verify_locations(store,
-				SYSTEM_CACERT_FILENAME,
-				NULL);
+  X509 *cert = NULL;
+  FILE *cafile = fopen(SYSTEM_CACERT_FILENAME, "rb");
+  if (cafile != NULL)
+  { cert = PEM_read_X509(cafile, NULL, NULL, NULL);
+    fclose(cafile);
+    if (cert != NULL)
+      X509_STORE_add_cert(store, cert);
+  }
 #endif
 #endif
 }
