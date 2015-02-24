@@ -115,7 +115,7 @@ PL_SSL_INSTANCE *ssl_ssl_bio	 (PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite
 PL_SSL_INSTANCE *ssl_ssl         (PL_SSL *config, int sock);
 void             ssl_exit        (PL_SSL *config);
 int              ssl_close       (PL_SSL_INSTANCE *instance);
-
+X509 *		ssl_peer_certificate(PL_SSL *config);
 int             ssl_accept       (PL_SSL *config, void *addr, socklen_t *addrlen);
 int             ssl_connect      (PL_SSL *config);
 ssize_t         ssl_read         ( PL_SSL_INSTANCE *instance

@@ -671,6 +671,15 @@ ssl_exit(PL_SSL *config)
 }
 
 
+X509 *
+ssl_peer_certificate(PL_SSL *config)
+{ if ( !config->pl_ssl_peer_cert )
+    config->pl_ssl_peer_cert = SSL_get_peer_certificate(config->pl_ssl_ssl);
+
+  return config->pl_ssl_peer_cert;
+}
+
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ERR_print_errors_pl() is like  ERR_print_errors_fp(stderr),   but  deals
 with the fact that on Windows stderr is generally lost, so we use Prolog
