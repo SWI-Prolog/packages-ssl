@@ -15,7 +15,7 @@
 %\urldef{\diff}\url[Diff Automatisering v.o.f]{http://www.diff.nl}
 
 \title{SWI-Prolog SSL Interface}
-\author{Jan van der Steen \\
+\author{Jan van der Steen, Matt Lilley and Jan Wielemaker \\
 	\url[Diff Automatisering v.o.f]{http://www.diff.nl} \\[5pt]
 	Jan Wielemaker \\
         SWI, University of Amsterdam \\
@@ -53,10 +53,22 @@ agents to talk in private and create secure web services.
 The SWI-Prolog \pllib{ssl} library provides an API to turn arbitrary
 Prolog stream into SSL powered encrypted streams.
 
+Cryptography is a difficult topic. If you just want to download
+documents from an HTTPS server without worrying much about security,
+http_open/3 will do the job for you. As soon as you have higher security
+demands we strongly recomment you to read enough background material to
+understand what you are doing. See \secref{ssl-security} for some
+remarks regarding this implementation. This \url[The Linux Documentation
+Project
+page]{http://www.tldp.org/HOWTO/SSL-Certificates-HOWTO/index.html}
+provides some additional background and tips for managing certificates
+and keys.
+
+
 \input{ssllib.tex}
 
 \subsection{SSL Security}
-\label{sec:ssl-secutity}
+\label{sec:ssl-security}
 
 Using SSL (in this particular case based on the OpenSSL implementation)
 to connect to SSL services (e.g., an \verb$https://$ address) easily
