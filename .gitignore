@@ -29,6 +29,7 @@ config.h
 config.h.in
 config.status
 configure
+ssllib.tex
 ssl.tex
 ssl.html
 ssl.pdf
