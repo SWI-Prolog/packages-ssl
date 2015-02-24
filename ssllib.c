@@ -277,27 +277,25 @@ ssl_new(void)
     return new;
 }
 
-static void
-ssl_free(PL_SSL *config)
 /*
  * Free resources allocated to store the state and config parameters.
  */
-{
-    if (config) {
-        if ( config->magic == SSL_CONFIG_MAGIC ) {
-	    config->magic = 0;
-	    free(config->pl_ssl_cacert);
-	    free(config->pl_ssl_certf);
-	    free(config->pl_ssl_keyf);
-	    free(config->pl_ssl_password);
-	    free(config);
-	    ssl_deb(1, "Released config structure\n");
-	} else {
-	    assert(0);
-	}
-    } else {
-	ssl_deb(1, "No config structure to release\n");
-    }
+static void
+ssl_free(PL_SSL *config)
+{ if ( config )
+  { assert(config->magic == SSL_CONFIG_MAGIC);
+    config->magic = 0;
+    free(config->pl_ssl_cacert);
+    free(config->pl_ssl_certf);
+    free(config->pl_ssl_keyf);
+    free(config->pl_ssl_password);
+    if ( config->pl_ssl_peer_cert )
+      X509_free(config->pl_ssl_peer_cert);
+    free(config);
+    ssl_deb(1, "Released config structure\n");
+  } else
+  { ssl_deb(1, "No config structure to release\n");
+  }
 }
 
 static int
