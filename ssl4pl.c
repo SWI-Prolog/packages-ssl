@@ -1660,6 +1660,22 @@ pl_ssl_debug(term_t level)
 }
 
 
+static int
+add_key_string(term_t list, functor_t f, size_t len, const unsigned char*s)
+{ term_t tmp;
+  int rc;
+
+  rc = ( (tmp = PL_new_term_refs(2)) &&
+	 PL_unify_list_ex(list, tmp+0, list) &&
+	 PL_put_string_nchars(tmp+1, len, (const char*)s) &&
+	 PL_unify_term(tmp+0, PL_FUNCTOR, f, PL_TERM, tmp+1)
+       );
+  if ( tmp )
+    PL_reset_term_refs(tmp);
+  return rc;
+}
+
+
 static foreign_t
 pl_ssl_session(term_t stream_t, term_t session_t)
 { IOSTREAM* stream;
@@ -1687,44 +1703,28 @@ pl_ssl_session(term_t stream_t, term_t session_t)
     return FALSE;
   if ( !PL_unify_term(node_t,
 		      PL_FUNCTOR, FUNCTOR_version1,
-		        PL_INTEGER, (int)session->ssl_version))
-     return FALSE;
-
-  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
-    return FALSE;
-  if ( !PL_unify_term(node_t,
-		      PL_FUNCTOR, FUNCTOR_session_key1,
-		        PL_NCHARS, session->key_arg_length, session->key_arg))
+		      PL_INTEGER, (int)session->ssl_version))
     return FALSE;
 
-  if ( !PL_unify_list_ex(list_t, node_t, list_t))
+  if ( !add_key_string(list_t, FUNCTOR_session_key1,
+		       session->key_arg_length, session->key_arg) )
     return FALSE;
-  if ( !PL_unify_term(node_t,
-		      PL_FUNCTOR, FUNCTOR_master_key1,
-		        PL_NCHARS, session->master_key_length,
-		                   session->master_key))
-     return FALSE;
 
-  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+  if ( !add_key_string(list_t, FUNCTOR_master_key1,
+		       session->master_key_length, session->master_key) )
     return FALSE;
-  if ( !PL_unify_term(node_t,
-                     PL_FUNCTOR, FUNCTOR_session_id1,
-		       PL_NCHARS, session->session_id_length,
-		                  session->session_id) )
+
+  if ( !add_key_string(list_t, FUNCTOR_session_id1,
+		       session->session_id_length, session->session_id) )
     return FALSE;
+
   if ( ssl->s3 != NULL ) /* If the connection is SSLv2?! */
-  { if ( !PL_unify_list_ex(list_t, node_t, list_t) )
-      return FALSE;
-    if ( !PL_unify_term(node_t,
-			PL_FUNCTOR, FUNCTOR_client_random1,
-			  PL_NCHARS, SSL3_RANDOM_SIZE, ssl->s3->client_random) )
+  { if ( !add_key_string(list_t, FUNCTOR_client_random1,
+			 SSL3_RANDOM_SIZE, ssl->s3->client_random) )
       return FALSE;
 
-    if ( !PL_unify_list_ex(list_t, node_t, list_t) )
-      return FALSE;
-    if ( !PL_unify_term(node_t,
-			PL_FUNCTOR, FUNCTOR_server_random1,
-			  PL_NCHARS, SSL3_RANDOM_SIZE, ssl->s3->server_random) )
+    if ( !add_key_string(list_t, FUNCTOR_server_random1,
+			 SSL3_RANDOM_SIZE, ssl->s3->server_random) )
       return FALSE;
   }
 

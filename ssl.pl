@@ -191,10 +191,12 @@ ssl_context(Role, SSL, Module:Options) :-
 %	Retrieves (debugging) properties from the SSL context associated
 %	with Stream. If Stream  is  not   an  SSL  stream, the predicate
 %	raises  a  domain  error.  Session  is  a  list  of  properties,
-%	containing the following members:
+%	containing the members described below.   Except  for `Version`,
+%	all information are byte arrays that   are represented as Prolog
+%	strings holding characters in the range 0..255.
 %
 %	  * ssl_version(Version)
-%	  The negotiated version of the session.
+%	  The negotiated version of the session as an integer.
 %	  * session_key(Key)
 %	  The key material used in SSLv2 connections (if present).
 %	  * master_key(Key)
