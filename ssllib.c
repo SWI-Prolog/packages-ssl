@@ -70,6 +70,8 @@ typedef enum
 #define DEBUG 1
 #endif
 
+X509_STORE *system_root_store = NULL;
+
 /*
  * Index of our config data in the SSL data
  */
@@ -782,7 +784,7 @@ http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trust
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 static void
-ssl_system_verify_locations(PL_SSL *config)
+ssl_system_verify_locations(X509_STORE *store)
 {
 #ifdef __WINDOWS__
   HCERTSTORE hSystemStore;
@@ -795,7 +797,7 @@ ssl_system_verify_locations(PL_SSL *config)
 
       X509 *cert = d2i_X509(NULL, &ce, (int)pCertCtx->cbCertEncoded);
       if ( cert )
-      { X509_STORE_add_cert(SSL_CTX_get_cert_store(config->pl_ssl_ctx), cert);
+      { X509_STORE_add_cert(store, cert);
         X509_free(cert);
       }
     }
@@ -805,7 +807,6 @@ ssl_system_verify_locations(PL_SSL *config)
 #elif defined(__APPLE__)
   SecKeychainRef keychain = NULL;
   OSStatus status;
-
   status = SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &keychain);
   if ( status == errSecSuccess )
   { CFDictionaryRef query = NULL;
@@ -839,7 +840,7 @@ ssl_system_verify_locations(PL_SSL *config)
         if ( x509 == NULL )
         { continue;
         }
-        X509_STORE_add_cert(SSL_CTX_get_cert_store(config->pl_ssl_ctx), x509);
+        X509_STORE_add_cert(store, x509);
         X509_free(x509);
       }
       CFRelease(certs);
@@ -848,10 +849,9 @@ ssl_system_verify_locations(PL_SSL *config)
     CFRelease(keychainSingleton);
     CFRelease(keychain);
   }
-
 #else
 #ifdef SYSTEM_CACERT_FILENAME
-  SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
+  SSL_CTX_load_verify_locations(store,
 				SYSTEM_CACERT_FILENAME,
 				NULL);
 #endif
@@ -862,7 +862,7 @@ ssl_system_verify_locations(PL_SSL *config)
 static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->use_system_cacert == 1 )
-  { ssl_system_verify_locations(config);
+  { SSL_CTX_set_cert_store(config->pl_ssl_ctx, system_root_store);
     ssl_deb(1, "System certificate authority(s) installed (public keys loaded)\n");
   } else if ( config->pl_ssl_cacert )
   { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
@@ -973,6 +973,8 @@ ssl_lib_init(void)
       return -1;
     }
 #endif
+    system_root_store = X509_STORE_new();
+    ssl_system_verify_locations(system_root_store);
 
 #ifdef _REENTRANT
     ssl_thread_setup();
