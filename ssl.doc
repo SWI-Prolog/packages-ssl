@@ -28,9 +28,9 @@
 \begin{abstract}
 This document describes the SWI-Prolog SSL library, a set of predicates
 which provides secure sockets to Prolog applications, for example to run
-a secure HTTPS server, or access websites using the \const{https}
-protocol.  It can also be used to provide authentication and secure
-data exchange between Prolog processes over the network.
+a secure HTTP (HTTPS) server, or access websites using the \const{https}
+protocol. It can also be used to provide authentication and secure data
+exchange between Prolog processes over the network.
 \end{abstract}
 
 \pagebreak
@@ -55,24 +55,91 @@ Prolog stream into SSL powered encrypted streams.
 
 \input{ssllib.tex}
 
+\subsection{SSL Security}
+\label{sec:ssl-secutity}
+
+Using SSL (in this particular case based on the OpenSSL implementation)
+to connect to SSL services (e.g., an \verb$https://$ address) easily
+gives a false sense of security. This section explains some of the
+pitfalls.\footnote{We do not claim to be complete, just to start warning
+you if security is really important to you. Please make sure you
+understand (Open)SSL before relying on it.}. As stated in the
+introduction, SSL aims at solving two issues: tapping information from
+the wire by means of encryption and make sure that you are talking to
+the right address.
+
+Encryption is generally well arranged as long as you ensure that the
+underlying SSL library has all known security patches installed and you
+use an encryption that is not known to be weak. The Windows version of
+SWI-Prolog ships with its own binary of the OpenSSL library. Ensure this
+is up-to-date. Most other systems ship with the OpenSSL library and
+SWI-Prolog uses the system version. This applies for the binaries we
+distribute for MacOSX and Linux, as well as official Linux packages.
+Check the origin and version of the OpenSSL libraries if SWI-Prolog was
+compiled from source.
+
+Whether you are talking to the right address is a complicated issue. The
+core of the validation is that the server provides a
+\jargon{certificate} that identifies the server. This certificate is
+digitally \jargon{signed} by another certificate, and ultimately by a
+\jargon{root certificate}.  Verifying the peer implies:
+
+\begin{enumerate}
+    \item Verifying the chain or digital signatures until a trusted
+    root certificate is found.
+    \item Verifying that the signer of a certificate did not \jargon{revoke}
+    the certificate.
+    \item Verifying that the host we connected to is indeed the host
+    claimed in the certificate.
+\end{enumerate}
+
+The default https client plugin (\pllib{http/http_ssl_plugin}) registers
+the system trusted root certificate with OpenSSL. This is achieved using
+the option \term{cacert_file}{system(root_certificates)} of
+ssl_context/3. The verification is left to OpenSSL. To the best of our
+knowledge, the current (1.0) version of OpenSSL \textbf{only} implements
+step (1) of the verification process outlined above. This implies that
+an attacker that can control DNS mapping (host name to IP) or routing
+(IP to physical machine) can fake to be a secure host as long as they
+manage to obtain a certificate that is signed from a recognised
+authority.
+
+
+\subsubsection{Disabling certificate checking}
+\label{sec:disable-certificate}
+
+In some cases clients are not really interested in host validation of
+the peer and whether or not the certificate can be trusted.  In these
+cases the client can pass \term{cert_verify_hook}{cert_accept_any},
+calling cert_accept_any/5 which accepts any certificate.
+
+
+\subsubsection{Establishing a safe connection}
+\label{sec:ssl-safe-connection}
+
+Applications that exchange sensitive data with e.g., a backend server
+typically need to ensure they have a secure connection to their peer.
+
+TODO: How to deal with this?
+
+
 \subsection{Accessing an HTTPS server}
 \label{sec:ssl-https-client}
 
-Accessing an =|https://|= server can be achieved using the code skeleton
-below.  See ssl_context/3 for the \term{cert_verify_hook}{:Hook} option.
+Accessing an \verb$https://$ server can be achieved using the code
+skeleton below. The line \verb$:- use_module(library(http/http_ssl_plugin)).$
+can be omitted if the development environment is present because the
+plugin is dynamically loaded by http_open/3 of the \const{https} scheme
+is detected.  See \secref{ssl-secutity} for more information about
+security aspects.
 
 \begin{code}
 :- use_module(library(http/http_open)).
 :- use_module(library(http/http_ssl_plugin)).
 
-cert_verify(_SSL, _ProblemCert, _AllCerts, _FirstCert, _Error) :-
-	format(user_error, 'Accepting certificate~n', []).
-
-	...,
-	http_open(HTTPS_url, In,
-		  [ cert_verify_hook(cert_verify)
-		  ]),
-	...
+    ...,
+    http_open(HTTPS_url, In, []),
+    ...
 \end{code}
 
 

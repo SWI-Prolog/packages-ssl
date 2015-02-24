@@ -148,7 +148,8 @@ In UNIX, pipes could just as easily be used, for example.
 %	  follows: `call(CallBack, +SSL, +ProblemCertificate,
 %	  +AllCertificates, +FirstCertificate, +Error)`. Access will be
 %	  granted iff the predicate succeeds. See load_certificate/2
-%	  for a description of the certificate terms.
+%	  for a description of the certificate terms.  See
+%	  cert_accept_any/5 for accepting any certificate.
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate as specified using the
 %	  option `certificate_file` described earlier. For a

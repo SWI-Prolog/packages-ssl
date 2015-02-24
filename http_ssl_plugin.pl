@@ -103,10 +103,9 @@ thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 %%	http:http_protocol_hook(+Scheme, +Parts, +PlainIn, +PlainOut,
 %%				-In, -Out, +Options) is semidet.
 %
-%	Hook for HTTP clients to connect   to  an HTTPS (SSL-based HTTP)
-%	server.
-%
-%	@see http_open/3
+%	Hook for http_open/3 to connect  to   an  HTTPS (SSL-based HTTP)
+%	server.   This   plugin   also   passes   the   default   option
+%	`cacert_file(system(root_certificates))` to ssl_context/3.
 
 http:http_protocol_hook(https, Parts, PlainIn, PlainOut, In, Out, Options):-
 	ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options).
