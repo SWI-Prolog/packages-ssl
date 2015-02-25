@@ -55,6 +55,7 @@
 :- use_module(library(socket)).
 :- use_module(library(error)).
 :- use_module(library(option)).
+:- use_module(library(debug)).
 
 :- use_foreign_library(foreign(ssl4pl)).
 
@@ -272,8 +273,9 @@ ssl_init(SSL, Role, Options) :-
 
 ssl_init2(server, SSL, Options) :-
 	Options = _:Options1,
-	option(port(Port), Options1),
+	need_option(port(Port), Options1),
         tcp_socket(Socket),
+	assertion(Socket = '$socket'(_)),	% may change
 	tcp_setopt(Socket, reuseaddr),
         tcp_bind(Socket, Port),
         tcp_listen(Socket, 5),
@@ -285,9 +287,10 @@ ssl_init2(server, SSL, Options) :-
         ssl_put_socket(SSL, S).
 ssl_init2(client, SSL, Options) :-
 	Options = _:Options1,
-        option(port(Port), Options1),
-        option(host(Host), Options1),
+        need_option(port(Port), Options1),
+        need_option(host(Host), Options1),
         tcp_socket(Socket),
+	assertion(Socket = '$socket'(_)),	% may change
 	tcp_setopt(Socket, reuseaddr),
         tcp_connect(Socket, Host:Port),
         catch(ssl_context(client, SSL, Options),
@@ -297,6 +300,11 @@ ssl_init2(client, SSL, Options) :-
         Socket = '$socket'(S),
         ssl_put_socket(SSL, S).
 
+need_option(Opt, Options) :-
+	option(Opt, Options), !.
+need_option(Opt, _) :-
+	functor(Opt, Name, _),
+	existence_error(option, Name).
 
 %%	ssl_accept(+SSL, -Socket, -Peer) is det.
 %
