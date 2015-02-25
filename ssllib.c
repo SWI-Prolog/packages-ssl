@@ -854,10 +854,11 @@ ssl_system_verify_locations(X509_STORE *store)
   X509 *cert = NULL;
   FILE *cafile = fopen(SYSTEM_CACERT_FILENAME, "rb");
   if (cafile != NULL)
-  { cert = PEM_read_X509(cafile, NULL, NULL, NULL);
+  { while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
+    { X509_STORE_add_cert(store, cert);
+      X509_free(cert);
+    }
     fclose(cafile);
-    if (cert != NULL)
-      X509_STORE_add_cert(store, cert);
   }
 #endif
 #endif
