@@ -9,8 +9,9 @@
 */
 
 :- module(https_server,
-	  [ server/1,				% ?Port
-	    server_with_client_cert/1		% ?Port
+	  [ http_server/1,			% ?Port
+	    https_server/1,			% ?Port
+	    https_server_with_client_cert/1	% ?Port
 	  ]).
 :- if(exists_source('../http/examples/demo_body')).
 :- use_module('../http/examples/demo_body').	% location in source tree
@@ -42,14 +43,26 @@ simple demo through HTTPS.
   ==
   $ swipl https.pl
   ...
-  ?- server(1443).
+  ?- https_server(1443).
   % Started server at https://localhost:1443/
   true.
   ==
 
 */
 
-%%	server(?Port) is det.
+%%	http_server(?Port) is det.
+%
+%	Our baseline is a plain HTTP server.  No HTTPS involved here. We
+%	give it for the case you want to do timing and other experiments
+%	comparing the HTTP with HTTPS.
+
+http_server(Port) :-
+	http_server(reply,
+		    [ port(Port)
+		    ]).
+
+
+%%	https_server(?Port) is det.
 %
 %	Start an HTTPS demo server at Port.   Compared  to a normal HTTP
 %	server, this requires two additional SSL components:
@@ -70,7 +83,7 @@ simple demo through HTTPS.
 %	to realise a safe login procedure  where attackers cannot easily
 %	steal the HTTP authentication token or cookie.
 
-server(Port) :-
+https_server(Port) :-
 	http_server(reply,
 		    [ port(Port),
 		      ssl([ certificate_file('etc/server/server-cert.pem'),
@@ -80,7 +93,7 @@ server(Port) :-
 		    ]).
 
 
-%%	server_with_client_cert/1
+%%	https_server_with_client_cert/1
 %
 %	Our second server  is  a  setup   that  is  typically  used  for
 %	administrative tasks where users  are   handed  a certificate to
@@ -102,7 +115,7 @@ server(Port) :-
 %	this is in   Edit/Preference/Advanced/View  Certificates/Import.
 %	When requested for the password, enter "secret".
 
-server_with_client_cert(Port) :-
+https_server_with_client_cert(Port) :-
 	http_server(reply,
 		    [ port(Port),
 		      ssl([ certificate_file('etc/server/server-cert.pem'),
