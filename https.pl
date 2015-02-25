@@ -1,50 +1,32 @@
-/*  $Id$
-
-    Part of SWI-Prolog
+/*  Part of SWI-Prolog
 
     Author:        Jan Wielemaker
-    E-mail:        J.Wielemaker@cs.vu.nl
+    E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 1985-2011, University of Amsterdam
-			      VU University Amsterdam
 
-    This program is free software; you can redistribute it and/or
-    modify it under the terms of the GNU General Public License
-    as published by the Free Software Foundation; either version 2
-    of the License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-    As a special exception, if you link this library with other files,
-    compiled with a Free Software compiler, to produce an executable, this
-    library does not by itself cause the resulting executable to be covered
-    by the GNU General Public License. This exception does not however
-    invalidate any other reasons why the executable file might be covered by
-    the GNU General Public License.
+    This demo code is released in the _public domain_, which implies
+    you may copy, modify and reuse this code without restriction.
 */
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Demo using the threaded HTTP library with SSL.
+:- module(https_server,
+	  [ server/0,
+	    server/2				% +Port, +Options
+	  ]).
+:- use_module('../http/demo_body').
+:- use_module(library('http/thread_httpd')).
+:- use_module(library('http/http_ssl_plugin')).
 
-URL:	https://localhost:1443/env
+/** <module> Demo HTTPS server
 
-For further details on supported paths,   see demo_body.pl from the http
-examples.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+This demo illustrates hot to  setup  a   minimal  HTTPS  server  using a
+self-signed certificate.
+*/
 
-:- load_files([ '../http/demo_body',
-		library('http/thread_httpd'),
-		library('http/http_ssl_plugin')
-	      ],
-	      [ silent(true)
-	      ]).
+%%	server is det.
+%%	server(?Port, +Options) is det.
+%
+%	Start HTTPS demo server.  The predicate server/0 starts the
+%	server without options at port 1443.
 
 server :-
 	server(1443, []).
@@ -52,20 +34,20 @@ server :-
 server(Port, Options) :-
 	http_server(reply,
 		    [ port(Port),
-		      timeout(60),
-		      ssl([ host('localhost'),
-%			    cert(true),
-%			    peer_cert(true),
-			    cacert_file('etc/demoCA/cacert.pem'),
-			    certificate_file('etc/server/server-cert.pem'),
+		      ssl([ certificate_file('etc/server/server-cert.pem'),
 			    key_file('etc/server/server-key.pem'),
-			    cert_verify_hook(get_cert_verify),
-			    password('apenoot1')
+			    password('apenoot1')/*,
+			    peer_cert(true),
+			    cacert_file('etc/demoCA/cacert.pem'),
+			    cert_verify_hook(get_cert_verify)*/
 			  ])
 		    | Options
 		    ]).
 
+:- public
+	get_cert_verify/3.
+
 get_cert_verify(_SSL, Certificate, Error) :-
-	format('Handling detailed certificate verification~n'),
-	format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
+	format('Handling client certificate verification~n'),
+	format('Certificate: ~p, error: ~w~n', [Certificate, Error]),
 	format('Server accepts the client certificate~n').
