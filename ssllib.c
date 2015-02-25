@@ -672,11 +672,11 @@ ssl_exit(PL_SSL *config)
 
 
 X509 *
-ssl_peer_certificate(PL_SSL *config)
-{ if ( !config->pl_ssl_peer_cert )
-    config->pl_ssl_peer_cert = SSL_get_peer_certificate(config->pl_ssl_ssl);
+ssl_peer_certificate(PL_SSL_INSTANCE *instance)
+{ if ( !instance->config->pl_ssl_peer_cert )
+    instance->config->pl_ssl_peer_cert = SSL_get_peer_certificate(instance->ssl);
 
-  return config->pl_ssl_peer_cert;
+  return instance->config->pl_ssl_peer_cert;
 }
 
 

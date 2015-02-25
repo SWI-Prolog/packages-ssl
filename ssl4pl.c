@@ -1747,8 +1747,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
   instance = stream->handle;
   PL_release_stream(stream);
-
-  if ( (cert = ssl_peer_certificate(instance->config)) )
+  if ( (cert = ssl_peer_certificate(instance)) )
   { return unify_certificate(Cert, cert);
   }
 
