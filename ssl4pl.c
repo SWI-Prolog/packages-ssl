@@ -1778,6 +1778,28 @@ foreign_t pl_system_root_certificates(term_t list)
   return PL_unify_nil(tail);
 }
 
+static foreign_t
+pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
+{ IOSTREAM* stream;
+  PL_SSL_INSTANCE* instance;
+  X509 *cert;
+
+  if ( !PL_get_stream_handle(stream_t, &stream) )
+    return FALSE;
+  if ( stream->functions != &ssl_funcs )
+  { PL_release_stream(stream);
+    return PL_domain_error("ssl_stream", stream_t);
+  }
+
+  instance = stream->handle;
+  PL_release_stream(stream);
+  if ( (cert = ssl_peer_certificate(instance)) )
+  { return unify_certificate(Cert, cert);
+  }
+
+  return FALSE;
+}
+
 
 		 /*******************************
 		 *	     INSTALL		*
@@ -1850,6 +1872,8 @@ install_ssl4pl()
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
+  PL_register_foreign("ssl_peer_certificate",
+					2, pl_ssl_peer_certificate, 0);
   PL_register_foreign("load_crl",       2, pl_load_crl,      0);
   PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);

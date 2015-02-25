@@ -207,41 +207,6 @@ ssl_cert_print(X509 *cert, const char *role)
 
 #endif /* SSL_CERT_VERIFY_MORE */
 
-#if SSL_CERT_VERIFY_MORE
-
-static void
-ssl_verify_cert(PL_SSL *config)
-/*
- * Verify certificate
- */
-{
-    SSL        * ssl  = config->pl_ssl_ssl;
-    X509       * cert = config->pl_ssl_peer_cert;
-    const char * role = (config->pl_ssl_role == PL_SSL_SERVER)
-                        ? "Client"
-                        : "Server"
-                        ;
-
-    if (cert != NULL) {
-        if (SSL_get_verify_result(ssl) != X509_V_OK) {
-            ssl_err("%s certificate didn't verify, continue anyway\n", role);
-        } else {
-            ssl_deb(1, "%s certificate verified ok\n", role);
-        }
-
-        ssl_cert_print(cert, role);
-
-        /*
-         * Do additional certificate verification stuff here.
-         */
-        X509_free (cert);
-    } else {
-        ssl_err("%s does not have certificate.\n", role);
-    }
-}
-
-#endif /* SSL_CERT_VERIFY_MORE */
-
 static PL_SSL *
 ssl_new(void)
 /*
@@ -673,6 +638,15 @@ ssl_exit(PL_SSL *config)
 }
 
 
+X509 *
+ssl_peer_certificate(PL_SSL_INSTANCE *instance)
+{ if ( !instance->config->pl_ssl_peer_cert )
+    instance->config->pl_ssl_peer_cert = SSL_get_peer_certificate(instance->ssl);
+
+  return instance->config->pl_ssl_peer_cert;
+}
+
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ERR_print_errors_pl() is like  ERR_print_errors_fp(stderr),   but  deals
 with the fact that on Windows stderr is generally lost, so we use Prolog
@@ -732,42 +706,6 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
     ssl_deb(1, "Initialized\n");
 
     return config;
-}
-
-int
-ssl_debug(PL_SSL *config)
-/*
- * Get some extra info once the SSL negotiation is completed
- */
-{
-#if DEBUG
-    /*
-     * Get the cipher
-     */
-    ssl_deb(1,  "SSL connection using %s\n"
-           , SSL_get_cipher(config->pl_ssl_ssl)
-           ) ;
-#endif
-
-#if SSL_CERT_VERIFY_MORE
-    if (config->pl_ssl_peer_cert_required) {
-        /*
-         * Get peer's certificate
-         */
-        config->pl_ssl_peer_cert = SSL_get_peer_certificate(config->pl_ssl_ssl);
-        if (config->pl_ssl_peer_cert == NULL) {
-            return -8;
-        }
-        ssl_deb(1, "got peer certificate\n");
-
-        ssl_verify_cert(config);
-        ssl_deb(1, "verified peer certificate\n");
-    }
-#endif
-
-    ssl_deb(1, "inspected ssl peer details\n");
-
-    return 0;
 }
 
 
