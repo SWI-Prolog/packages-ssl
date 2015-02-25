@@ -41,8 +41,8 @@
             rsa_private_encrypt/3,      % +Key, +Plaintext, -Ciphertext
             rsa_public_decrypt/3,       % +Key, +Ciphertext, -Plaintext
             rsa_public_encrypt/3,       % +Key, +Plaintext, -Ciphertext
-            ssl_context/3,		% +Role, -Config, +Options
-            ssl_init/3,                 % -Config, +Role, +Options
+            ssl_context/3,		% +Role, -Config, :Options
+            ssl_init/3,                 % -Config, +Role, :Options
             ssl_accept/3,               % +Config, -Socket, -Peer
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
