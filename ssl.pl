@@ -33,6 +33,7 @@
             load_private_key/3,         % +Stream, +Password, -Key
             load_public_key/2,          % +Stream, -Key
             load_crl/2,                 % +Stream, -Crl
+	    system_root_certificates/1, % -List
 	    cert_accept_any/5,		% +SSL, +ProblemCertificate,
 					% +AllCertificates, +FirstCertificate,
 					% +Error
@@ -48,8 +49,8 @@
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
 					%          -SSLRead,   -SSLWrite
 	    ssl_peer_certificate/2,	% +Stream, -Certificate
-	    ssl_exit/1,			% +Config
-            ssl_session/2               % +Stream, -Session
+            ssl_session/2,              % +Stream, -Session
+	    ssl_exit/1			% +Config
 	  ]).
 :- use_module(library(socket)).
 :- use_module(library(error)).
@@ -126,17 +127,9 @@ In UNIX, pipes could just as easily be used, for example.
 %	  * cacert_file(+FileName)
 %	  Specify a file containing certificate keys which will thus
 %	  automatically be verified as trusted. Using FileName
-%	  `system(root_certificates)` starts an OS specific
-%	  process to obtain the system's trusted root certificates.
-%	  Current implementation for `system(root_certificates)`:
-%
-%	    - On Windows, CertOpenSystemStore() is used to import
-%	      the `"ROOT"` certificates from the OS.
-%	    - On MacOSX, the trusted keys are loaded from the
-%	      _SystemRootCertificates_ key chain.
-%	    - Otherwise, certificates are loaded from the file
-%	      =/etc/ssl/certs/ca-certificates.crt=.  This
-%	      location is the default on Linux.
+%	  `system(root_certificates)` uses a list of trusted root
+%	  certificates as provided by the OS. See
+%	  system_root_certificates/1 for details.
 %
 %	  It is also possible to install an application defined handler
 %	  for    verifying    certificates    using      the     option
@@ -187,6 +180,21 @@ ssl_context(Role, SSL, Module:Options) :-
 %	called to negotiate an SSL  session   over  the  streams. If the
 %	negotiation is successful, SSLRead and SSLWrite are returned.
 
+%%	ssl_peer_certificate(+Stream, -Certificate) is semidet.
+%
+%	True if the peer certificate  is   provided  (this is always the
+%	case for a client connection) and   Certificate unifies with the
+%	peer certificate. The example below  uses   this  to  obtain the
+%	_Common Name_ of the peer  after   establishing  an https client
+%	connection:
+%
+%	  ==
+%	    http_open(HTTPS_url, In, []),
+%	    ssl_peer_certificate(In, Cert),
+%	    memberchk(subject(Subject), Cert),
+%	    memberchk('CN' = CommonName), Subject)
+%	  ==
+
 %%	ssl_session(+Stream, -Session) is det.
 %
 %	Retrieves (debugging) properties from the SSL context associated
@@ -229,6 +237,21 @@ ssl_context(Role, SSL, Module:Options) :-
 %	containing  terms  hash/1,   signature/1,    issuer_name/1   and
 %	revocations/1,  which  is  a  list   of  revoked/2  terms.  Each
 %	revoked/2 term is of the form revoked(+Serial, DateOfRevocation)
+
+%%	system_root_certificates(-List) is det.
+%
+%	List is a list of trusted root   certificates as provided by the
+%	OS. This is the list used by ssl_context/3 when using the option
+%	`system(root_certificates)`.  The list is obtained using an OS
+%	specific process.  The current implementation is as follows:
+%
+%	    - On Windows, CertOpenSystemStore() is used to import
+%	      the `"ROOT"` certificates from the OS.
+%	    - On MacOSX, the trusted keys are loaded from the
+%	      _SystemRootCertificates_ key chain.
+%	    - Otherwise, certificates are loaded from the file
+%	      =/etc/ssl/certs/ca-certificates.crt=.  This
+%	      location is the default on Linux.
 
 
 /*
