@@ -136,15 +136,21 @@ In UNIX, pipes could just as easily be used, for example.
 %	  for    verifying    certificates    using      the     option
 %	  `cert_verify_hook`
 %	  * cert_verify_hook(:CallBack)
-%	  In case a certificate cannot be verified or has some
-%	  properties which makes it invalid (invalid validity date for
-%	  example) the supplied function will be called to ask its
-%	  opinion about the certificate. The predicate is called as
-%	  follows: `call(CallBack, +SSL, +ProblemCertificate,
-%	  +AllCertificates, +FirstCertificate, +Error)`. Access will be
-%	  granted iff the predicate succeeds. See load_certificate/2
-%	  for a description of the certificate terms.  See
-%	  cert_accept_any/5 for accepting any certificate.
+%	  The predicate ssl_negotiate/5 calls CallBack as follows:
+%
+%	    ==
+%	    call(CallBack, +SSL,
+%		 +ProblemCertificate, +AllCertificates, +FirstCertificate,
+%		 +Error)
+%	    ==
+%
+%	  In case the certificate was verified by one of the provided
+%	  certifications from the `cacert_file` option, Error is unified
+%	  with the atom `verified`. Otherwise it contains the error
+%	  string passed from OpenSSL. Access will be granted iff the
+%	  predicate succeeds. See load_certificate/2 for a description
+%	  of the certificate terms. See cert_accept_any/5 for a dummy
+%	  implementation that accepts any certificate.
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate as specified using the
 %	  option `certificate_file` described earlier. For a

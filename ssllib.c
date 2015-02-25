@@ -475,8 +475,12 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
         /*
          * Get error specification
          */
-        err   = X509_STORE_CTX_get_error(ctx);
-        error = X509_verify_cert_error_string(err);
+	if ( preverify_ok )
+	{ error = "verified";
+	} else
+	{ err   = X509_STORE_CTX_get_error(ctx);
+	  error = X509_verify_cert_error_string(err);
+	}
 
         if (config->pl_ssl_cb_cert_verify) {
            preverify_ok = ((config->pl_ssl_cb_cert_verify)(config, cert, ctx, error) != 0);
