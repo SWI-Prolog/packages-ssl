@@ -461,7 +461,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 
 
     ssl_deb(1, " ---- INIT Handling certificate verification\n");
-    if (!preverify_ok) {
+    if ( !preverify_ok || config->pl_ssl_cb_cert_verify_data != NULL ) {
         X509 *cert = NULL;
         int   err;
         const char *error;
