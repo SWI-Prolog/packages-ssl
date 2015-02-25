@@ -53,6 +53,7 @@ static atom_t ATOM_tlsv1;
 static atom_t ATOM_tlsv1_1;
 static atom_t ATOM_tlsv1_2;
 
+static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_error2;
@@ -422,10 +423,10 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
         return FALSE;
      }
      /* Otherwise just get the first 12 chars - ignore seconds */
-     memcpy(pbuffer, source, 10);
-     pbuffer += 10;
-     source += 10;
-     length -= 10;
+     memcpy(pbuffer, source, 12);
+     pbuffer += 12;
+     source += 12;
+     length -= 12;
   }
   /* Next find end of string */
   if ((*source == 'Z') || (*source == '-') || (*source == '+'))
@@ -501,13 +502,30 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   unsigned char digest[EVP_MAX_MD_SIZE];
   unsigned int digest_length;
   unsigned char* p;
-
+  int nid = 0;
   /* Generate hash */
-  type=EVP_get_digestbyname(OBJ_nid2sn(OBJ_obj2nid(algorithm)));
-  if (type == NULL)
-  { return ssl_error("digest_lookup");
+  nid = OBJ_obj2nid(algorithm);
+  /* Annoyingly, EVP_get_digestbynid doesnt work for some of these algorithms. Instead check for
+     them explicitly and set the digest manually
+  */
+  if (nid == NID_ecdsa_with_SHA1)
+  { type = EVP_sha1();
+  } else if (nid == NID_ecdsa_with_SHA256)
+  { type = EVP_sha256();
+  } else if (nid == NID_ecdsa_with_SHA384)
+  { type = EVP_sha384();
+#ifdef HAVE_OPENSSL_MD2_H
+  } else if (nid == NID_md2WithRSAEncryption)
+  { type = EVP_md2();
+#endif
+  } else
+  { type = EVP_get_digestbynid(nid);
+    if (type == NULL)
+      return PL_unify_term(hash,
+                           PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
+                           PL_INTEGER, nid);
   }
-  EVP_MD_CTX_init( &ctx);
+  EVP_MD_CTX_init(&ctx);
 
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
@@ -1731,8 +1749,34 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   return PL_unify_nil_ex(list_t);
 }
 
+extern X509_STORE *system_root_store;
+foreign_t pl_system_root_certificates(term_t list)
+{ STACK_OF(X509_OBJECT) *certs = NULL;
+  X509_OBJECT *obj = NULL;
+  X509 *cert;
+  int i;
+  term_t head = PL_new_term_ref();
+  term_t tail = PL_copy_term_ref(list);
 
+  if (system_root_store == NULL)
+    return PL_unify_nil(list);
 
+  certs = system_root_store->objs;
+  for(i = 0; i < sk_X509_OBJECT_num(certs); i++)
+  { obj = sk_X509_OBJECT_value(certs, i);
+    if (obj->type == X509_LU_X509) /* Could be a CRL */
+    { cert = obj->data.x509;
+      if (!(PL_unify_list(tail, head, tail) &&
+            unify_certificate(head, cert)))
+      {
+        Sdprintf("Bad cert\n");
+        continue;
+        return FALSE;
+      }
+    }
+  }
+  return PL_unify_nil(tail);
+}
 
 
 		 /*******************************
@@ -1790,7 +1834,7 @@ install_ssl4pl()
   FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
   FUNCTOR_system1         = PL_new_functor(PL_new_atom("system"), 1);
-
+  FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
   memset(&ssl_context_type, 0, sizeof(ssl_context_type));
   ssl_context_type.magic = PL_BLOB_MAGIC;
   ssl_context_type.flags = PL_BLOB_UNIQUE | PL_BLOB_NOCOPY;
@@ -1814,6 +1858,7 @@ install_ssl4pl()
   PL_register_foreign("rsa_private_encrypt", 3, pl_rsa_private_encrypt, 0);
   PL_register_foreign("rsa_public_decrypt", 3, pl_rsa_public_decrypt, 0);
   PL_register_foreign("rsa_public_encrypt", 3, pl_rsa_public_encrypt, 0);
+  PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
 
   /*
    * Initialize ssllib
