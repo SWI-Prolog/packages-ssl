@@ -72,23 +72,23 @@ thread_httpd:make_socket_hook(Port, Options0, Options) :-
 		   close_parent(true)
 		 | SSLOptions
 		 ]),
-	atom_concat('httpsd@', Port, Queue),
+	atom_concat('httpsd', Port, Queue),
 	Options = [ queue(Queue),
 		    ssl_instance(SSL)
 		  | Options0
 		  ].
 
+%%	thread_httpd:accept_hook(:Goal, +Options) is semidet.
+%
+%	Implement the accept for HTTPS connections.
+
 thread_httpd:accept_hook(Goal, Options) :-
 	memberchk(ssl_instance(SSL), Options), !,
 	memberchk(queue(Queue), Options),
-	repeat,
-	  catch(ssl_accept(SSL, Client, Peer), E,
-		(   print_message(error, E),
-		    fail
-		)),
-	  debug(http(connection), 'New HTTPS connection from ~p', [Peer]),
-	  thread_send_message(Queue, ssl_client(SSL, Client, Goal, Peer)),
-	fail.
+	ssl_accept(SSL, Client, Peer),
+	debug(http(connection), 'New HTTPS connection from ~p', [Peer]),
+	http_enough_workers(Queue, accept, Peer),
+	thread_send_message(Queue, ssl_client(SSL, Client, Goal, Peer)).
 
 thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 			      Goal, In, Out,
