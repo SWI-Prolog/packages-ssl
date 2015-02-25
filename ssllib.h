@@ -61,7 +61,6 @@ typedef struct pl_ssl {
     /*
      * Context, Certificate, SSL info
      */
-    SSL *               pl_ssl_ssl;
     SSL_CTX *           pl_ssl_ctx;
     int                 pl_ssl_idx;
     X509 *              pl_ssl_peer_cert;
