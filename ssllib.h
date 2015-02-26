@@ -108,9 +108,9 @@ typedef struct ssl_instance {
 int              ssl_lib_init    (void);
 int              ssl_lib_exit    (void);
 PL_SSL *         ssl_init        (PL_SSL_ROLE role, const SSL_METHOD *method);
-int              ssl_config      (PL_SSL *config);
+int              ssl_config      (PL_SSL *config, term_t source);
 int              ssl_socket      (PL_SSL *config);
-PL_SSL_INSTANCE *ssl_ssl_bio	 (PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite);
+int              ssl_ssl_bio	 (PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE ** instance);
 PL_SSL_INSTANCE *ssl_ssl         (PL_SSL *config, int sock);
 void             ssl_exit        (PL_SSL *config);
 int              ssl_close       (PL_SSL_INSTANCE *instance);

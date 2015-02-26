@@ -56,8 +56,8 @@ static atom_t ATOM_tlsv1_2;
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_system1;
-static functor_t FUNCTOR_error2;
-static functor_t FUNCTOR_ssl_error1;
+       functor_t FUNCTOR_error2;	/* also used in ssllib.c */
+       functor_t FUNCTOR_ssl_error4;	/* also used in ssllib.c */
 static functor_t FUNCTOR_permission_error3;
 static functor_t FUNCTOR_ip4;
 static functor_t FUNCTOR_version1;
@@ -85,46 +85,8 @@ static functor_t FUNCTOR_system1;
 
 static PL_blob_t ssl_context_type;
 
-static int
-ssl_error(const char *id)
-{ term_t ex;
+extern foreign_t raise_ssl_error(long e);
 
-  if ( (ex=PL_new_term_ref()) &&
-       PL_unify_term(ex,
-		     PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_ssl_error1,
-		         PL_CHARS, id,
-		       PL_VARIABLE) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
-
-static int
-raise_last_ssl_error()
-{ char errmsg[1024];
-
-  ERR_error_string_n(ERR_get_error(), errmsg, sizeof(errmsg));
-  return ssl_error(errmsg);
-}
-
-
-static int
-permission_error(const char *action, const char *type, term_t obj)
-{ term_t ex;
-
-  if ( (ex=PL_new_term_ref()) &&
-       PL_unify_term(ex,
-		     PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_permission_error3,
-		         PL_CHARS, action,
-		         PL_CHARS, type,
-		         PL_TERM, obj,
-		       PL_VARIABLE) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
 
 static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
 {
@@ -538,17 +500,17 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   if (!EVP_DigestInit(&ctx, type))
   { EVP_MD_CTX_cleanup(&ctx);
     PL_free(digest_buffer);
-    return ssl_error("digest_initialize");
+    return raise_ssl_error(ERR_get_error());
   }
   if (!EVP_DigestUpdate(&ctx, digest_buffer, digestible_length))
   { EVP_MD_CTX_cleanup(&ctx);
     PL_free(digest_buffer);
-    return ssl_error("digest_update");
+    return raise_ssl_error(ERR_get_error());
   }
   if (!EVP_DigestFinal(&ctx, digest, &digest_length))
   { EVP_MD_CTX_cleanup(&ctx);
     PL_free(digest_buffer);
-    return ssl_error("digest_finalize");
+    return raise_ssl_error(ERR_get_error());
   }
   EVP_MD_CTX_cleanup(&ctx);
   PL_free(digest_buffer);
@@ -953,7 +915,7 @@ pl_load_public_key(term_t source, term_t key_t)
   BIO_free(bio);
   PL_release_stream(stream);
   if (key == NULL)
-     return permission_error("read", "key", source);
+     return PL_permission_error("read", "key", source);
   if (!unify_public_key(key, key_t))
   { EVP_PKEY_free(key);
     PL_fail;
@@ -1000,7 +962,7 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
   BIO_free(bio);
   PL_release_stream(stream);
   if (key == NULL)
-     return permission_error("read", "key", source);
+     return PL_permission_error("read", "key", source);
   if (!unify_private_key(key, key_t))
   { EVP_PKEY_free(key);
     PL_fail;
@@ -1063,7 +1025,7 @@ pl_load_certificate(term_t source, term_t cert)
   BIO_free(bio);
   PL_release_stream(stream);
   if (x509 == NULL)
-     return ssl_error("read_x509");
+    return raise_ssl_error(ERR_get_error());
   if (unify_certificate(cert, x509))
   { X509_free(x509);
     PL_succeed;
@@ -1184,7 +1146,7 @@ static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 { atom_t a;
   PL_SSL *conf;
-  int r, rc;
+  int r;
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
@@ -1349,12 +1311,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
-  if ( ( rc = ssl_config(conf) ) < 0 )
-  { if ( rc == -1 )
-      return ssl_error("certificate and private key required but not set\n");
-    return raise_last_ssl_error();
-  }
-  return register_conf(config, conf);
+  return ssl_config(conf, options) && register_conf(config, conf);
 }
 
 
@@ -1474,6 +1431,7 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   IOSTREAM *sorg_in, *sorg_out;
   IOSTREAM *i, *o;
   PL_SSL_INSTANCE * instance = NULL;
+  int rc;
 
   if ( !get_conf(config, &conf) )
     return FALSE;
@@ -1482,10 +1440,10 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   if ( !PL_get_stream_handle(org_out, &sorg_out) )
     return FALSE;
 
-  if ( !(instance = ssl_ssl_bio(conf, sorg_in, sorg_out)) )
+  if ( !(rc = ssl_ssl_bio(conf, sorg_in, sorg_out, &instance)) )
   { PL_release_stream(sorg_in);
     PL_release_stream(sorg_out);
-    return ssl_error("ssl_verify");
+    return raise_ssl_error(ERR_get_error());
   }
 
   if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
@@ -1831,7 +1789,7 @@ install_ssl4pl()
 
   FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
-  FUNCTOR_ssl_error1      = PL_new_functor(PL_new_atom("ssl_error"), 1);
+  FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
   FUNCTOR_permission_error3=PL_new_functor(PL_new_atom("permission_error"), 3);
   FUNCTOR_ip4		  = PL_new_functor(PL_new_atom("ip"), 4);
   FUNCTOR_version1	  = PL_new_functor(PL_new_atom("version"), 1);

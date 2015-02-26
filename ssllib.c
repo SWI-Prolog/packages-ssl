@@ -54,6 +54,11 @@ static int PL_handle_signals(void) { return 0; }
 #endif
 #endif  /* __SWI_PROLOG__ */
 
+
+extern functor_t FUNCTOR_error2;
+extern functor_t FUNCTOR_ssl_error4;
+
+
 #include <openssl/rsa.h>
 
 typedef enum
@@ -76,94 +81,98 @@ X509_STORE *system_root_store = NULL;
 static int ssl_idx;
 static int ctx_idx;
 
+foreign_t raise_ssl_error(long e)
+{ term_t ex;
+  char* buffer;
+  char* colon;
+  char *component[5];
+  int n = 0;
 
-static void
-ssl_error(SSL *ssl, int ssl_ret, int code)
-/*
- * Report about errors occuring in the SSL layer
- */
-{
-    char  buf[256];
-    char *component[5];
-    char *colon;
-    int   error = ERR_get_error();
-    int   n;
+  if ( PL_exception(0) )
+    return FALSE;			/* already pending exception */
 
-    ssl_deb(1, "ssl_error() ret=%d, code=%d, err=%d\n", ssl_ret, code, error);
+  buffer = ERR_error_string(e, NULL);
+
+  /*
+   * Disect the following error string:
+   *
+   * error:[error code]:[library name]:[function name]:[reason string]
+   */
+
+  if ( (ex=PL_new_term_ref()) )
+  { for (colon = buffer, n = 0; n < 5; n++)
+    { component[n] = colon;
+      if ((colon = strchr(colon, ':')) == NULL) break;
+      *colon++ = 0;
+    }
+    if (PL_unify_term(ex,
+                      PL_FUNCTOR, FUNCTOR_error2,
+                      PL_FUNCTOR, FUNCTOR_ssl_error4,
+                      PL_CHARS,   component[1],
+                      PL_CHARS,   component[2],
+                      PL_CHARS,   component[3],
+                      PL_CHARS,   component[4],
+                      PL_VARIABLE) )
+      return PL_raise_exception(ex);
+  }
+  return FALSE;
+}
+
+
+
+static SSL_PL_STATUS
+ssl_inspect_status(SSL *ssl, int ssl_ret, PL_SSL_INSTANCE* instance)
+{ int code;
+  int error = ERR_get_error();
+  if (ssl_ret > 0)
+    return SSL_PL_OK;
+
+  code=SSL_get_error(ssl, ssl_ret);
+
+  switch (code) {
+    /* I am not sure what to do here - specifically, I am not sure if our underlying BIO
+       will block if there is not enough data to complete a handshake. If it will, we should
+       never get these return values. If it wont, then we presumably need to simply try again
+       which is why I am returning SSL_PL_RETRY
+    */
+  case SSL_ERROR_WANT_READ:
+    return SSL_PL_RETRY;
+
+  case SSL_ERROR_WANT_WRITE:
+    return SSL_PL_RETRY;
+
+#ifdef SSL_ERROR_WANT_CONNECT
+  case SSL_ERROR_WANT_CONNECT:
+    return SSL_PL_RETRY;
+#endif
+
+#ifdef SSL_ERROR_WANT_ACCEPT
+  case SSL_ERROR_WANT_ACCEPT:
+    return SSL_PL_RETRY;
+#endif
+
+  case SSL_ERROR_ZERO_RETURN:
+    return SSL_PL_OK;
+
+  default:
+    break;
+  }
 
     if ( code == SSL_ERROR_SYSCALL && error == 0 )
     { if ( ssl_ret == 0 )
       {	/* normal if peer just hangs up the line */
+        // FIXME: Should Sset_exception here?
 	ssl_deb(1, "SSL error report: unexpected end-of-file\n");
-	return;
+	return SSL_PL_ERROR;
       } else if ( ssl_ret == -1 )
       { ssl_deb(0, "SSL error report: syscall error: %s\n", strerror(errno));
-	return;
+        // FIXME: Should Sset_exception here too?
+	return SSL_PL_ERROR;
       }
     }
-
-    (void) ERR_error_string(error, buf);
-
-    /*
-     * Disect the following error string:
-     *
-     * error:[error code]:[library name]:[function name]:[reason string]
-     */
-    for (colon = buf, n = 0; n < 5; n++) {
-        component[n] = colon;
-        if ((colon = strchr(colon, ':')) == NULL) break;
-        *colon++ = 0;
-    }
-
-    ssl_deb(0,
-	    "SSL error report:\n\t%8s: %s\n\t%8s: %s\n\t%8s: %s\n\t%8s: %s\n"
-	   ,     "code", component[1]
-	   ,  "library", component[2]
-	   , "function", component[3]
-	   ,   "reason", component[4]
-	   );
-}
-
-static SSL_PL_STATUS
-ssl_inspect_status(SSL *ssl, int ssl_ret)
-{   int code;
-
-    if (ssl_ret > 0) {
-        return SSL_PL_OK;
-    }
-
-    code=SSL_get_error(ssl, ssl_ret);
-
-    switch (code) {
-       /* I am not sure what to do here - specifically, I am not sure if our underlying BIO
-          will block if there is not enough data to complete a handshake. If it will, we should
-          never get these return values. If it wont, then we presumably need to simply try again
-          which is why I am returning SSL_PL_RETRY
-       */
-	case SSL_ERROR_WANT_READ:
-           return SSL_PL_RETRY;
-
-	case SSL_ERROR_WANT_WRITE:
-           return SSL_PL_RETRY;
-
-#ifdef SSL_ERROR_WANT_CONNECT
-	case SSL_ERROR_WANT_CONNECT:
-           return SSL_PL_RETRY;
-#endif
-
-#ifdef SSL_ERROR_WANT_ACCEPT
-	case SSL_ERROR_WANT_ACCEPT:
-           return SSL_PL_RETRY;
-#endif
-
-	case SSL_ERROR_ZERO_RETURN:
-	    return SSL_PL_OK;
-
-	default:
-	    break;
-    }
-
-    ssl_error(ssl, ssl_ret, code);
+    // FIXME: This uses PL_raise_exception() which may or may not do the right thing if we are being called
+    // from an IO operation.
+    (void)raise_ssl_error(error);
     return SSL_PL_ERROR;
 }
 
@@ -177,35 +186,6 @@ ssl_strdup(const char *s)
     }
     return new;
 }
-
-#if SSL_CERT_VERIFY_MORE
-
-static void
-ssl_cert_print(X509 *cert, const char *role)
-{
-#if DEBUG
-    char * str = NULL;
-    int i;
-
-    ssl_deb(1, "%s certificate:\n", role);
-    str = X509_NAME_oneline(X509_get_subject_name (cert), NULL, 0);
-    if (str) {
-        ssl_deb(1, "\t subject: %s\n", str);
-        OPENSSL_free(str);
-    }
-
-    str = X509_NAME_oneline(X509_get_issuer_name  (cert), NULL, 0);
-    if (str) {
-        ssl_deb(1, "\t issuer: %s\n", str);
-        OPENSSL_free(str);
-    }
-
-    i = X509_get_signature_type(cert);
-    ssl_deb(1, "\t signature type: %d\n", i);
-#endif /* DEBUG */
-}
-
-#endif /* SSL_CERT_VERIFY_MORE */
 
 static PL_SSL *
 ssl_new(void)
@@ -461,6 +441,8 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 
 
     ssl_deb(1, " ---- INIT Handling certificate verification\n");
+    ssl_deb(1, "      Certificate preverified %sok\n",
+	    preverify_ok ? "" : "NOT ");
     if ( !preverify_ok || config->pl_ssl_cb_cert_verify_data != NULL ) {
         X509 *cert = NULL;
         int   err;
@@ -499,11 +481,9 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
             ssl_deb(1, "subject:%s\n", subject);
             ssl_deb(1,  "issuer:%s\n", issuer);
         }
-        ssl_deb(1, "Certificate preverified not ok\n");
-    } else {
-        ssl_deb(1, "Certificate preverified ok\n");
     }
-    ssl_deb(1, " ---- EXIT Handling certificate verification\n");
+    ssl_deb(1, " ---- EXIT Handling certificate verification (%saccepted)\n",
+	    preverify_ok ? "" : "NOT ");
 
     return preverify_ok;
 }
@@ -818,7 +798,7 @@ ssl_init_verify_locations(PL_SSL *config)
 
 
 int
-ssl_config(PL_SSL *config)
+ssl_config(PL_SSL *config, term_t options)
 /*
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
@@ -833,27 +813,24 @@ ssl_config(PL_SSL *config)
                                  ) ;
     ssl_deb(1, "password handler installed\n");
 
-    if (config->pl_ssl_cert_required) {
-        if (config->pl_ssl_certf == NULL ||
-            config->pl_ssl_keyf  == NULL) {
-            ssl_err("certificate and private key required but not set\n");
-            return -1;
-        }
-        if (SSL_CTX_use_certificate_file( config->pl_ssl_ctx
+    if (config->pl_ssl_cert_required)
+    { if (config->pl_ssl_certf == NULL)
+        return PL_existence_error("certificate", options);
+      if (config->pl_ssl_keyf  == NULL)
+        return PL_existence_error("key_file", options);
+      if (SSL_CTX_use_certificate_file( config->pl_ssl_ctx
                                         , config->pl_ssl_certf
-                                        , SSL_FILETYPE_PEM) <= 0) {
-            return -2;
-        }
-        if (SSL_CTX_use_PrivateKey_file( config->pl_ssl_ctx
+                                        , SSL_FILETYPE_PEM) <= 0)
+        return raise_ssl_error(ERR_get_error());
+      if (SSL_CTX_use_PrivateKey_file( config->pl_ssl_ctx
                                        , config->pl_ssl_keyf
-                                       , SSL_FILETYPE_PEM) <= 0) {
-            return -3;
-        }
-        if (SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0) {
-            ssl_err("Private key does not match certificate public key\n");
-            return -4;
-        }
-        ssl_deb(1, "certificate installed successfully\n");
+                                       , SSL_FILETYPE_PEM) <= 0)
+        return raise_ssl_error(ERR_get_error());
+      if (SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0)
+      { ssl_err("Private key does not match certificate public key\n");
+        return raise_ssl_error(ERR_get_error());
+      }
+      ssl_deb(1, "certificate installed successfully\n");
     }
     (void) SSL_CTX_set_verify( config->pl_ssl_ctx
                              , (config->pl_ssl_peer_cert_required)
@@ -862,8 +839,7 @@ ssl_config(PL_SSL *config)
                              , ssl_cb_cert_verify
                              ) ;
     ssl_deb(1, "installed certificate verification handler\n");
-
-    return 0;
+    return TRUE;
 }
 
 PL_SSL_INSTANCE *
@@ -1089,24 +1065,23 @@ BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
                                   &bio_create,
                                   &bio_destroy};
 
+
+
 /*
  * Establish an SSL session using the given read and write streams and the role
  */
 
-PL_SSL_INSTANCE *
-ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
+int
+ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE** instance)
 /*
  * Establish the SSL layer using the supplied streams
  */
 {
-    PL_SSL_INSTANCE * instance = NULL;
     BIO* rbio = NULL;
     BIO* wbio = NULL;
 
-    if ((instance = ssl_instance_new(config, sread, swrite)) == NULL) {
-        ssl_deb(1, "ssl instance malloc failed\n");
-        return NULL;
-    }
+    if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
+      return PL_resource_error("memory");
 
     /*
      * Create BIOs
@@ -1118,36 +1093,36 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
     /*
      * Prepare SSL layer
      */
-    if ((instance->ssl = SSL_new(config->pl_ssl_ctx)) == NULL) {
-        free(instance);
-        return NULL;
+    if (((*instance)->ssl = SSL_new(config->pl_ssl_ctx)) == NULL)
+    { free(*instance);
+      return raise_ssl_error(ERR_get_error());
     }
     ssl_deb(1, "allocated ssl layer\n");
 
     /*
      * Store reference to our config data in SSL
      */
-    SSL_set_ex_data(instance->ssl, ssl_idx, config);
-    SSL_set_bio(instance->ssl, rbio, wbio); /* No return value */
+    SSL_set_ex_data((*instance)->ssl, ssl_idx, config);
+    SSL_set_bio((*instance)->ssl, rbio, wbio); /* No return value */
     ssl_deb(1, "allocated ssl fd\n");
     switch (config->pl_ssl_role) {
         case PL_SSL_SERVER:
             ssl_deb(1, "setting up SSL server side\n");
             do {
-                int ssl_ret = SSL_accept(instance->ssl);
-                switch(ssl_inspect_status(instance->ssl, ssl_ret)) {
+                int ssl_ret = SSL_accept((*instance)->ssl);
+                switch(ssl_inspect_status((*instance)->ssl, ssl_ret, *instance)) {
                     case SSL_PL_OK:
                         /* success */
                         ssl_deb(1, "established ssl server side\n");
-                        return instance;
+                        return TRUE;
 
                     case SSL_PL_RETRY:
                         continue;
 
                     case SSL_PL_ERROR:
-                        SSL_free(instance->ssl);
-                        free(instance);
-                        return NULL;
+                        SSL_free((*instance)->ssl);
+                        free(*instance);
+                        return FALSE;
                 }
             } while (1);
             break;
@@ -1156,27 +1131,28 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
 	case PL_SSL_CLIENT:
 	   ssl_deb(1, "setting up SSL client side\n");
 	   do {
-	      int ssl_ret = SSL_connect(instance->ssl);
-	      switch(ssl_inspect_status(instance->ssl, ssl_ret)) {
+	      int ssl_ret = SSL_connect((*instance)->ssl);
+	      switch(ssl_inspect_status((*instance)->ssl, ssl_ret, *instance)) {
 	         case SSL_PL_OK:
 	            /* success */
 	            ssl_deb(1, "established ssl client side\n");
-	            return instance;
+                    return TRUE;
 
 	         case SSL_PL_RETRY:
 	            continue;
 
 	         case SSL_PL_ERROR:
-                    Sdprintf("Unrecoverable error: %d\n", SSL_get_error(instance->ssl, ssl_ret));
+                    Sdprintf("Unrecoverable error: %d\n", SSL_get_error((*instance)->ssl, ssl_ret));
                     Sdprintf("Additionally, get_error returned %d\n", ERR_get_error());
-                    SSL_free(instance->ssl);
-                    free(instance);
-                    return NULL;
+                    SSL_free((*instance)->ssl);
+                    free(*instance);
+                    return FALSE;
                     }
 	   } while (1);
 	   break;
     }
-    return NULL;
+    /* This should not be possible, but just in case we will fail */
+    return FALSE;
 }
 
 ssize_t
@@ -1193,7 +1169,8 @@ ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
         int rbytes = SSL_read(ssl, buf, size);
         if (rbytes == 0) /* EOF - error, but we handle in prolog */
           return 0;
-        switch(ssl_inspect_status(ssl, rbytes)) {
+        switch(ssl_inspect_status(ssl, rbytes, instance))
+        {
             case SSL_PL_OK:
                 /* success */
                 return rbytes;
@@ -1221,7 +1198,8 @@ ssl_write(PL_SSL_INSTANCE *instance, const char *buf, int size)
         int wbytes = SSL_write(ssl, buf, size);
         if (wbytes == 0) /* EOF - error, but we handle in prolog */
           return 0;
-        switch(ssl_inspect_status(ssl, wbytes)) {
+        switch(ssl_inspect_status(ssl, wbytes, instance))
+        {
             case SSL_PL_OK:
                 /* success */
                 return wbytes;
