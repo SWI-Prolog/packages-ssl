@@ -28,13 +28,11 @@
     the GNU General Public License.
 */
 
-/* doesn't work when called from ../swipl.sh??
 :- module(test_ssl,
 	  [ test_ssl/0,
 	    test_ssl/1,
 	    ssl_server/0
 	  ]).
-*/
 
 :- asserta(user:file_search_path(library, '.')).
 :- asserta(user:file_search_path(library, '../clib')).
@@ -142,7 +140,7 @@ copy_client(In, Out) :-
 	    copy_client(In, Out)
 	).
 
-get_server_pwd(_SSL, apenoot1) :-
+get_server_pwd(_SSL, "apenoot1") :-
 	debug(passwd, 'Returning password from server passwd hook', []).
 
 get_cert_verify(SSL,
@@ -222,5 +220,5 @@ read_from_server(In, Message) :-
 	    )
 	).
 
-user:get_client_pwd(_SSL, apenoot2) :-
+get_client_pwd(_SSL, "apenoot2") :-
 	debug(passwd, 'Returning password from client passwd hook', []).
