@@ -1251,6 +1251,10 @@ pthreads_locking_callback(int mode, int type, const char *file, int line)
 
     As for pthreads_win32 version 2, the thread identifier is no longer
     integral, we are going to test this claim from the manual
+
+    JW: I don't think getpid() returns different thread ids on Linux any
+    longer, nor on many other Unix systems. Maybe we should use
+    PL_thread_self()?
 */
 
 #ifndef __WINDOWS__
