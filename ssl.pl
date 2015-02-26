@@ -388,26 +388,34 @@ ssl_accept(SSL, Socket, Peer) :-
 %
 %	(Client) Connect to the  host  and   port  specified  by the SSL
 %	object, negotiate an SSL connection and   return  Read and Write
-%	streams if successful.
+%	streams if successful.  It  calls   ssl_open/4  with  the socket
+%	associated  to  the  SSL  instance.  See  ssl_open/4  for  error
+%	handling.
 %
 %	@deprecated New code should use ssl_negotiate/5.
 
 ssl_open(SSL, In, Out) :-
-        ssl_get_socket(SSL, S),
-        tcp_open_socket('$socket'(S), Read, Write),
-        ssl_negotiate(SSL, Read, Write, In, Out).
+        ssl_get_socket(SSL, Socket),
+	ssl_open(SSL, Socket, In, Out).
 
 %%	ssl_open(+SSL, +Socket, -Read, -Write) is det.
 %
 %	Given the Socket  returned  from   ssl_accept/3,  negotiate  the
 %	connection on the accepted socket  and   return  Read  and Write
-%	streams if successful.
+%	streams if successful. If ssl_negotiate/5   raises an exception,
+%	the Socket is closed and the exception is re-thrown.
 %
 %	@deprecated New code should use ssl_negotiate/5.
 
 ssl_open(SSL, Socket, In, Out):-
         tcp_open_socket(Socket, Read, Write),
-        ssl_negotiate(SSL, Read, Write, In, Out).
+        catch(ssl_negotiate(SSL, Read, Write, In, Out), E,
+	      ssl_open_failed(Read, Write, E)).
+
+ssl_open_failed(Read, Write, Error) :-
+	close(Read, [force(true)]),
+	close(Write, [force(true)]),
+	throw(Error).
 
 %%	cert_accept_any(+SSL,
 %%			+ProblemCertificate, +AllCertificates, +FirstCertificate,
