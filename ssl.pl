@@ -421,6 +421,22 @@ ssl_open_failed(Read, Write, Error) :-
 	close(Write, [force(true)]),
 	throw(Error).
 
+%%	ssl_exit(+SSL)
+%
+%	Free an SSL context. SSL contexts   are  reclaimed by the Prolog
+%	(atom) garbage collector. Calling ssl_exit/1   is  needed if the
+%	deprecated  ssl_init/3  interface  is  used    rather  than  the
+%	ssl_context/3 based interface to reclaim the associated socket.
+
+ssl_exit(SSL) :-
+	(   ssl_get_socket(SSL, Socket),
+	    Socket \== -1
+	->  tcp_close_socket('$socket'(Socket))
+	;   true
+	),
+	'_ssl_exit'(Socket).
+
+
 %%	cert_accept_any(+SSL,
 %%			+ProblemCertificate, +AllCertificates, +FirstCertificate,
 %%			+Error) is det.

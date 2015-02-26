@@ -1824,7 +1824,7 @@ install_ssl4pl()
 
 
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
-  PL_register_foreign("ssl_exit",	1, pl_ssl_exit,	      0);
+  PL_register_foreign("_ssl_exit",	1, pl_ssl_exit,	      0);
   PL_register_foreign("ssl_put_socket",	2, pl_ssl_put_socket, 0);
   PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
