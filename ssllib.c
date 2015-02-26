@@ -1257,62 +1257,58 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
     return FALSE;
 }
 
-ssize_t
-ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
 /*
  * Perform read on SSL session
  */
-{
-    SSL *ssl = instance->ssl;
+ssize_t
+ssl_read(void *handle, char *buf, size_t size)
+{ PL_SSL_INSTANCE *instance = handle;
+  SSL *ssl = instance->ssl;
 
-    assert(ssl != NULL);
+  assert(ssl != NULL);
 
-    do {
-        int rbytes = SSL_read(ssl, buf, size);
-        if (rbytes == 0) /* EOF - error, but we handle in prolog */
-          return 0;
-        switch(ssl_inspect_status(instance, rbytes, STAT_READ))
-        {
-            case SSL_PL_OK:
-                /* success */
-                return rbytes;
+  for(;;)
+  { int rbytes = SSL_read(ssl, buf, size);
 
-            case SSL_PL_RETRY:
-                continue;
+    if ( rbytes == 0 ) /* EOF - error, but we handle in prolog */
+      return 0;
 
-            case SSL_PL_ERROR:
-               return -1;
-       }
-    } while (1);
+    switch(ssl_inspect_status(instance, rbytes, STAT_READ))
+    { case SSL_PL_OK:
+	return rbytes;
+      case SSL_PL_RETRY:
+	continue;
+      case SSL_PL_ERROR:
+	return -1;
+    }
+  }
 }
 
-ssize_t
-ssl_write(PL_SSL_INSTANCE *instance, const char *buf, int size)
 /*
  * Perform write on SSL session
  */
-{
-    SSL *ssl = instance->ssl;
+ssize_t
+ssl_write(void *handle, char *buf, size_t size)
+{ PL_SSL_INSTANCE *instance = handle;
+  SSL *ssl = instance->ssl;
 
-    assert(ssl != NULL);
+  assert(ssl != NULL);
 
-    do {
-        int wbytes = SSL_write(ssl, buf, size);
-        if (wbytes == 0) /* EOF - error, but we handle in prolog */
-          return 0;
-        switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
-        {
-            case SSL_PL_OK:
-                /* success */
-                return wbytes;
+  for(;;)
+  { int wbytes = SSL_write(ssl, buf, size);
 
-            case SSL_PL_RETRY:
-                continue;
+    if ( wbytes == 0 ) /* EOF - error, but we handle in prolog */
+      return 0;
 
-            case SSL_PL_ERROR:
-               return -1;
-        }
-    } while (1);
+    switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
+    { case SSL_PL_OK:
+	return wbytes;
+      case SSL_PL_RETRY:
+	continue;
+      case SSL_PL_ERROR:
+	return -1;
+    }
+  }
 }
 
 

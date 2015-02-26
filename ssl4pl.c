@@ -1382,27 +1382,27 @@ pl_ssl_exit(term_t config)
   PL_succeed;
 }
 
-static
-void acquire_ssl(atom_t atom)
-{
-   ssl_deb(4, "Acquire on atom %d\n", atom);
+static void
+acquire_ssl(atom_t atom)
+{ ssl_deb(4, "Acquire on atom %d\n", atom);
 }
 
-static int release_ssl(atom_t atom)
-{
-   PL_SSL* conf;
-   size_t size;
-   ssl_deb(4, "Releasing SSL from %d\n", atom);
-   conf = PL_blob_data(atom, &size, NULL);
-   ssl_exit(conf);
-   /* conf is freed by an internal call from OpenSSL via ssl_config_free() */
-   return TRUE;
+static int
+release_ssl(atom_t atom)
+{ PL_SSL* conf;
+  size_t size;
+
+  conf = PL_blob_data(atom, &size, NULL);
+  ssl_deb(4, "Releasing PL_SSL %p\n", conf);
+  ssl_exit(conf);	/* conf is freed by an internal call from OpenSSL
+	                   via ssl_config_free() */
+  return TRUE;
 }
 
 
 static IOFUNCTIONS ssl_funcs =
-{ (Sread_function) ssl_read,		/* read */
-  (Swrite_function) ssl_write,		/* write */
+{ ssl_read,				/* read */
+  ssl_write,				/* write */
   NULL,					/* seek */
   (Sclose_function) pl_ssl_close,	/* close */
   (Scontrol_function) pl_ssl_control	/* control */
