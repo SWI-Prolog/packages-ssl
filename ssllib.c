@@ -81,15 +81,24 @@ X509_STORE *system_root_store = NULL;
 static int ssl_idx;
 static int ctx_idx;
 
-foreign_t raise_ssl_error(long e)
+/**
+ * ssl_error_term(long ex) returns a Prolog term representing the SSL
+ * error.  If there is already a pending exception, this is returned.
+ *
+ * FIXME: we are putting 0-bytes in the result of ERR_error_string().
+ * This suggests this is a copy, but we do not free the error string?
+ * FIXME: What if there are not enough fields in the error string?
+ */
+static int
+ssl_error_term(long e)
 { term_t ex;
   char* buffer;
   char* colon;
   char *component[5];
   int n = 0;
 
-  if ( PL_exception(0) )
-    return FALSE;			/* already pending exception */
+  if ( (ex=PL_exception(0)) )
+    return ex;					/* already pending exception */
 
   buffer = ERR_error_string(e, NULL);
 
@@ -105,18 +114,74 @@ foreign_t raise_ssl_error(long e)
       if ((colon = strchr(colon, ':')) == NULL) break;
       *colon++ = 0;
     }
-    if (PL_unify_term(ex,
-                      PL_FUNCTOR, FUNCTOR_error2,
-                      PL_FUNCTOR, FUNCTOR_ssl_error4,
-                      PL_CHARS,   component[1],
-                      PL_CHARS,   component[2],
-                      PL_CHARS,   component[3],
-                      PL_CHARS,   component[4],
-                      PL_VARIABLE) )
-      return PL_raise_exception(ex);
+    if ( PL_unify_term(ex,
+		       PL_FUNCTOR, FUNCTOR_error2,
+		         PL_FUNCTOR, FUNCTOR_ssl_error4,
+		           PL_CHARS, component[1],
+		           PL_CHARS, component[2],
+		           PL_CHARS, component[3],
+		           PL_CHARS, component[4],
+		       PL_VARIABLE) )
+    { return ex;
+    }
   }
+
+  return PL_exception(0);
+}
+
+
+int
+raise_ssl_error(long e)
+{ term_t ex;
+
+  if ( (ex = ssl_error_term(e)) )
+    return PL_raise_exception(ex);
+
   return FALSE;
 }
+
+
+/**
+ * Raise syscall_error(id, string)
+ * This should move to the kernel error system
+ */
+static term_t
+syscall_error(const char *op, int e)
+{ term_t ex;
+
+  if ( (ex = PL_new_term_ref()) &&
+       PL_unify_term(ex,
+		     PL_FUNCTOR, FUNCTOR_error2,
+		       PL_FUNCTOR, FUNCTOR_ssl_error4,
+		         PL_CHARS, "syscall",
+		         PL_CHARS, op,
+		         PL_INTEGER, e,
+		         PL_CHARS, strerror(e),
+		     PL_VARIABLE) )
+    return ex;
+
+  return PL_exception(0);
+}
+
+static term_t
+unexpected_eof(PL_SSL_INSTANCE *instance)
+{ term_t ex;
+
+  if ( (ex = PL_new_term_ref()) &&
+       PL_unify_term(ex,
+		     PL_FUNCTOR, FUNCTOR_error2,
+		       PL_FUNCTOR, FUNCTOR_ssl_error4,
+		         PL_CHARS, "SSL_eof",
+		         PL_CHARS, "ssl",
+		         PL_CHARS, "negotiate",
+		         PL_CHARS, "Unexpected end-of-file",
+		     PL_VARIABLE) )
+
+    return ex;
+
+  return PL_exception(0);
+}
+
 
 /**
  * Inspect the error status.  If an error occurs we want to pass this to
@@ -138,57 +203,79 @@ typedef enum
 static SSL_PL_STATUS
 ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
 { int code;
-  int error = ERR_get_error();
-  if (ssl_ret > 0)
+  int error;
+
+  if ( ssl_ret > 0 )
     return SSL_PL_OK;
 
-  code=SSL_get_error(instance->ssl, ssl_ret);
+  code = SSL_get_error(instance->ssl, ssl_ret);
 
-  switch (code) {
-    /* I am not sure what to do here - specifically, I am not sure if our underlying BIO
-       will block if there is not enough data to complete a handshake. If it will, we should
-       never get these return values. If it wont, then we presumably need to simply try again
-       which is why I am returning SSL_PL_RETRY
+  switch (code)
+  { /* I am not sure what to do here - specifically, I am not sure if our
+       underlying BIO will block if there is not enough data to complete
+       a handshake. If it will, we should never get these return values.
+       If it wont, then we presumably need to simply try again which is
+       why I am returning SSL_PL_RETRY
     */
-  case SSL_ERROR_WANT_READ:
-    return SSL_PL_RETRY;
+    case SSL_ERROR_WANT_READ:
+      return SSL_PL_RETRY;
 
-  case SSL_ERROR_WANT_WRITE:
-    return SSL_PL_RETRY;
+    case SSL_ERROR_WANT_WRITE:
+      return SSL_PL_RETRY;
 
 #ifdef SSL_ERROR_WANT_CONNECT
-  case SSL_ERROR_WANT_CONNECT:
-    return SSL_PL_RETRY;
+    case SSL_ERROR_WANT_CONNECT:
+      return SSL_PL_RETRY;
 #endif
 
 #ifdef SSL_ERROR_WANT_ACCEPT
-  case SSL_ERROR_WANT_ACCEPT:
-    return SSL_PL_RETRY;
+    case SSL_ERROR_WANT_ACCEPT:
+      return SSL_PL_RETRY;
 #endif
 
-  case SSL_ERROR_ZERO_RETURN:
-    return SSL_PL_OK;
+    case SSL_ERROR_ZERO_RETURN:
+      return SSL_PL_OK;
 
-  default:
-    break;
+    default:
+      break;
   }
 
-    if ( code == SSL_ERROR_SYSCALL && error == 0 )
-    { if ( ssl_ret == 0 )
-      {	/* normal if peer just hangs up the line */
-        // FIXME: Should Sset_exception here?
-	ssl_deb(1, "SSL error report: unexpected end-of-file\n");
-	return SSL_PL_ERROR;
-      } else if ( ssl_ret == -1 )
-      { ssl_deb(0, "SSL error report: syscall error: %s\n", strerror(errno));
-        // FIXME: Should Sset_exception here too?
-	return SSL_PL_ERROR;
+  error = ERR_get_error();
+
+  if ( code == SSL_ERROR_SYSCALL && error == 0 )
+  { if ( ssl_ret == 0 )
+    { switch(role)
+      { case STAT_NEGOTIATE:
+	  PL_raise_exception(unexpected_eof(instance));
+	  break;
+	case STAT_READ:
+	  Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
+	  break;
+	case STAT_WRITE:
+	  Sseterr(instance->dwrite, SIO_FERR, "SSL: unexpected end-of-file");
+	  break;
       }
+      return SSL_PL_ERROR;
+    } else if ( ssl_ret == -1 )
+    { if ( role == STAT_NEGOTIATE )
+	PL_raise_exception(syscall_error("ssl_negotiate", errno));
+      return SSL_PL_ERROR;
     }
-    // FIXME: This uses PL_raise_exception() which may or may not do the right thing if we are being called
-    // from an IO operation.
-    (void)raise_ssl_error(error);
-    return SSL_PL_ERROR;
+  }
+
+  switch(role)
+  { case STAT_NEGOTIATE:
+      raise_ssl_error(error);
+      break;
+    case STAT_READ:
+      Sset_exception(instance->dread, ssl_error_term(error));
+      break;
+    case STAT_WRITE:
+      Sset_exception(instance->dwrite, ssl_error_term(error));
+      break;
+  }
+
+  return SSL_PL_ERROR;
 }
 
 static char *
