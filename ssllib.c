@@ -121,13 +121,13 @@ foreign_t raise_ssl_error(long e)
 
 
 static SSL_PL_STATUS
-ssl_inspect_status(SSL *ssl, int ssl_ret, PL_SSL_INSTANCE* instance)
+ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret)
 { int code;
   int error = ERR_get_error();
   if (ssl_ret > 0)
     return SSL_PL_OK;
 
-  code=SSL_get_error(ssl, ssl_ret);
+  code=SSL_get_error(instance->ssl, ssl_ret);
 
   switch (code) {
     /* I am not sure what to do here - specifically, I am not sure if our underlying BIO
@@ -1110,7 +1110,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
             ssl_deb(1, "setting up SSL server side\n");
             do {
                 int ssl_ret = SSL_accept((*instance)->ssl);
-                switch(ssl_inspect_status((*instance)->ssl, ssl_ret, *instance)) {
+                switch(ssl_inspect_status(*instance, ssl_ret)) {
                     case SSL_PL_OK:
                         /* success */
                         ssl_deb(1, "established ssl server side\n");
@@ -1132,7 +1132,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
 	   ssl_deb(1, "setting up SSL client side\n");
 	   do {
 	      int ssl_ret = SSL_connect((*instance)->ssl);
-	      switch(ssl_inspect_status((*instance)->ssl, ssl_ret, *instance)) {
+	      switch(ssl_inspect_status(*instance, ssl_ret)) {
 	         case SSL_PL_OK:
 	            /* success */
 	            ssl_deb(1, "established ssl client side\n");
@@ -1169,7 +1169,7 @@ ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
         int rbytes = SSL_read(ssl, buf, size);
         if (rbytes == 0) /* EOF - error, but we handle in prolog */
           return 0;
-        switch(ssl_inspect_status(ssl, rbytes, instance))
+        switch(ssl_inspect_status(instance, rbytes))
         {
             case SSL_PL_OK:
                 /* success */
@@ -1198,7 +1198,7 @@ ssl_write(PL_SSL_INSTANCE *instance, const char *buf, int size)
         int wbytes = SSL_write(ssl, buf, size);
         if (wbytes == 0) /* EOF - error, but we handle in prolog */
           return 0;
-        switch(ssl_inspect_status(ssl, wbytes, instance))
+        switch(ssl_inspect_status(instance, wbytes))
         {
             case SSL_PL_OK:
                 /* success */
