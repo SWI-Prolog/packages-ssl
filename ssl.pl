@@ -400,7 +400,7 @@ ssl_accept(SSL, Socket, Peer) :-
 
 ssl_open(SSL, In, Out) :-
         ssl_get_socket(SSL, Socket),
-	ssl_open(SSL, Socket, In, Out).
+	ssl_open(SSL, '$socket'(Socket), In, Out).
 
 %%	ssl_open(+SSL, +Socket, -Read, -Write) is det.
 %
