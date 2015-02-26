@@ -1263,11 +1263,16 @@ pthreads_thread_id(void)
 }
 #endif
 
-// FIXME: ERR_remove_state() is deprecated, but at least some version of OpenSSL (such as my one) do not have ERR_remove_thread_state() yet.
-// For now, I think ERR_remove_state() is the safest bet; ideally we could change the autoconf rules to work out which one to use.
 void
 ssl_thread_exit(void* ignored)
-{ ERR_remove_state(0);
+{
+#ifdef HAVE_ERR_REMOVE_THREAD_STATE
+  ERR_remove_thread_state(0);
+#elif defined(HAVE_ERR_REMOVE_STATE)
+  ERR_remove_state(0);
+#else
+#error "Do not know how to remove SSL error state"
+#endif
 }
 
 int
