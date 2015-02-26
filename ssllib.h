@@ -96,8 +96,10 @@ typedef struct ssl_instance {
     PL_SSL              *config;
     SSL                 *ssl;
     nbio_sock_t          sock;
-    IOSTREAM            *sread;
+    IOSTREAM            *sread;		/* wire streams */
     IOSTREAM            *swrite;
+    IOSTREAM		*dread;		/* data streams */
+    IOSTREAM		*dwrite;
     int                  close_needed;
 } PL_SSL_INSTANCE;
 

@@ -118,10 +118,25 @@ foreign_t raise_ssl_error(long e)
   return FALSE;
 }
 
+/**
+ * Inspect the error status.  If an error occurs we want to pass this to
+ * the Prolog layer.  This is called from
+ *
+ *   - ssl_ssl_bio(), which is called from ssl_negotiate/5.  If an error
+ *     occurs we must call PL_raise_exception() or another exception
+ *     raising function.
+ *   - ssl_read() and ssl_write().  If an error occurs, we must set this
+ *     error on the filtered streams using Sseterr() or Sset_exception()
+ */
 
+typedef enum
+{ STAT_NEGOTIATE,
+  STAT_READ,
+  STAT_WRITE
+} status_role;
 
 static SSL_PL_STATUS
-ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret)
+ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
 { int code;
   int error = ERR_get_error();
   if (ssl_ret > 0)
@@ -844,17 +859,17 @@ ssl_config(PL_SSL *config, term_t options)
 
 PL_SSL_INSTANCE *
 ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
-{
-    PL_SSL_INSTANCE *new = NULL;
+{ PL_SSL_INSTANCE *new = NULL;
 
-    if ((new = malloc(sizeof(PL_SSL_INSTANCE))) != NULL) {
-        new->config       = config;
-        new->sock         = -1;
-        new->sread        = sread;
-        new->swrite       = swrite;
-        new->close_needed = 0;
-    }
-    return new;
+  if ((new = malloc(sizeof(PL_SSL_INSTANCE))) != NULL)
+  { memset(new, 0, sizeof(*new));
+    new->config = config;
+    new->sock   = -1;
+    new->sread  = sread;
+    new->swrite	= swrite;
+  }
+
+  return new;
 }
 
 int
@@ -1110,7 +1125,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
             ssl_deb(1, "setting up SSL server side\n");
             do {
                 int ssl_ret = SSL_accept((*instance)->ssl);
-                switch(ssl_inspect_status(*instance, ssl_ret)) {
+                switch(ssl_inspect_status(*instance, ssl_ret, STAT_NEGOTIATE)) {
                     case SSL_PL_OK:
                         /* success */
                         ssl_deb(1, "established ssl server side\n");
@@ -1132,7 +1147,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
 	   ssl_deb(1, "setting up SSL client side\n");
 	   do {
 	      int ssl_ret = SSL_connect((*instance)->ssl);
-	      switch(ssl_inspect_status(*instance, ssl_ret)) {
+	      switch(ssl_inspect_status(*instance, ssl_ret, STAT_NEGOTIATE)) {
 	         case SSL_PL_OK:
 	            /* success */
 	            ssl_deb(1, "established ssl client side\n");
@@ -1169,7 +1184,7 @@ ssl_read(PL_SSL_INSTANCE *instance, char *buf, int size)
         int rbytes = SSL_read(ssl, buf, size);
         if (rbytes == 0) /* EOF - error, but we handle in prolog */
           return 0;
-        switch(ssl_inspect_status(instance, rbytes))
+        switch(ssl_inspect_status(instance, rbytes, STAT_READ))
         {
             case SSL_PL_OK:
                 /* success */
@@ -1198,7 +1213,7 @@ ssl_write(PL_SSL_INSTANCE *instance, const char *buf, int size)
         int wbytes = SSL_write(ssl, buf, size);
         if (wbytes == 0) /* EOF - error, but we handle in prolog */
           return 0;
-        switch(ssl_inspect_status(instance, wbytes))
+        switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
         {
             case SSL_PL_OK:
                 /* success */

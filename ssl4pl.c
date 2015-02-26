@@ -1425,8 +1425,14 @@ pl_ssl_get_socket(term_t config, term_t data)
   return PL_unify_integer(data, conf->sock);
 }
 
+/**
+ * FIXME: if anything goes wrong, the instance is not reclaimed.
+ * Can we simple call free() on it?
+ */
 static foreign_t
-pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t out)
+pl_ssl_negotiate(term_t config,
+		 term_t org_in, term_t org_out, /* wire streams */
+		 term_t in, term_t out)		/* data streams */
 { PL_SSL *conf;
   IOSTREAM *sorg_in, *sorg_out;
   IOSTREAM *i, *o;
@@ -1460,6 +1466,8 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   }
   Sset_filter(sorg_in, i);
   PL_release_stream(sorg_in);
+  instance->dread = i;
+
   if ( !(o=Snew(instance, SIO_OUTPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
   { PL_release_stream(sorg_out);
     return PL_resource_error("memory");
@@ -1474,7 +1482,10 @@ pl_ssl_negotiate(term_t config, term_t org_in, term_t org_out, term_t in, term_t
   }
   Sset_filter(sorg_out, o);
   PL_release_stream(sorg_out);
-  /* Increase atom reference count so that the context is not GCd until this session is complete */
+  instance->dwrite = o;
+
+  /* Increase atom reference count so that the context is not
+     GCd until this session is complete */
   ssl_deb(4, "Increasing count on %d\n", conf->atom);
   PL_register_atom(conf->atom);
   return TRUE;
