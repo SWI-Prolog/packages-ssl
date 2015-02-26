@@ -1,11 +1,10 @@
-/*  $Id$
-
-    Part of SWI-Prolog
+/*  Part of SWI-Prolog
 
     Author:        Jan Wielemaker
-    E-mail:        jan@swi.psy.uva.nl
+    E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 1985-2004, University of Amsterdam
+    Copyright (C): 1985-2015, University of Amsterdam
+			      VU University Amsterdam
 
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License
@@ -44,9 +43,11 @@
 
 :- use_module(library(ssl)).
 :- use_module(library(debug)).
+:- use_module(library(error)).
 :- use_module(library(readutil)).
 
 %:- debug(connection).
+%:- debug(certificate).
 %:- debug(data).
 %:- debug(_).
 
@@ -57,9 +58,23 @@
 test_ssl :-
 	make_server(SSL),
 	thread_create(server_loop(SSL), Id, []),
-	client,
-	thread_join(Id, Status),
-	Status == true.
+	(   catch(client, E, true)
+	->  (   var(E)
+	    ->	thread_join(Id, Status),
+		report_join_status(Status)
+	    ;   format(user_error, 'Client error:~n', []),
+		print_message(error, E),
+		thread_join(Id, Status),
+		report_join_status(Status),
+		fail
+	    )
+	).
+
+report_join_status(true).
+report_join_status(false) :-
+	print_message(error, goal_failed(server_loop(_))).
+report_join_status(exception(Term)) :-
+	print_message(error, Term).
 
 test_ssl(N) :-
 	(   between(1, N, _),
@@ -130,9 +145,21 @@ copy_client(In, Out) :-
 get_server_pwd(_SSL, apenoot1) :-
 	debug(passwd, 'Returning password from server passwd hook', []).
 
-get_cert_verify(_SSL, Certificate, Error) :-
+get_cert_verify(SSL,
+		ProblemCertificate, AllCertificates, FirstCertificate,
+		Error) :-
 	debug(certificate,
-	      'Certificate: ~w, error: ~w', [Certificate, Error]).
+	      'Accept from ~p, \c
+	       ProblemCert: ~p, AllCerts: ~p, FirstCert: ~p, \c
+	       Error: ~p',
+	      [ SSL,
+		ProblemCertificate, AllCertificates, FirstCertificate,
+		Error
+	      ]),
+	(   Error == verified
+	->  true
+	;   domain_error(verified, Error)
+	).
 
 
 		 /*******************************
