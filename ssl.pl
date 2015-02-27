@@ -455,3 +455,14 @@ ssl_exit(SSL) :-
 cert_accept_any(_SSL,
 		_ProblemCertificate, _AllCertificates, _FirstCertificate,
 		_Error).
+
+
+		 /*******************************
+		 *	     MESSAGES		*
+		 *******************************/
+
+:- multifile
+	prolog:error_message//1.
+
+prolog:error_message(ssl_error(ID, _Library, Function, Reason)) -->
+	[ 'SSL(~w) ~w: ~w'-[ID, Function, Reason] ].
