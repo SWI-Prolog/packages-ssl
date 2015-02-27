@@ -8,8 +8,10 @@
     you may copy, modify and reuse this code without restriction.
 */
 
-:- module(https_server,
-	  [ http_server/1,			% ?Port
+:- module(https,
+	  [ http_download/2,			% +URL, -String
+
+	    http_server/1,			% ?Port
 	    https_server/1,			% ?Port
 	    https_server_with_client_cert/1,	% ?Port
 
@@ -28,14 +30,16 @@
 
 /** <module> Demo HTTPS server
 
-This demo illustrates how to setup   an HTTPS server using (self-signed)
-certificates. The certificates are  provided   in  the  `etc` directory.
-These certificates are the same certificates   that are used for testing
-the SSL library. You may use them   for testing purposes, but you should
-not use them for your own services  because   the  private key is not so
-private.
+This demo illustrates how to use the SSL library for dealing with HTTPS.
+It provides examples for simple download of HTTPS documents from the web
+and provides demo code  for  several   HTTPS  servers  and corresponding
+client code using  (self-signed)  certificates.   The  certificates  are
+provided in the  `etc`  directory.  These   certificates  are  the  same
+certificates that are used for testing the SSL library. You may use them
+for testing purposes, but you should not  use them for your own services
+because the private key is not so private.
 
-This demo gives three versions:
+This demo implements three different servers:
 
   - http_server/1 implements a typical HTTP server.
   - https_server/1 implements a typical HTTPS server.
@@ -74,6 +78,26 @@ load this file into another Prolog.
   true.
   ==
 */
+
+%%	http_download(+URL, -Data) is det.
+%
+%	Download data from an HTTP or HTTPS   server.  If HTTPS is used,
+%	the certificate is verified  by   the  system's root certificate
+%	store.  This  means  you  cannot  download  from  servers  using
+%	self-signed certificates, but  you  can   download  from  proper
+%	public websites with official authorized keys.  For example:
+%
+%	  ==
+%	  ?- http_download('https://raw.githubusercontent.com\c
+%			   /SWI-Prolog/packages-ssl/master/README.md',
+%			   String).
+%	  ==
+
+http_download(URL, String) :-
+	http_open(URL, In, []),
+	call_cleanup(
+	    read_string(In, _, String),
+	    close(In)).
 
 %%	http_server(?Port) is det.
 %
