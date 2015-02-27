@@ -54,7 +54,6 @@ static atom_t ATOM_tlsv1_1;
 static atom_t ATOM_tlsv1_2;
 
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
-static functor_t FUNCTOR_ssl1;
 static functor_t FUNCTOR_system1;
        functor_t FUNCTOR_error2;	/* also used in ssllib.c */
        functor_t FUNCTOR_ssl_error4;	/* also used in ssllib.c */
@@ -1035,20 +1034,69 @@ pl_load_certificate(term_t source, term_t cert)
   }
 }
 
+
+static void
+acquire_ssl(atom_t atom)
+{ ssl_deb(4, "Acquire on atom %d\n", atom);
+}
+
+
 static int
-put_conf(term_t config, PL_SSL *conf)
-{  return PL_unify_term(config,
-                        PL_FUNCTOR, FUNCTOR_ssl1,
-                        PL_ATOM, conf->atom);
+release_ssl(atom_t atom)
+{ PL_SSL* conf;
+  size_t size;
+
+  conf = PL_blob_data(atom, &size, NULL);
+  ssl_deb(4, "Releasing PL_SSL %p\n", conf);
+  ssl_exit(conf);	/* conf is freed by an internal call from OpenSSL
+	                   via ssl_config_free() */
+  return TRUE;
 }
 
 static int
+compare_ssl(atom_t a, atom_t b)
+{ PL_SSL* *ssla = PL_blob_data(a, NULL, NULL);
+  PL_SSL* *sslb = PL_blob_data(b, NULL, NULL);
+
+  return ( ssla > sslb ?  1 :
+	   ssla < sslb ? -1 : 0
+	 );
+}
+
+static int
+write_ssl(IOSTREAM *s, atom_t symbol, int flags)
+{ PL_SSL *ssl = PL_blob_data(symbol, NULL, NULL);
+
+  Sfprintf(s, "<ssl_context>(%p)", ssl);
+
+  return TRUE;
+}
+
+static PL_blob_t ssl_context_type =
+{ PL_BLOB_MAGIC,
+  PL_BLOB_NOCOPY,
+  "ssl_context",
+  release_ssl,
+  compare_ssl,
+  write_ssl,
+  acquire_ssl
+};
+
+
+static int
+put_conf(term_t config, PL_SSL *conf)
+{ return PL_unify_atom(config, conf->atom);
+}
+
+
+static int
 register_conf(term_t config, PL_SSL *conf)
-{
-  term_t blob = PL_new_term_ref();
+{ term_t blob = PL_new_term_ref();
+  int rc;
+
   PL_put_blob(blob, conf, sizeof(void*), &ssl_context_type);
-  if (!PL_get_atom(blob, &conf->atom))
-     return FALSE;
+  rc = PL_get_atom(blob, &conf->atom);
+  assert(rc);
   ssl_deb(4, "Atom created: %d\n", conf->atom);
   return put_conf(config, conf);
 }
@@ -1056,20 +1104,19 @@ register_conf(term_t config, PL_SSL *conf)
 
 static int
 get_conf(term_t config, PL_SSL **conf)
-{ term_t a = PL_new_term_ref();
-  void *ptr;
-  PL_SSL *ssl;
+{ PL_blob_t *type;
+  void *data;
 
-  if ( !PL_is_functor(config, FUNCTOR_ssl1) ||
-       !PL_get_arg(1, config, a) ||
-       !PL_get_blob(a, &ptr, NULL, NULL) ||
-       !(ssl = ptr) ||
-       ssl->magic != SSL_CONFIG_MAGIC )
-    return PL_type_error("ssl_config", config);
+  if ( PL_get_blob(config, &data, NULL, &type) && type == &ssl_context_type )
+  { PL_SSL *ssl = data;
 
-  *conf = ssl;
+    assert(ssl->magic == SSL_CONFIG_MAGIC);
+    *conf = ssl;
 
-  return TRUE;
+    return TRUE;
+  }
+
+  return PL_type_error("ssl_context", config);
 }
 
 
@@ -1380,23 +1427,6 @@ pl_ssl_exit(term_t config)
      See release_ssl()
   */
   PL_succeed;
-}
-
-static void
-acquire_ssl(atom_t atom)
-{ ssl_deb(4, "Acquire on atom %d\n", atom);
-}
-
-static int
-release_ssl(atom_t atom)
-{ PL_SSL* conf;
-  size_t size;
-
-  conf = PL_blob_data(atom, &size, NULL);
-  ssl_deb(4, "Releasing PL_SSL %p\n", conf);
-  ssl_exit(conf);	/* conf is freed by an internal call from OpenSSL
-	                   via ssl_config_free() */
-  return TRUE;
 }
 
 
@@ -1797,8 +1827,6 @@ install_ssl4pl()
   ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
   ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
 
-
-  FUNCTOR_ssl1            = PL_new_functor(PL_new_atom("$ssl"), 1);
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
   FUNCTOR_permission_error3=PL_new_functor(PL_new_atom("permission_error"), 3);
@@ -1826,13 +1854,6 @@ install_ssl4pl()
   FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
   FUNCTOR_system1         = PL_new_functor(PL_new_atom("system"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
-  memset(&ssl_context_type, 0, sizeof(ssl_context_type));
-  ssl_context_type.magic = PL_BLOB_MAGIC;
-  ssl_context_type.flags = PL_BLOB_UNIQUE | PL_BLOB_NOCOPY;
-  ssl_context_type.name = "SSL Context";
-  ssl_context_type.release = release_ssl;
-  ssl_context_type.acquire = acquire_ssl;
-
 
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
   PL_register_foreign("_ssl_exit",	1, pl_ssl_exit,	      0);

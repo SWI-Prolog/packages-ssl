@@ -169,10 +169,11 @@ In UNIX, pipes could just as easily be used, for example.
 %	  Specify the explicit Method to use when negotiating. For
 %	  allowed values, see the list for `disable_ssl_methods` above.
 %
-%
 %	@arg Role is one of `server` or `client` and denotes whether the
 %	SSL  instance  will  have  a  server   or  client  role  in  the
 %	established connection.
+%	@arg SSL is a SWI-Prolog _blob_ of type `ssl_context`, i.e., the
+%	type-test for an SSL context is `blob(SSL, ssl_context)`.
 
 ssl_context(Role, SSL, Module:Options) :-
 	select_option(ssl_method(Method), Options, O1, sslv23),
