@@ -1189,89 +1189,52 @@ BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
 /*
  * Establish an SSL session using the given read and write streams and the role
  */
-
 int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE** instance)
-/*
- * Establish the SSL layer using the supplied streams
- */
-{
-    BIO* rbio = NULL;
-    BIO* wbio = NULL;
+{ BIO* rbio = NULL;
+  BIO* wbio = NULL;
 
-    if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
-      return PL_resource_error("memory");
+  if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
+    return PL_resource_error("memory");
 
-    /*
-     * Create BIOs
-     */
-    rbio = BIO_new(&bio_read_functions);
-    BIO_set_ex_data(rbio, 0, sread);
-    wbio = BIO_new(&bio_write_functions);
-    BIO_set_ex_data(wbio, 0, swrite);
-    /*
-     * Prepare SSL layer
-     */
-    if (((*instance)->ssl = SSL_new(config->pl_ssl_ctx)) == NULL)
-    { free(*instance);
-      return raise_ssl_error(ERR_get_error());
+  rbio = BIO_new(&bio_read_functions);
+  BIO_set_ex_data(rbio, 0, sread);
+  wbio = BIO_new(&bio_write_functions);
+  BIO_set_ex_data(wbio, 0, swrite);
+
+  if (((*instance)->ssl = SSL_new(config->pl_ssl_ctx)) == NULL)
+  { free(*instance);
+    return raise_ssl_error(ERR_get_error());
+  }
+  ssl_deb(1, "allocated ssl layer\n");
+
+  SSL_set_ex_data((*instance)->ssl, ssl_idx, config);
+  SSL_set_bio((*instance)->ssl, rbio, wbio); /* No return value */
+  ssl_deb(1, "allocated ssl fd\n");
+
+  for(;;)
+  { int ssl_ret;
+
+    ssl_deb(1, "Negotiating %s ...\n",
+	    config->pl_ssl_role == PL_SSL_SERVER ? "server" : "client");
+    ssl_ret = (config->pl_ssl_role == PL_SSL_SERVER ?
+		 SSL_accept((*instance)->ssl) :
+		 SSL_connect((*instance)->ssl));
+
+    switch( ssl_inspect_status(*instance, ssl_ret, STAT_NEGOTIATE) )
+    { case SSL_PL_OK:
+	ssl_deb(1, "established ssl connection\n");
+        return TRUE;
+      case SSL_PL_RETRY:
+	ssl_deb(1, "retry ssl connection\n");
+	continue;
+      case SSL_PL_ERROR:
+	ssl_deb(1, "failed ssl connection\n");
+	SSL_free((*instance)->ssl);
+        free(*instance);
+	return FALSE;
     }
-    ssl_deb(1, "allocated ssl layer\n");
-
-    /*
-     * Store reference to our config data in SSL
-     */
-    SSL_set_ex_data((*instance)->ssl, ssl_idx, config);
-    SSL_set_bio((*instance)->ssl, rbio, wbio); /* No return value */
-    ssl_deb(1, "allocated ssl fd\n");
-    switch (config->pl_ssl_role) {
-        case PL_SSL_SERVER:
-            ssl_deb(1, "setting up SSL server side\n");
-            do {
-                int ssl_ret = SSL_accept((*instance)->ssl);
-                switch(ssl_inspect_status(*instance, ssl_ret, STAT_NEGOTIATE)) {
-                    case SSL_PL_OK:
-                        /* success */
-                        ssl_deb(1, "established ssl server side\n");
-                        return TRUE;
-
-                    case SSL_PL_RETRY:
-                        continue;
-
-                    case SSL_PL_ERROR:
-                        SSL_free((*instance)->ssl);
-                        free(*instance);
-                        return FALSE;
-                }
-            } while (1);
-            break;
-
-	case PL_SSL_NONE:
-	case PL_SSL_CLIENT:
-	   ssl_deb(1, "setting up SSL client side\n");
-	   do {
-	      int ssl_ret = SSL_connect((*instance)->ssl);
-	      switch(ssl_inspect_status(*instance, ssl_ret, STAT_NEGOTIATE)) {
-	         case SSL_PL_OK:
-	            /* success */
-	            ssl_deb(1, "established ssl client side\n");
-                    return TRUE;
-
-	         case SSL_PL_RETRY:
-	            continue;
-
-	         case SSL_PL_ERROR:
-                    Sdprintf("Unrecoverable error: %d\n", SSL_get_error((*instance)->ssl, ssl_ret));
-                    Sdprintf("Additionally, get_error returned %d\n", ERR_get_error());
-                    SSL_free((*instance)->ssl);
-                    free(*instance);
-                    return FALSE;
-                    }
-	   } while (1);
-	   break;
-    }
-    /* This should not be possible, but just in case we will fail */
-    return FALSE;
+  }
 }
 
 /*
