@@ -27,7 +27,6 @@
 
 #define SSL_CONFIG_MAGIC 0x539dbe3a
 #define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
-#define CA_SYSTEM_ROOT_CERTIFICATES "system://root certificates"
 
 typedef int BOOL;
 #ifndef TRUE
