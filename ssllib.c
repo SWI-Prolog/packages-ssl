@@ -924,44 +924,45 @@ ssl_config(PL_SSL *config, term_t options)
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
  */
-{   ssl_init_verify_locations(config);
+{ ssl_init_verify_locations(config);
 
-    SSL_CTX_set_default_passwd_cb_userdata( config->pl_ssl_ctx
-                                          , config
-                                          ) ;
-    SSL_CTX_set_default_passwd_cb( config->pl_ssl_ctx
-                                 , ssl_cb_pem_passwd
-                                 ) ;
-    ssl_deb(1, "password handler installed\n");
+  SSL_CTX_set_default_passwd_cb_userdata(config->pl_ssl_ctx, config);
+  SSL_CTX_set_default_passwd_cb(config->pl_ssl_ctx, ssl_cb_pem_passwd);
+  ssl_deb(1, "password handler installed\n");
 
-    if (config->pl_ssl_cert_required)
-    { if (config->pl_ssl_certf == NULL)
-        return PL_existence_error("certificate", options);
-      if (config->pl_ssl_keyf  == NULL)
-        return PL_existence_error("key_file", options);
-      if (SSL_CTX_use_certificate_file( config->pl_ssl_ctx
-                                        , config->pl_ssl_certf
-                                        , SSL_FILETYPE_PEM) <= 0)
-        return raise_ssl_error(ERR_get_error());
-      if (SSL_CTX_use_PrivateKey_file( config->pl_ssl_ctx
-                                       , config->pl_ssl_keyf
-                                       , SSL_FILETYPE_PEM) <= 0)
-        return raise_ssl_error(ERR_get_error());
-      if (SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0)
-      { ssl_deb(1, "Private key does not match certificate public key\n");
-        return raise_ssl_error(ERR_get_error());
-      }
-      ssl_deb(1, "certificate installed successfully\n");
+  if ( config->pl_ssl_cert_required ||
+       ( config->pl_ssl_certf && config->pl_ssl_keyf ) )
+  { if (config->pl_ssl_certf == NULL)
+      return PL_existence_error("certificate", options);
+    if (config->pl_ssl_keyf  == NULL)
+      return PL_existence_error("key_file", options);
+
+    if ( SSL_CTX_use_certificate_file(config->pl_ssl_ctx,
+				      config->pl_ssl_certf,
+				      SSL_FILETYPE_PEM) <= 0 )
+      return raise_ssl_error(ERR_get_error());
+    if ( SSL_CTX_use_PrivateKey_file(config->pl_ssl_ctx,
+				     config->pl_ssl_keyf,
+				     SSL_FILETYPE_PEM) <= 0)
+      return raise_ssl_error(ERR_get_error());
+
+    if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
+    { ssl_deb(1, "Private key does not match certificate public key\n");
+      return raise_ssl_error(ERR_get_error());
     }
-    (void) SSL_CTX_set_verify( config->pl_ssl_ctx
-                             , (config->pl_ssl_peer_cert_required)
-                               ? SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT
-                               : SSL_VERIFY_NONE
-                             , ssl_cb_cert_verify
-                             ) ;
-    ssl_deb(1, "installed certificate verification handler\n");
-    return TRUE;
+    ssl_deb(1, "certificate installed successfully\n");
+  }
+
+  (void) SSL_CTX_set_verify(config->pl_ssl_ctx,
+			    config->pl_ssl_peer_cert_required ?
+				SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT :
+				SSL_VERIFY_NONE,
+			    ssl_cb_cert_verify);
+  ssl_deb(1, "installed certificate verification handler\n");
+
+  return TRUE;
 }
+
 
 PL_SSL_INSTANCE *
 ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
