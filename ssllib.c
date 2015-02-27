@@ -1328,7 +1328,11 @@ code is based on mttest.c distributed with the OpenSSL library.
 static pthread_mutex_t *lock_cs;
 static long *lock_count;
 static void (*old_locking_callback)(int, int, const char*, int) = NULL;
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+static void (*old_id_callback)(CRYPTO_THREADID*) = NULL;
+#else
 static unsigned long (*old_id_callback)(void) = NULL;
+#endif
 
 static void
 pthreads_locking_callback(int mode, int type, const char *file, int line)
@@ -1356,6 +1360,12 @@ pthreads_locking_callback(int mode, int type, const char *file, int line)
 */
 
 #ifndef __WINDOWS__
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+static void
+pthreads_thread_id(CRYPTO_THREADID* id)
+{ CRYPTO_THREADID_set_numeric(id, (unsigned long)pthread_self());
+}
+#else
 static unsigned long
 pthreads_thread_id(void)
 { unsigned long ret;
@@ -1363,7 +1373,8 @@ pthreads_thread_id(void)
   ret=(unsigned long)pthread_self();
   return(ret);
 }
-#endif
+#endif /* OpenSSL 1.0.0 */
+#endif /* WINDOWS */
 
 void
 ssl_thread_exit(void* ignored)
@@ -1387,11 +1398,18 @@ ssl_thread_setup(void)
   { lock_count[i]=0;
     pthread_mutex_init(&(lock_cs[i]), NULL);
   }
-
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+  old_id_callback = CRYPTO_THREADID_get_callback();
+#else
   old_id_callback = CRYPTO_get_id_callback();
+#endif
   old_locking_callback = CRYPTO_get_locking_callback();
 #ifndef __WINDOWS__
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+  CRYPTO_THREADID_set_callback(pthreads_thread_id);
+#else
   CRYPTO_set_id_callback(pthreads_thread_id);
+#endif
 #endif
   CRYPTO_set_locking_callback(pthreads_locking_callback);
   PL_thread_at_exit(ssl_thread_exit, NULL, TRUE);
@@ -1424,9 +1442,13 @@ ssl_lib_exit(void)
  */
 #ifdef _REENTRANT
 #ifndef __WINDOWS__
-  CRYPTO_set_id_callback(old_id_callback);
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+    CRYPTO_THREADID_set_callback(old_id_callback);
+#else
+    CRYPTO_set_id_callback(old_id_callback);
 #endif
-  CRYPTO_set_locking_callback(old_locking_callback);
+#endif
+    CRYPTO_set_locking_callback(old_locking_callback);
 #endif
     return 0;
 }
