@@ -703,29 +703,30 @@ ssl_close(PL_SSL_INSTANCE *instance)
     return ret;
 }
 
-void
-ssl_exit(PL_SSL *config)
 /*
  * Clean up all allocated resources.
  */
-{
-    if (config)
-    { if ( config->pl_ssl_role == PL_SSL_SERVER && config->sock >= 0 )
-      { /* If the socket has been stored, then we ought to close it if the SSL is being closed */
-        closesocket(config->sock);
-	config->sock = -1;
-      }
-
-      if (config->pl_ssl_ctx)
-      { ssl_deb(1, "Calling SSL_CTX_free()\n");
-	SSL_CTX_free(config->pl_ssl_ctx);	/* doesn't call free hook? */
-      }
-      else
-      { ssl_deb(1, "config without CTX encountered\n");
-      }
+void
+ssl_exit(PL_SSL *config)
+{ if ( config )
+  { if ( config->pl_ssl_role == PL_SSL_SERVER && config->sock >= 0 )
+    { /* If the socket has been stored, then we ought to close it
+         if the SSL is being closed
+         FIXME: this beast is owned by Prolog now, no?
+      */
+      closesocket(config->sock);
+      config->sock = -1;
     }
 
-    ssl_deb(1, "Controlled exit\n");
+    if (config->pl_ssl_ctx)
+    { ssl_deb(1, "Calling SSL_CTX_free()\n");
+      SSL_CTX_free(config->pl_ssl_ctx);	/* doesn't call free hook? */
+    } else
+    { ssl_deb(1, "config without CTX encountered\n");
+    }
+  }
+
+  ssl_deb(1, "Controlled exit\n");
 }
 
 
@@ -907,13 +908,17 @@ system_root_certificates(void)
 static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->use_system_cacert )
-  { SSL_CTX_set_cert_store(config->pl_ssl_ctx, system_root_certificates());
-    ssl_deb(1, "System certificate authority(s) installed (public keys loaded)\n");
+  { X509_STORE *store = system_root_certificates();
+
+    if ( store )
+    { SSL_CTX_set_cert_store(config->pl_ssl_ctx, store);
+    }
+    ssl_deb(1, "System certificate authority(s) installed\n");
   } else if ( config->pl_ssl_cacert )
   { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
                                   config->pl_ssl_cacert,
                                   NULL);
-    ssl_deb(1, "certificate authority(s) installed (public keys loaded)\n");
+    ssl_deb(1, "certificate authority(s) installed\n");
   }
 }
 
