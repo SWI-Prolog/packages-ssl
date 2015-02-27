@@ -97,7 +97,7 @@ get_char_arg(int a, term_t t, char **s)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_chars(t2, s, CVT_ATOM|CVT_EXCEPTION) )
+  if ( !PL_get_chars(t2, s, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
     return FALSE;
 
   return TRUE;
