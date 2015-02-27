@@ -23,6 +23,10 @@
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
+#ifdef _REENTRANT
+#include <pthread.h>
+#endif
+
 #include "ssllib.h"
 #include <openssl/rand.h>
 
@@ -73,7 +77,8 @@ typedef enum
 #define DEBUG 1
 #endif
 
-X509_STORE *system_root_store = NULL;
+static X509_STORE *system_root_store = NULL;
+static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * Index of our config data in the SSL data
@@ -885,10 +890,24 @@ ssl_system_verify_locations(X509_STORE *store)
 }
 
 
+
+X509_STORE *
+system_root_certificates(void)
+{ pthread_mutex_lock(&root_store_lock);
+  if ( !system_root_store )
+  { system_root_store = X509_STORE_new();
+    ssl_system_verify_locations(system_root_store);
+  }
+  pthread_mutex_unlock(&root_store_lock);
+
+  return system_root_store;
+}
+
+
 static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->use_system_cacert == 1 )
-  { SSL_CTX_set_cert_store(config->pl_ssl_ctx, system_root_store);
+  { SSL_CTX_set_cert_store(config->pl_ssl_ctx, system_root_certificates());
     ssl_deb(1, "System certificate authority(s) installed (public keys loaded)\n");
   } else if ( config->pl_ssl_cacert )
   { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
@@ -995,8 +1014,6 @@ ssl_lib_init(void)
       return -1;
     }
 #endif
-    system_root_store = X509_STORE_new();
-    ssl_system_verify_locations(system_root_store);
 
 #ifdef _REENTRANT
     ssl_thread_setup();
@@ -1322,8 +1339,6 @@ code is based on mttest.c distributed with the OpenSSL library.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #ifdef _REENTRANT
-
-#include <pthread.h>
 
 static pthread_mutex_t *lock_cs;
 static long *lock_count;

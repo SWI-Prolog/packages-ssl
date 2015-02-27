@@ -82,11 +82,6 @@ static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
 
-static PL_blob_t ssl_context_type;
-
-extern foreign_t raise_ssl_error(long e);
-
-
 static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
 {
    return i2d_X509_CRL_INFO(i, d);
@@ -1363,8 +1358,10 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
 
 static int
-pl_ssl_close(PL_SSL_INSTANCE *instance)
-{ assert(instance->close_needed > 0);
+pl_ssl_close(void *handle)
+{ PL_SSL_INSTANCE *instance = handle;
+
+  assert(instance->close_needed > 0);
 
   if ( --instance->close_needed == 0 )
     return ssl_close(instance);
@@ -1374,8 +1371,10 @@ pl_ssl_close(PL_SSL_INSTANCE *instance)
 
 
 static int
-pl_ssl_control(PL_SSL_INSTANCE *instance, int action, void *data)
-{ switch(action)
+pl_ssl_control(void *handle, int action, void *data)
+{ PL_SSL_INSTANCE *instance = handle;
+
+  switch(action)
   {
 #ifdef __WINDOWS__
     case SIO_GETFILENO:
@@ -1434,8 +1433,8 @@ static IOFUNCTIONS ssl_funcs =
 { ssl_read,				/* read */
   ssl_write,				/* write */
   NULL,					/* seek */
-  (Sclose_function) pl_ssl_close,	/* close */
-  (Scontrol_function) pl_ssl_control	/* control */
+  pl_ssl_close,				/* close */
+  pl_ssl_control			/* control */
 };
 
 
@@ -1521,7 +1520,8 @@ pl_ssl_negotiate(term_t config,
   return TRUE;
 }
 
-foreign_t pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain_t)
+static foreign_t
+pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain_t)
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1556,7 +1556,8 @@ foreign_t pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain
   return retval;
 }
 
-foreign_t pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t)
+static foreign_t
+pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t)
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1591,7 +1592,8 @@ foreign_t pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t
   return retval;
 }
 
-foreign_t pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t)
+static foreign_t
+pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t)
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1629,7 +1631,8 @@ foreign_t pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t
 }
 
 
-foreign_t pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher_t)
+static foreign_t
+pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher_t)
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1748,19 +1751,21 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   return PL_unify_nil_ex(list_t);
 }
 
-extern X509_STORE *system_root_store;
-foreign_t pl_system_root_certificates(term_t list)
+
+static foreign_t
+pl_system_root_certificates(term_t list)
 { STACK_OF(X509_OBJECT) *certs = NULL;
   X509_OBJECT *obj = NULL;
+  X509_STORE *root_store;
   X509 *cert;
   int i;
   term_t head = PL_new_term_ref();
   term_t tail = PL_copy_term_ref(list);
 
-  if (system_root_store == NULL)
+  if ( !(root_store=system_root_certificates()) )
     return PL_unify_nil(list);
 
-  certs = system_root_store->objs;
+  certs = root_store->objs;
   for(i = 0; i < sk_X509_OBJECT_num(certs); i++)
   { obj = sk_X509_OBJECT_value(certs, i);
     if (obj->type == X509_LU_X509) /* Could be a CRL */

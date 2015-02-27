@@ -132,6 +132,8 @@ BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
 BOOL		ssl_set_close_parent(PL_SSL *config, int closeparent);
 void            ssl_set_method_options(PL_SSL *config, int options);
+int		raise_ssl_error(long e);
+X509_STORE *	system_root_certificates(void);
 
 BOOL            ssl_set_cb_cert_verify
                                  ( PL_SSL *config
