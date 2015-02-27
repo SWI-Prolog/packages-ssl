@@ -160,7 +160,7 @@ syscall_error(const char *op, int e)
 		       PL_FUNCTOR, FUNCTOR_ssl_error4,
 		         PL_CHARS, "syscall",
 		         PL_CHARS, op,
-		         PL_INTEGER, e,
+		         PL_INT, e,
 		         PL_CHARS, strerror(e),
 		     PL_VARIABLE) )
     return ex;
