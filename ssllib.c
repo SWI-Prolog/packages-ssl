@@ -314,7 +314,7 @@ ssl_new(void)
         new->pl_ssl_idx                 = -1;
         new->pl_ssl_password            = NULL;
 
-        new->use_system_cacert          = 0;
+        new->use_system_cacert          = FALSE;
         new->pl_ssl_cacert              = NULL;
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
@@ -906,7 +906,7 @@ system_root_certificates(void)
 
 static void
 ssl_init_verify_locations(PL_SSL *config)
-{ if ( config->use_system_cacert == 1 )
+{ if ( config->use_system_cacert )
   { SSL_CTX_set_cert_store(config->pl_ssl_ctx, system_root_certificates());
     ssl_deb(1, "System certificate authority(s) installed (public keys loaded)\n");
   } else if ( config->pl_ssl_cacert )
