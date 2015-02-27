@@ -11,7 +11,11 @@
 :- module(https_server,
 	  [ http_server/1,			% ?Port
 	    https_server/1,			% ?Port
-	    https_server_with_client_cert/1	% ?Port
+	    https_server_with_client_cert/1,	% ?Port
+
+	    http_client/2,			% +Port, +Page
+	    https_client/2,			% +Port, +Page
+	    https_client_with_client_cert/2	% +Port, +Page
 	  ]).
 :- if(exists_source('../http/examples/demo_body')).
 :- use_module('../http/examples/demo_body').	% location in source tree
@@ -30,10 +34,11 @@ the SSL library. You may use them   for testing purposes, but you should
 not use them for your own services  because   the  private key is not so
 private.
 
-This demo gives two versions:
+This demo gives three versions:
 
-  - server/1 implements a typical HTTPS server.
-  - server_with_client_cert/1 implements a server that asks
+  - http_server/1 implements a typical HTTP server.
+  - https_server/1 implements a typical HTTPS server.
+  - https_server_with_client_cert/1 implements a server that asks
 
 The startup sequence to run the  server   at  port  1443 is shown below.
 Directing your browser to the indicated URL should cause your browser to
@@ -48,6 +53,25 @@ simple demo through HTTPS.
   true.
   ==
 
+The demo is primarily intended to  access   from  a  browser, but at the
+bottom of this file are predicates to access the server from Prolog. The
+first argument is the port and must be the same as the value returned by
+or given to the *_server predicate. The   second  is the location on the
+server, e.g., `/`, `/quit`, `/env`, etc.
+
+  - http_client/2 accesses http_server/1.
+  - https_client/2 accesses https_server/1.
+  - https_client_with_client_cert/2 accesses https_server_with_client_cert/1.
+
+An example session is given  below.  Now   that  you  can either run the
+client calls from the Prolog window in   which you started the server or
+load this file into another Prolog.
+
+  ==
+  ?- https_client(1443, '/quit').
+  Bye Bye
+  true.
+  ==
 */
 
 %%	http_server(?Port) is det.
@@ -134,3 +158,55 @@ client_cert_verify(_SSL, _Problem, _AllCerts, First, Error) :-
 	format('Handling client certificate verification~n'),
 	format('Certificate: ~p, error: ~w~n', [First, Error]),
 	format('Server accepts the client certificate~n').
+
+
+		 /*******************************
+		 *	      CLIENTS		*
+		 *******************************/
+
+:- use_module(library(http/http_open)).
+
+%%	http_client(+Port, +Page) is det.
+%
+%	Access the server created with http_server/1. Note that the only
+%	significant difference to  https_client/2  is   the  URL  scheme
+%	(`http` vs. `https`.
+
+http_client(Port, Page) :-
+	format(atom(URL), 'http://localhost:~d~w', [Port, Page]),
+	http_open(URL, In,
+		  [
+		  ]),
+	copy_stream_data(In, current_output),
+	close(In).
+
+%%	https_client(+Port, +Page) is det.
+%
+%	Access the server created with https_server/1.  Note that, as we
+%	are using a self-signed  certificate,  we   pass  our  own  root
+%	certificate instead of using the system one.
+
+https_client(Port, Page) :-
+	format(atom(URL), 'https://localhost:~d~w', [Port, Page]),
+	http_open(URL, In,
+		  [ cacert_file('etc/demoCA/cacert.pem')
+		  ]),
+	copy_stream_data(In, current_output),
+	close(In).
+
+%%	https_client_with_client_cert(+Port, +Page) is det.
+%
+%	Access the server created  with https_server_with_client_cert/1,
+%	providing our client certificate.
+
+https_client_with_client_cert(Port, Page) :-
+	format(atom(URL), 'https://localhost:~d~w', [Port, Page]),
+	http_open(URL, In,
+		  [ cacert_file('etc/demoCA/cacert.pem'),
+		    cert(true),		% FIXME: should not be needed
+		    certificate_file('etc/client/client-cert.pem'),
+		    key_file('etc/client/client-key.pem'),
+		    password('apenoot2')
+		  ]),
+	copy_stream_data(In, current_output),
+	close(In).
