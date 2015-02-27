@@ -24,6 +24,7 @@
 :- endif.
 :- use_module(library('http/thread_httpd')).
 :- use_module(library('http/http_ssl_plugin')).
+:- use_module(library(debug)).
 
 /** <module> Demo HTTPS server
 
@@ -112,7 +113,7 @@ https_server(Port) :-
 		    [ port(Port),
 		      ssl([ certificate_file('etc/server/server-cert.pem'),
 			    key_file('etc/server/server-key.pem'),
-			    password('apenoot1')
+			    password("apenoot1")
 			  ])
 		    ]).
 
@@ -144,20 +145,37 @@ https_server_with_client_cert(Port) :-
 		    [ port(Port),
 		      ssl([ certificate_file('etc/server/server-cert.pem'),
 			    key_file('etc/server/server-key.pem'),
-			    password('apenoot1'),
+			    password("apenoot1"),
 			    peer_cert(true),
 			    cacert_file('etc/demoCA/cacert.pem'),
 			    cert_verify_hook(client_cert_verify)
 			  ])
 		    ]).
 
+%%	client_cert_verify(+SSL,
+%%			   +ProblemCert, +AllCerts, +FirstCer,
+%%			   +Error) is semidet.
+%
+%	This hook is called for  validating   the  peer certificate. The
+%	certificate has already been validated   against the known _root
+%	certificates_ and Error either contains   `verified` to indicate
+%	that this part of the  validation   was  successful or a message
+%	from OpenSSL indicating why it did   not verify. The certificate
+%	is accepted if this hook  succeeds,   regardless  of the initial
+%	verification. If this hook  is   not  defined, certificates that
+%	verify against the root certificates are accepted and others are
+%	rejected, i.e., the default implementation  behaves as `Error ==
+%	verified`.
+
+% :- debug(cert_verify_hook).
+
 :- public
 	client_cert_verify/5.
 
 client_cert_verify(_SSL, _Problem, _AllCerts, First, Error) :-
-	format('Handling client certificate verification~n'),
-	format('Certificate: ~p, error: ~w~n', [First, Error]),
-	format('Server accepts the client certificate~n').
+	debug(cert_verify_hook,
+	      'Handling client certificate verification~n\c
+	      Certificate: ~p, error: ~w~n', [First, Error]).
 
 
 		 /*******************************
@@ -203,7 +221,6 @@ https_client_with_client_cert(Port, Page) :-
 	format(atom(URL), 'https://localhost:~d~w', [Port, Page]),
 	http_open(URL, In,
 		  [ cacert_file('etc/demoCA/cacert.pem'),
-		    cert(true),		% FIXME: should not be needed
 		    certificate_file('etc/client/client-cert.pem'),
 		    key_file('etc/client/client-key.pem'),
 		    password('apenoot2')
