@@ -306,7 +306,7 @@ ssl_new(void)
         new->pl_ssl_role                = PL_SSL_NONE;
 
 	new->sock			= -1;
-        new->closeparent		= 0;
+        new->closeparent		= FALSE;
         new->atom		        = 0;
 
         new->pl_ssl_peer_cert           = NULL;
