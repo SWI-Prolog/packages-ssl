@@ -26,11 +26,16 @@
 \maketitle
 
 \begin{abstract}
-This document describes the SWI-Prolog SSL library, a set of predicates
-which provides secure sockets to Prolog applications, for example to run
-a secure HTTP (HTTPS) server, or access websites using the \const{https}
-protocol. It can also be used to provide authentication and secure data
-exchange between Prolog processes over the network.
+The SWI-Prolog SSL (Secure Socket Layer) library implements a pair of
+\jargon{filtered streams} that realises an SSL encrypted connection on
+top of a pair of Prolog \jargon{wire} streams, typically a network
+socket. SSL provides public key based encryption and digitally signed
+identity information of the \jargon{peer}. The SSL library is well
+integrated with SWI-Prolog's HTTP library for both implementing HTTPS
+servers and communicating with HTTPS servers. It is also used by the
+\url[smtp pack]{http://www.swi-prolog.org/pack/list?p=smtp} for
+accessing secure mail agents. Plain SSL can be used to realise secure
+connections between e.g., Prolog agents.
 \end{abstract}
 
 \pagebreak
@@ -50,8 +55,10 @@ problems.  It uses certificates to establish the identity of the peer
 and encryption to make it useless to tap into the wire.  SSL allows
 agents to talk in private and create secure web services.
 
-The SWI-Prolog \pllib{ssl} library provides an API to turn arbitrary
-Prolog stream into SSL powered encrypted streams.
+The SWI-Prolog \pllib{ssl} library provides an API to turn a pair of
+arbitrary Prolog \jargon{wire} streams into SSL powered encrypted
+streams. Note that secure protocols such as secure HTTP simply run the
+plain protocol over (SSL) encrypted streams.
 
 Cryptography is a difficult topic. If you just want to download
 documents from an HTTPS server without worrying much about security,

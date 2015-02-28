@@ -82,20 +82,25 @@
 
 /** <module> Secure Socket Layer (SSL) library
 
-An SSL server and client can be built with the following (abstracted)
-predicate calls:
+An SSL server and client can be built with the (abstracted)
+predicate calls from the table below.  The `tcp_` predicates
+are provided by library(socket).  The predicate ssl_context/3
+defines properties of the SSL connection, while ssl_negotiate/5
+establishes the SSL connection based on the wire streams created
+by the TCP predicates and the context.
 
-	| SSL Server		| SSL Client		|
+	| *The SSL Server*	| *The SSL Client*	|
 	| ssl_context/3		| ssl_context/3		|
 	| tcp_socket/1		| tcp_socket/1		|
 	| tcp_accept/3		| tcp_connect/2		|
 	| tcp_open_socket/3	| tcp_open_socket/3	|
 	| ssl_negotiate/5	| ssl_negotiate/5	|
 
-The library is abstracted to  communication   over  streams,  and is not
-reliant on those  streams  being  directly   attached  to  sockets.  The
-tcp_\ldots calls here are simply the most common way to use the library.
-In UNIX, pipes could just as easily be used, for example.
+The library is abstracted to communication over streams, and is not
+reliant on those streams being directly attached to sockets. The `tcp_`
+calls here are simply the most common way to use the library. Other
+two-way communication channels such as (named), pipes can just as
+easily be used.
 
 @see library(socket), library(http/http_open)
 */
@@ -107,15 +112,22 @@ In UNIX, pipes could just as easily be used, for example.
 %	passwords. After establishing a context,   an SSL connection can
 %	be negotiated using ssl_negotiate/5, turning two arbitrary plain
 %	Prolog streams into encrypted streams.  This predicate processes
-%	the options below. Options are marked [S] if they only apply for
-%	the server role and [C] if they only apply for the client role.
+%	the options below.
 %
 %	  * certificate_file(+FileName)
-%	  [S] Specify where the certificate file can be found. This can
-%	  be the same as the key_file(+FileName) option.
+%	  Specify where the certificate file can be found. This can
+%	  be the same as the key_file(+FileName) option.  A certificate
+%	  file is obligatory for a server and may be provided for a
+%	  client if the server demands the client to identify itself
+%	  with a client certificate using the peer_cert(true) option. If
+%	  a certificate is provided, it is always necessary to provide a
+%	  matching \jargon{private key} using the key_file(+FileName)
+%	  option.
 %	  * key_file(+FileName)
-%	  [S] Specify where the private key can be found. This can be
-%	  the same as the certificate file.
+%	  Specify where the private key that matches the certificate can
+%	  be found.  If the key is encrypted with a password, this must
+%	  be supplied using the password(+Text) or
+%	  pem_password_hook(:PredicateName) option.
 %	  * password(+Text)
 %	  Specify the password the private key is protected with (if
 %	  any). If you do not want to store the password you can also
@@ -125,23 +137,26 @@ In UNIX, pipes could just as easily be used, for example.
 %	  resources.
 %	  * pem_password_hook(:PredicateName)
 %	  In case a password is required to access the private key the
-%	  supplied function will be called to fetch it. The function has
-%	  the following prototype: \term{function}{+SSL, -Password}
+%	  supplied predicate will be called to fetch it. The predicate
+%	  is called as call(PredicateName, Password) and typically
+%	  unifies `Password` with a _string_ containing the password.
 %	  * cacert_file(+FileName)
-%	  Specify a file containing certificate keys which will thus
-%	  automatically be verified as trusted. Using FileName
-%	  `system(root_certificates)` uses a list of trusted root
-%	  certificates as provided by the OS. See
+%	  Specify a file containing certificate keys of _trusted_
+%	  certificates. The peer is trusted if its certificate is
+%	  signed (ultimately) by one of the provided certificates. Using
+%	  the FileName `system(root_certificates)` uses a list of
+%	  trusted root certificates as provided by the OS. See
 %	  system_root_certificates/1 for details.
 %
-%	  It is also possible to install an application defined handler
-%	  for    verifying    certificates    using      the     option
-%	  `cert_verify_hook`
-%	  * cert_verify_hook(:CallBack)
-%	  The predicate ssl_negotiate/5 calls CallBack as follows:
+%	  Additional verification of the peer certificate as well as
+%	  accepting certificates that are not trusted by the given set
+%	  can be realised using the hook
+%	  cert_verify_hook(PredicateName).
+%	  * cert_verify_hook(:PredicateName)
+%	  The predicate ssl_negotiate/5 calls PredicateName as follows:
 %
 %	    ==
-%	    call(CallBack, +SSL,
+%	    call(PredicateName, +SSL,
 %		 +ProblemCertificate, +AllCertificates, +FirstCertificate,
 %		 +Error)
 %	    ==
@@ -154,15 +169,18 @@ In UNIX, pipes could just as easily be used, for example.
 %	  of the certificate terms. See cert_accept_any/5 for a dummy
 %	  implementation that accepts any certificate.
 %	  * cert(+Boolean)
-%	  Trigger the sending of our certificate as specified using the
-%	  option `certificate_file` described earlier. For a
-%	  server this option is automatically turned on.
+%	  Trigger the sending of our certificate specified by
+%	  certificate_file(FileName).  Sending is automatic for the
+%	  server role and implied if both a certificate and key are
+%	  supplied for clients, making this option obsolete.
 %	  * peer_cert(+Boolean)
 %	  Trigger the request of our peer's certificate while
 %	  establishing the SSL layer. This option is automatically
-%	  turned on in a client SSL socket.
+%	  turned on in a client SSL socket.  It can be used in a server
+%	  to ask the client to identify itself using an SSL certificate.
 %	  * close_parent(+Boolean)
 %	  If `true`, close the raw streams if the SSL streams are closed.
+%	  Default is `false`.
 %	  * disable_ssl_methods(+List)
 %	  A list of methods to disable. Unsupported methods will be
 %	  ignored. Methods include `sslv2`, `sslv2`, `sslv23`,
