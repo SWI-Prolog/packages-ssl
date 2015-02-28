@@ -102,6 +102,10 @@ typedef struct ssl_instance {
     int                  close_needed;
 } PL_SSL_INSTANCE;
 
+typedef struct X509_list
+{ struct X509_list *next;
+  X509 *cert;
+} X509_list;
 
 /*
  * The PL-SSL API

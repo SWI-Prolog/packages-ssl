@@ -77,7 +77,7 @@ typedef enum
 #define DEBUG 1
 #endif
 
-static X509_STORE *system_root_store = NULL;
+static X509_list *system_root_store = NULL;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
@@ -896,7 +896,9 @@ X509_STORE *
 system_root_certificates(void)
 { pthread_mutex_lock(&root_store_lock);
   if ( !system_root_store )
-  { system_root_store = X509_STORE_new();
+  { X509_list *certs =
+
+    system_root_store = X509_STORE_new();
     ssl_system_verify_locations(system_root_store);
   }
   pthread_mutex_unlock(&root_store_lock);
