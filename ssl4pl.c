@@ -663,7 +663,9 @@ int unify_public_key(EVP_PKEY* key, term_t item)
   return TRUE;
 }
 
-int unify_private_key(EVP_PKEY* key, term_t item)
+
+static int
+unify_private_key(EVP_PKEY* key, term_t item)
 {
  /* EVP_PKEY_get1_* returns a copy of the existing key */
   switch (EVP_PKEY_type(key->type))
@@ -886,7 +888,7 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
   return retval && PL_unify_nil(list);
 }
 
-foreign_t
+static foreign_t
 pl_load_public_key(term_t source, term_t key_t)
 { EVP_PKEY* key;
   BIO* bio;
@@ -899,9 +901,7 @@ pl_load_public_key(term_t source, term_t key_t)
   BIO_set_ex_data(bio, 0, stream);
 
   /* Determine format */
-  c = Sgetc(stream);
-  if (c != EOF)
-     Sungetc(c, stream);
+  c = Speekcode(stream);
   if (c == 0x30)  /* ASN.1 sequence, so assume DER */
      key = d2i_PUBKEY_bio(bio, NULL);
   else
@@ -919,23 +919,25 @@ pl_load_public_key(term_t source, term_t key_t)
 }
 
 
-int private_password_callback(char *buf, int bufsiz, int verify, void* pw)
-{ int res;
-  char* password = (char*)pw;
-  res = (int)strlen(password);
-  if (res > bufsiz)
-     res = bufsiz;
+static int
+private_password_callback(char *buf, int bufsiz, int verify, void* pw)
+{ char *password = (char*)pw;
+  size_t res = strlen(password);
+
+  if ( res > (size_t)bufsiz )
+    res = bufsiz;
   memcpy(buf, password, res);
+
   return res;
 }
 
-foreign_t
+static foreign_t
 pl_load_private_key(term_t source, term_t password, term_t key_t)
 { EVP_PKEY* key;
   BIO* bio;
   IOSTREAM* stream;
   char* password_chars;
-  int c;
+  int c, rc;
 
   if ( !PL_get_chars(password, &password_chars,
 		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
@@ -946,26 +948,26 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
   BIO_set_ex_data(bio, 0, stream);
 
   /* Determine format */
-  c = Sgetc(stream);
-  if (c != EOF)
-     Sungetc(c, stream);
+  c = Speekcode(stream);
   if (c == 0x30)  /* ASN.1 sequence, so assume DER */
-     key = d2i_PrivateKey_bio(bio, NULL); /* TBD: Password! */
+    key = d2i_PrivateKey_bio(bio, NULL); /* TBD: Password! */
   else
-     key = PEM_read_bio_PrivateKey(bio, NULL, &private_password_callback, (void*)password_chars);
+    key = PEM_read_bio_PrivateKey(bio, NULL,
+				  &private_password_callback,
+				  (void*)password_chars);
   BIO_free(bio);
   PL_release_stream(stream);
-  if (key == NULL)
-     return PL_permission_error("read", "key", source);
-  if (!unify_private_key(key, key_t))
-  { EVP_PKEY_free(key);
-    PL_fail;
-  }
+
+  if ( key == NULL )
+    return PL_permission_error("read", "key", source);
+
+  rc = (unify_private_key(key, key_t) != 0);
   EVP_PKEY_free(key);
-  PL_succeed;
+
+  return rc;
 }
 
-foreign_t
+static foreign_t
 pl_load_crl(term_t source, term_t list)
 { X509_CRL* crl;
   BIO* bio;
@@ -997,7 +999,7 @@ pl_load_crl(term_t source, term_t list)
   return result;
 }
 
-foreign_t
+static foreign_t
 pl_load_certificate(term_t source, term_t cert)
 { X509* x509;
   BIO* bio;
