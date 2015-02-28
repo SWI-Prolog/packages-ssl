@@ -208,9 +208,10 @@ ssl_context(Role, SSL, Module:Options) :-
 %	called to negotiate an SSL  session   over  the  streams. If the
 %	negotiation is successful, SSLRead and SSLWrite are returned.
 %
-%	@error ssl_error(Info) is raised if   the negotiation fails. The
-%	streams PlainRead and  PlainWrite  are   *not*  closed,  but  an
-%	unknown amount of data may have been read and written.
+%	@error ssl_error(Code, LibName, FuncName, Reason) is raised
+%	if the negotiation fails. The streams PlainRead and PlainWrite
+%	are *not* closed, but an unknown amount of data may have been
+%	read and written.
 
 %%	ssl_peer_certificate(+Stream, -Certificate) is semidet.
 %
