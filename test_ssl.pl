@@ -34,15 +34,20 @@
 
 :- asserta(user:file_search_path(library, '.')).
 :- asserta(user:file_search_path(library, '../clib')).
-:- asserta(user:file_search_path(foreign, '.')).
-:- asserta(user:file_search_path(foreign, '../clib')).
+:- asserta(user:file_search_path(library, '..')).
 :- asserta(user:file_search_path(library, '../plunit')).
+:- asserta(user:file_search_path(library, '../sgml')).
+:- asserta(user:file_search_path(foreign, '../clib')).
+:- asserta(user:file_search_path(foreign, '.')).
+:- asserta(user:file_search_path(foreign, '../http')).
+:- asserta(user:file_search_path(foreign, '../sgml')).
 
 :- use_module(library(plunit)).
 :- use_module(library(ssl)).
 :- use_module(library(debug)).
 :- use_module(library(error)).
 :- use_module(library(readutil)).
+:- use_module(https).
 
 %:- debug(connection).
 %:- debug(certificate).
@@ -50,11 +55,25 @@
 %:- debug(_).
 
 test_ssl :-
-	run_tests([ ssl_server
+	run_tests([ ssl_server,
+		    https_open
 		  ]).
 :- dynamic
 	option/1,			% Options to test
 	copy_error/1.
+
+run_network_tests :-
+	\+ getenv('USE_PUBLIC_NETWORK_TESTS', false).
+
+:- begin_tests(https_open, [condition(run_network_tests)]).
+
+test(readme, Title == "# SWI-Prolog SSL interface") :-
+	http_download('https://raw.githubusercontent.com\c
+		      /SWI-Prolog/packages-ssl/master/README.md',
+		      String),
+	split_string(String, "\n", " \t", [Title|_]).
+
+:- end_tests(https_open).
 
 :- begin_tests(ssl_server).
 
