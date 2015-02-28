@@ -1754,31 +1754,20 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 
 static foreign_t
 pl_system_root_certificates(term_t list)
-{ STACK_OF(X509_OBJECT) *certs = NULL;
-  X509_OBJECT *obj = NULL;
-  X509_STORE *root_store;
-  X509 *cert;
-  int i;
+{ X509_list *certs;
   term_t head = PL_new_term_ref();
   term_t tail = PL_copy_term_ref(list);
 
-  if ( !(root_store=system_root_certificates()) )
+  if ( !(certs=system_root_certificates()) )
     return PL_unify_nil(list);
 
-  certs = root_store->objs;
-  for(i = 0; i < sk_X509_OBJECT_num(certs); i++)
-  { obj = sk_X509_OBJECT_value(certs, i);
-    if (obj->type == X509_LU_X509) /* Could be a CRL */
-    { cert = obj->data.x509;
-      if (!(PL_unify_list(tail, head, tail) &&
-            unify_certificate(head, cert)))
-      {
-        Sdprintf("Bad cert\n");
-        continue;
-        return FALSE;
-      }
+  for(; certs; certs = certs->next)
+  { if ( !(PL_unify_list(tail, head, tail) &&
+	   unify_certificate(head, certs->cert)))
+    { return FALSE;
     }
   }
+
   return PL_unify_nil(tail);
 }
 

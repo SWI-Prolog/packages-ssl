@@ -810,8 +810,43 @@ http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trust
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 static void
-ssl_system_verify_locations(X509_STORE *store)
-{
+free_509_list(X509_list *list)
+{ X509_list *next;
+
+  for(; list; list=next)
+  { next = list->next;
+    X509_free(list->cert);
+    free(list);
+  }
+}
+
+
+static int
+list_add_X509(X509 *cert, X509_list **head, X509_list **tail)
+{ X509_list *cell = malloc(sizeof(*cell));
+
+  if ( cell )
+  { cell->cert = cert;
+    cell->next = NULL;
+    if ( *head )
+    { (*tail)->next = cell;
+      (*tail) = cell;
+    } else
+    { *head = *tail = cell;
+    }
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+
+static X509_list *
+ssl_system_verify_locations(void)
+{ X509_list *head=NULL, *tail=NULL;
+  int ok = TRUE;
+
 #ifdef __WINDOWS__
   HCERTSTORE hSystemStore;
 
@@ -823,8 +858,10 @@ ssl_system_verify_locations(X509_STORE *store)
 
       X509 *cert = d2i_X509(NULL, &ce, (int)pCertCtx->cbCertEncoded);
       if ( cert )
-      { X509_STORE_add_cert(store, cert);
-        X509_free(cert);
+      { if ( !list_add_X509(cert, &head, &tail) )
+	{ ok = FALSE;
+	  break;
+	}
       }
     }
 
@@ -863,11 +900,12 @@ ssl_system_verify_locations(X509_STORE *store)
         cert_data_length = CFDataGetLength(cert_data);
         x509 = d2i_X509(NULL, &der, cert_data_length);
         CFRelease(cert_data);
-        if ( x509 == NULL )
-        { continue;
+        if ( x509 )
+        { if ( !list_add_X509(x509, &head, &tail) )
+	  { ok = FALSE;
+	    break;
+	  }
         }
-        X509_STORE_add_cert(store, x509);
-        X509_free(x509);
       }
       CFRelease(certs);
     }
@@ -881,25 +919,30 @@ ssl_system_verify_locations(X509_STORE *store)
   FILE *cafile = fopen(SYSTEM_CACERT_FILENAME, "rb");
   if (cafile != NULL)
   { while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
-    { X509_STORE_add_cert(store, cert);
-      X509_free(cert);
+    { if ( !list_add_X509(cert, &head, &tail) )
+      { ok = FALSE;
+	break;
+      }
     }
     fclose(cafile);
   }
 #endif
 #endif
+
+  if ( ok )
+  { return head;
+  } else
+  { free_509_list(head);
+    return NULL;				/* no memory */
+  }
 }
 
 
-
-X509_STORE *
+X509_list *
 system_root_certificates(void)
 { pthread_mutex_lock(&root_store_lock);
   if ( !system_root_store )
-  { X509_list *certs =
-
-    system_root_store = X509_STORE_new();
-    ssl_system_verify_locations(system_root_store);
+  { system_root_store = ssl_system_verify_locations();
   }
   pthread_mutex_unlock(&root_store_lock);
 
@@ -910,10 +953,19 @@ system_root_certificates(void)
 static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->use_system_cacert )
-  { X509_STORE *store = system_root_certificates();
+  { X509_list *certs = system_root_certificates();
 
-    if ( store )
-    { SSL_CTX_set_cert_store(config->pl_ssl_ctx, store);
+    if ( certs )
+    { X509_STORE *store = X509_STORE_new();
+
+      if ( store )
+      { X509_list *head;
+
+	for(head = certs; head; head=head->next)
+	{ X509_STORE_add_cert(store, head->cert);
+	}
+	SSL_CTX_set_cert_store(config->pl_ssl_ctx, store);
+      }
     }
     ssl_deb(1, "System certificate authority(s) installed\n");
   } else if ( config->pl_ssl_cacert )
