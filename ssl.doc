@@ -45,7 +45,7 @@ Raw TCP/IP networking is dangerous for two reasons.  It is hard to tell
 whether the body you think you are talking to is indeed the right one and
 anyone with access to a subnet through which your data flows can `tap'
 the wire and listen for sensitive information such as passwords,
-creditcard numbers, etc.   Secure Socket Layer (SSL) deals with both
+credit card numbers, etc.   Secure Socket Layer (SSL) deals with both
 problems.  It uses certificates to establish the identity of the peer
 and encryption to make it useless to tap into the wire.  SSL allows
 agents to talk in private and create secure web services.
@@ -232,7 +232,7 @@ interface.
 \label{sec:https-proxy}
 
 The above expects Prolog to be accessible directly from the internet.
-This is becomming more popular now that services are often deployed
+This is becoming more popular now that services are often deployed
 using \jargon{virtualization}. If the Prolog services are placed behind
 a reverse proxy, HTTPS implementation is the task of the proxy server
 (e.g., Apache or Nginx). The communication from the proxy server to the
@@ -246,7 +246,7 @@ it must decide on the destination based on the encrypted HTTP header.
 running on a machine that is not directly connected to the internet
 visible. It is not needed to decrypt the traffic using port forwarding,
 but it is also not possible to realise \jargon{virtual hosts} or
-\jargon{path-based} procy rules.
+\jargon{path-based} proxy rules.
 
 
 \section{Acknowledgments}

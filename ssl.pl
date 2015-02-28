@@ -103,7 +103,7 @@ In UNIX, pipes could just as easily be used, for example.
 %%	ssl_context(+Role, -SSL, :Options) is det.
 %
 %	Create an SSL context. The defines several properties of the SSL
-%	connection such as  involved  keys,   perferred  encryption  and
+%	connection such as  involved  keys,   preferred  encryption  and
 %	passwords. After establishing a context,   an SSL connection can
 %	be negotiated using ssl_negotiate/5, turning two arbitrary plain
 %	Prolog streams into encrypted streams.  This predicate processes
@@ -120,7 +120,9 @@ In UNIX, pipes could just as easily be used, for example.
 %	  Specify the password the private key is protected with (if
 %	  any). If you do not want to store the password you can also
 %	  specify an application defined handler to return the password
-%	  (see next option).
+%	  (see next option).  Text is either an atom or string.  Using
+%	  a string is preferred as strings are volatile and local
+%	  resources.
 %	  * pem_password_hook(:PredicateName)
 %	  In case a password is required to access the private key the
 %	  supplied function will be called to fetch it. The function has
@@ -326,7 +328,7 @@ ssl_context(Role, SSL, Module:Options) :-
 
 
 /*
-  These predicates are here to support backward compatability with the previous
+  These predicates are here to support backward compatibility with the previous
   incarnation of the SSL library. No changes should be required for legacy code.
 */
 
