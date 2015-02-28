@@ -52,6 +52,7 @@ static atom_t ATOM_sslv3;
 static atom_t ATOM_tlsv1;
 static atom_t ATOM_tlsv1_1;
 static atom_t ATOM_tlsv1_2;
+static atom_t ATOM_minus;			/* "-" */
 
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_system1;
@@ -143,207 +144,131 @@ get_predicate_arg(int a, module_t m, term_t t, int arity, predicate_t *pred)
   return TRUE;
 }
 
-static int
-recover_public_key(term_t public_t, RSA** rsa)
-{
-   char *n, *e;
-   term_t n_t, e_t;
-
-   n_t = PL_new_term_ref();
-   e_t = PL_new_term_ref();
-
-   if(!(PL_get_arg(1, public_t, n_t) &&
-        PL_get_arg(2, public_t, e_t)))
-      return PL_type_error("public_key", public_t);
-
-   if (!(PL_get_atom_chars(n_t, &n) &&
-         PL_get_atom_chars(e_t, &e)))
-      return PL_type_error("public_key", public_t);
-   *rsa = RSA_new();
-   BN_hex2bn(&((*rsa)->n), n);
-   BN_hex2bn(&((*rsa)->e), e);
-   return TRUE;
-}
 
 static int
-recover_private_key(term_t private_t, RSA** rsa)
-{
-   char *n, *d, *e, *p, *q, *dmp1, *dmq1, *iqmp;
-   term_t n_t, d_t, e_t, p_t, q_t, dmp1_t, dmq1_t, iqmp_t;
+get_bn_arg(int a, term_t t, BIGNUM **bn)
+{ term_t arg;
+  char *hex;
 
-   n_t = PL_new_term_ref();
-   e_t = PL_new_term_ref();
-   d_t = PL_new_term_ref();
-   p_t = PL_new_term_ref();
-   q_t = PL_new_term_ref();
-   dmp1_t = PL_new_term_ref();
-   dmq1_t = PL_new_term_ref();
-   iqmp_t = PL_new_term_ref();
-   if(!(PL_get_arg(1, private_t, n_t) &&
-        PL_get_arg(2, private_t, e_t) &&
-        PL_get_arg(3, private_t, d_t) &&
-        PL_get_arg(4, private_t, p_t) &&
-        PL_get_arg(5, private_t, q_t) &&
-        PL_get_arg(6, private_t, dmp1_t) &&
-        PL_get_arg(7, private_t, dmq1_t) &&
-        PL_get_arg(8, private_t, iqmp_t)))
-      return PL_type_error("private_key", private_t);
-   ssl_deb(1, "Dismantling key");
-   if (!(PL_get_atom_chars(n_t, &n) &&
-         PL_get_atom_chars(e_t, &e) &&
-         PL_get_atom_chars(d_t, &d) &&
-         PL_get_atom_chars(p_t, &p) &&
-         PL_get_atom_chars(q_t, &q) &&
-         PL_get_atom_chars(dmp1_t, &dmp1) &&
-         PL_get_atom_chars(dmq1_t, &dmq1) &&
-         PL_get_atom_chars(iqmp_t, &iqmp)))
-      return PL_type_error("private_key", private_t);
-   ssl_deb(1, "Assembling RSA");
-   *rsa = RSA_new();
+  if ( (arg=PL_new_term_ref()) &&
+       PL_get_arg(a, t, arg) &&
+       PL_get_chars(arg, &hex,
+		    CVT_ATOM|CVT_STRING|REP_ISO_LATIN_1|CVT_EXCEPTION) )
+  { if ( strcmp(hex, "-") == 0 )
+      *bn = NULL;
+    else
+      BN_hex2bn(bn, hex);
 
-   BN_hex2bn(&((*rsa)->n), n);
-   BN_hex2bn(&((*rsa)->d), d);
-   BN_hex2bn(&((*rsa)->e), e);
-   BN_hex2bn(&((*rsa)->p), p);
-   BN_hex2bn(&((*rsa)->q), q);
-   BN_hex2bn(&((*rsa)->dmp1), dmp1);
-   BN_hex2bn(&((*rsa)->dmq1), dmq1);
-   BN_hex2bn(&((*rsa)->iqmp), iqmp);
-   return TRUE;
+    return TRUE;
+  }
+
+  return FALSE;
 }
 
+
+static int
+unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
+{ term_t arg;
+
+  if ( (arg = PL_new_term_ref()) &&
+       PL_get_arg(a, t, arg) )
+  { int rc;
+
+    if ( bn )
+    { char *hex = BN_bn2hex(bn);
+
+      rc = PL_unify_chars(arg, PL_STRING|REP_ISO_LATIN_1, (size_t)-1, hex);
+      OPENSSL_free(hex);
+    } else
+      rc = PL_unify_atom(arg, ATOM_minus);
+
+    PL_reset_term_refs(arg);
+    return rc;
+  }
+
+  return FALSE;
+}
+
+
+static int
+recover_private_key(term_t private_key, RSA** rsap)
+{ RSA *rsa = RSA_new();
+
+  if ( get_bn_arg(1, private_key, &rsa->n) &&
+       get_bn_arg(2, private_key, &rsa->e) &&
+       get_bn_arg(3, private_key, &rsa->d) &&
+       get_bn_arg(4, private_key, &rsa->p) &&
+       get_bn_arg(5, private_key, &rsa->q) &&
+       get_bn_arg(6, private_key, &rsa->dmp1) &&
+       get_bn_arg(7, private_key, &rsa->dmq1) &&
+       get_bn_arg(8, private_key, &rsa->iqmp)
+     )
+  { *rsap = rsa;
+    return TRUE;
+  }
+
+  RSA_free(rsa);
+  return FALSE;
+}
 
 
 static int
 unify_private_rsa(term_t item, RSA* rsa)
-{ term_t n_t, d_t, e_t, p_t, q_t, dmp1_t, dmq1_t, iqmp_t;
-  char* hex;
-  int retval = 1;
+{ term_t pk;
 
-  n_t = PL_new_term_ref();
-  e_t = PL_new_term_ref();
-  d_t = PL_new_term_ref();
-  p_t = PL_new_term_ref();
-  q_t = PL_new_term_ref();
-  dmp1_t = PL_new_term_ref();
-  dmq1_t = PL_new_term_ref();
-  iqmp_t = PL_new_term_ref();
+  if ( (pk=PL_new_term_ref()) &&
+       PL_unify_functor(pk, FUNCTOR_private_key8) &&
+       unify_bignum_arg(1, pk, rsa->n) &&
+       unify_bignum_arg(2, pk, rsa->e) &&
+       unify_bignum_arg(3, pk, rsa->d) &&
+       unify_bignum_arg(4, pk, rsa->p) &&
+       unify_bignum_arg(5, pk, rsa->q) &&
+       unify_bignum_arg(6, pk, rsa->dmp1) &&
+       unify_bignum_arg(7, pk, rsa->dmq1) &&
+       unify_bignum_arg(8, pk, rsa->iqmp) )
+  { return PL_unify_term(item, PL_FUNCTOR, FUNCTOR_key1,
+			         PL_TERM, pk);
+  }
 
-  hex = BN_bn2hex(rsa->n);
-  retval = retval && (PL_unify_atom_nchars(n_t, strlen(hex), hex));
-  OPENSSL_free(hex);
-
-  hex = BN_bn2hex(rsa->e);
-  retval = retval && (PL_unify_atom_nchars(e_t, strlen(hex), hex));
-  OPENSSL_free(hex);
-
-  if (rsa->d != NULL)
-  { hex = BN_bn2hex(rsa->d);
-    retval = retval && (PL_unify_atom_nchars(d_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(d_t, "-"));
-
-  if (rsa->p != NULL)
-  { hex = BN_bn2hex(rsa->p);
-    retval = retval && (PL_unify_atom_nchars(p_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(p_t, "-"));
-
-  if (rsa->q != NULL)
-  { hex = BN_bn2hex(rsa->q);
-    retval = retval && (PL_unify_atom_nchars(q_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(q_t, "-"));
-
-  if (rsa->dmp1 != NULL)
-  { hex = BN_bn2hex(rsa->dmp1);
-    retval = retval && (PL_unify_atom_nchars(dmp1_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-      retval = retval && (PL_unify_atom_chars(dmp1_t, "-"));
-
-  if (rsa->dmq1 != NULL)
-  { hex = BN_bn2hex(rsa->dmq1);
-    retval = retval && (PL_unify_atom_nchars(dmq1_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(dmq1_t, "-"));
-
-  if (rsa->iqmp != NULL)
-  { hex = BN_bn2hex(rsa->iqmp);
-    retval = retval && (PL_unify_atom_nchars(iqmp_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(iqmp_t, "-"));
-
-  return retval && PL_unify_term(item,
-                                 PL_FUNCTOR, FUNCTOR_key1,
-                                 PL_FUNCTOR, FUNCTOR_private_key8,
-                                 PL_TERM, n_t,
-                                 PL_TERM, e_t,
-                                 PL_TERM, d_t,
-                                 PL_TERM, p_t,
-                                 PL_TERM, q_t,
-                                 PL_TERM, dmp1_t,
-                                 PL_TERM, dmq1_t,
-                                 PL_TERM, iqmp_t);
+  return FALSE;
 }
+
+
+static int
+recover_public_key(term_t public_key, RSA** rsap)
+{ RSA *rsa = RSA_new();
+
+  if ( get_bn_arg(1, public_key, &rsa->n) &&
+       get_bn_arg(2, public_key, &rsa->e) &&
+       get_bn_arg(3, public_key, &rsa->dmp1) &&  /* Does not seem to be used? */
+       get_bn_arg(4, public_key, &rsa->dmq1) &&
+       get_bn_arg(5, public_key, &rsa->iqmp)
+     )
+  { *rsap = rsa;
+    return TRUE;
+  }
+
+  RSA_free(rsa);
+  return FALSE;
+}
+
 
 static int
 unify_public_rsa(term_t item, RSA* rsa)
-{ term_t n_t, e_t, dmp1_t, dmq1_t, iqmp_t, key_t;
-  char* hex;
-  int retval = 1;
+{ term_t pk;
 
-  n_t = PL_new_term_ref();
-  e_t = PL_new_term_ref();
-  dmp1_t = PL_new_term_ref();
-  dmq1_t = PL_new_term_ref();
-  iqmp_t = PL_new_term_ref();
+  if ( (pk=PL_new_term_ref()) &&
+       PL_unify_functor(pk, FUNCTOR_public_key5) &&
+       unify_bignum_arg(1, pk, rsa->n) &&
+       unify_bignum_arg(2, pk, rsa->e) &&
+       unify_bignum_arg(3, pk, rsa->dmp1) &&
+       unify_bignum_arg(4, pk, rsa->dmq1) &&
+       unify_bignum_arg(5, pk, rsa->iqmp) )
+  { return PL_unify_term(item, PL_FUNCTOR, FUNCTOR_key1,
+			         PL_TERM, pk);
+  }
 
-  hex = BN_bn2hex(rsa->n);
-  retval = retval && (PL_unify_atom_nchars(n_t, strlen(hex), hex));
-  OPENSSL_free(hex);
-
-  hex = BN_bn2hex(rsa->e);
-  retval = retval && (PL_unify_atom_nchars(e_t, strlen(hex), hex));
-  OPENSSL_free(hex);
-
-  if (rsa->dmp1 != NULL)
-  { hex = BN_bn2hex(rsa->dmp1);
-    retval = retval && (PL_unify_atom_nchars(dmp1_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-      retval = retval && (PL_unify_atom_chars(dmp1_t, "-"));
-
-  if (rsa->dmq1 != NULL)
-  { hex = BN_bn2hex(rsa->dmq1);
-    retval = retval && (PL_unify_atom_nchars(dmq1_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(dmq1_t, "-"));
-
-  if (rsa->iqmp != NULL)
-  { hex = BN_bn2hex(rsa->iqmp);
-    retval = retval && (PL_unify_atom_nchars(iqmp_t, strlen(hex), hex));
-    OPENSSL_free(hex);
-  } else
-     retval = retval && (PL_unify_atom_chars(iqmp_t, "-"));
-
-  key_t = PL_new_term_ref();
-  retval = retval && PL_unify_term(key_t,
-                                   PL_FUNCTOR, FUNCTOR_public_key5,
-                                   PL_TERM, n_t,
-                                   PL_TERM, e_t,
-                                   PL_TERM, dmp1_t,
-                                   PL_TERM, dmq1_t,
-                                   PL_TERM, iqmp_t);
-  return retval && PL_unify_term(item,
-                                 PL_FUNCTOR, FUNCTOR_key1,
-                                 PL_TERM, key_t);
+  return FALSE;
 }
 
 
@@ -1822,6 +1747,7 @@ install_ssl4pl()
   ATOM_tlsv1              = PL_new_atom("tlsv1");
   ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
   ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
+  ATOM_minus		  = PL_new_atom("-");
 
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
