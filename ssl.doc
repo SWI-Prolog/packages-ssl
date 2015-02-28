@@ -74,7 +74,7 @@ Using SSL (in this particular case based on the OpenSSL implementation)
 to connect to SSL services (e.g., an \verb$https://$ address) easily
 gives a false sense of security. This section explains some of the
 pitfalls.\footnote{We do not claim to be complete, just to start warning
-you if security is really important to you. Please make sure you
+you if security is important to you. Please make sure you
 understand (Open)SSL before relying on it.}. As stated in the
 introduction, SSL aims at solving two issues: tapping information from
 the wire by means of encryption and make sure that you are talking to
@@ -100,7 +100,7 @@ digitally \jargon{signed} by another certificate, and ultimately by a
     \item Verifying the chain or digital signatures until a trusted
     root certificate is found.
     \item Verifying that the signer of a certificate did not \jargon{revoke}
-    the certificate.
+    the signed certificate.
     \item Verifying that the host we connected to is indeed the host
     claimed in the certificate.
 \end{enumerate}
@@ -114,7 +114,8 @@ step (1) of the verification process outlined above. This implies that
 an attacker that can control DNS mapping (host name to IP) or routing
 (IP to physical machine) can fake to be a secure host as long as they
 manage to obtain a certificate that is signed from a recognised
-authority.
+authority.   The predicate ssl_peer_certificate/2 can be used to obtain
+the peer certificate and inspect its properties.
 
 
 \subsubsection{Disabling certificate checking}
@@ -135,6 +136,17 @@ typically need to ensure they have a secure connection to their peer.
 TODO: How to deal with this?
 
 
+\section{Example code}
+\label{sec:ssl-examples}
+
+Examples of a simple server and client (\file{server.pl} and
+\file{client.pl} as well as a simple HTTPS server (\file{https.pl}) can
+be found in the example directory which is located in
+\file{doc/packages/examples/ssl} relative to the SWI-Prolog installation
+directory. The \file{etc} directory contains example certificate files
+as well as a \file{README} on the creation of certificates using OpenSSL
+tools.
+
 \subsection{Accessing an HTTPS server}
 \label{sec:ssl-https-client}
 
@@ -142,7 +154,7 @@ Accessing an \verb$https://$ server can be achieved using the code
 skeleton below. The line \verb$:- use_module(library(http/http_ssl_plugin)).$
 can be omitted if the development environment is present because the
 plugin is dynamically loaded by http_open/3 of the \const{https} scheme
-is detected.  See \secref{ssl-secutity} for more information about
+is detected.  See \secref{ssl-security} for more information about
 security aspects.
 
 \begin{code}
@@ -160,8 +172,25 @@ security aspects.
 
 The HTTP server is started in HTTPS mode by adding an option \const{ssl}
 to http_server/2. The argument of the \const{ssl} option is an option
-list passed to ssl_init/3. Here is an example that uses the demo
-certificates distributed with the SSL package.
+list passed to ssl_context/3.  Note that a server requires two items:
+
+    \begin{enumerate}
+    \item The \jargon{server certificate} identifies the server and
+	  acts as a \jargon{public key} for the encryption.
+    \item The \jargon{server key} provides the matching \jargon{private key}
+	  and must be kept secret. It key \textit{may} be protected by a
+	  password. If this is the case, the server must provide the
+	  password by means of the \const{password} option or the
+	  \const{pem_password_hook} callback.
+    \end{enumerate}
+
+Below is an example that uses the self-signed demo certificates
+distributed with the SSL package. This version does not require a
+certificate from the client, which is the normal case for publically
+accessible HTTPS servers. The example file \file{https.pl} also provides
+a server that does require the client to show its certificate. This
+version provides an additional level of security, often used to allow a
+selected set of clients to perform sensitive tasks.
 
 \begin{code}
 :- use_module(library(http/thread_httpd)).
@@ -170,38 +199,55 @@ certificates distributed with the SSL package.
 https_server(Port, Options) :-
         http_server(reply,
                     [ port(Port),
-                      timeout(60),
-                      ssl([ host('localhost'),
-                            cacert_file('etc/demoCA/cacert.pem'),
-                            certificate_file('etc/server/server-cert.pem'),
+                      ssl([ certificate_file('etc/server/server-cert.pem'),
                             key_file('etc/server/server-key.pem'),
-                            password('apenoot1')
+                            password("apenoot1")
                           ])
                     | Options
                     ]).
 \end{code}
 
+Note that a single Prolog server can call http_server/2 with different
+parameters to provide services at several security levels as described
+below. These servers can either use their own dispatching or commonly
+use http_dispatch/1 and check the \const{port} property of the request
+to verify they are called with the desired security level. If a service
+is approached at a too low level of security, the handler can deny
+access or use HTTP redirect to send the client to to appropriate
+interface.
 
-\section{Example code}
-\label{sec:ssl-examples}
+\begin{itemize}
+    \item A plain HTTP server at port 80.  This can either be used for
+    non-sensitive information or for \jargon{redirecting} to a more
+    secure service.
+    \item An HTTPS server at port 443 for sensitive services to the
+    general public.
+    \item An HTTPS server that demands for a client key on a selected
+    port for administrative tasks or sensitive machine-to-machine
+    communication.
+\end{itemize}
 
-Examples of a simple server and client (\file{server.pl} and
-\file{client.pl} as well as a simple HTTPS server (\file{https.pl}) can
-be found in the example directory which is located in
-\file{doc/packages/examples/ssl} relative to the SWI-Prolog installation
-directory. The \file{etc} directory contains example certificate files
-as well as a \file{README} on the creation of certificates using OpenSSL
-tools.
 
+\subsection{HTTPS behind a proxy}
+\label{sec:https-proxy}
 
-\section{Multithreading}
-\label{sec:ssl-thread-safety}
+The above expects Prolog to be accessible directly from the internet.
+This is becomming more popular now that services are often deployed
+using \jargon{virtualization}. If the Prolog services are placed behind
+a reverse proxy, HTTPS implementation is the task of the proxy server
+(e.g., Apache or Nginx). The communication from the proxy server to the
+Prolog server can use either plain HTTP or HTTPS. As plain HTTP is
+easier to setup and faster, this is typically preferred if the network
+between the proxy server and Prolog server can be trusted.
 
-OpenSSL is not intrinsically threadsafe, but can be made so by providing
-some callbacks for managing locking. These callbacks are installed when the
-ssl4pl library is loaded, and will overwrite any existing callbacks.
+Note that the proxy server \emph{must} decrypt the HTTPS traffic because
+it must decide on the destination based on the encrypted HTTP header.
+\jargon{Port forwarding} provides another option to make a server
+running on a machine that is not directly connected to the internet
+visible. It is not needed to decrypt the traffic using port forwarding,
+but it is also not possible to realise \jargon{virtual hosts} or
+\jargon{path-based} procy rules.
 
-When the ssl4pl library is unloaded, the original callbacks will be restored.
 
 \section{Acknowledgments}
 \label{sec:ssl-acknowledgments}
