@@ -19,13 +19,22 @@
 	    https_client/2,			% +Port, +Page
 	    https_client_with_client_cert/2	% +Port, +Page
 	  ]).
+
+% Include  our  dependencies.  The  conditions  are  to  accomodate  for
+% different locations of some of  the  files   in  the  source  tree and
+% examples tree.
+
 :- if(exists_source('../http/examples/demo_body')).
 :- use_module('../http/examples/demo_body').	% location in source tree
 :- else.
 :- use_module('../http/demo_body').		% location in demo tree
 :- endif.
 :- use_module(library('http/thread_httpd')).
+:- if(exists_source(library('http/http_ssl_plugin'))).
 :- use_module(library('http/http_ssl_plugin')).
+:- else.
+:- use_module(http_ssl_plugin).
+:- endif.
 :- use_module(library(debug)).
 
 /** <module> Demo HTTPS server
