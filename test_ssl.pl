@@ -29,16 +29,16 @@
 */
 
 :- module(test_ssl,
-	  [ test_ssl/0,
-	    test_ssl/1,
-	    ssl_server/0
+	  [ test_ssl/0
 	  ]).
 
 :- asserta(user:file_search_path(library, '.')).
 :- asserta(user:file_search_path(library, '../clib')).
 :- asserta(user:file_search_path(foreign, '.')).
 :- asserta(user:file_search_path(foreign, '../clib')).
+:- asserta(user:file_search_path(library, '../plunit')).
 
+:- use_module(library(plunit)).
 :- use_module(library(ssl)).
 :- use_module(library(debug)).
 :- use_module(library(error)).
@@ -49,11 +49,16 @@
 %:- debug(data).
 %:- debug(_).
 
+test_ssl :-
+	run_tests([ ssl_server
+		  ]).
 :- dynamic
 	option/1,			% Options to test
 	copy_error/1.
 
-test_ssl :-
+:- begin_tests(ssl_server).
+
+test(server) :-
 	make_server(SSL),
 	thread_create(server_loop(SSL), Id, []),
 	(   catch(client, E, true)
@@ -222,3 +227,5 @@ read_from_server(In, Message) :-
 
 get_client_pwd(_SSL, "apenoot2") :-
 	debug(passwd, 'Returning password from client passwd hook', []).
+
+:- end_tests(ssl_server).
