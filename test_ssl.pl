@@ -56,6 +56,7 @@
 
 test_ssl :-
 	run_tests([ ssl_server,
+		    ssl_keys,
 		    https_open
 		  ]).
 :- dynamic
@@ -74,6 +75,65 @@ test(readme, Title == "# SWI-Prolog SSL interface") :-
 	split_string(String, "\n", " \t", [Title|_]).
 
 :- end_tests(https_open).
+
+:- begin_tests(ssl_keys).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+The tests in this  section  illustrate   SSL  encryption  as  public key
+encryption. We use the server's private key and the server's certificate
+public key for encryption and decryption of messages.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- meta_predicate
+	from_file(+, ?, 0).
+
+from_file(File, Stream, Goal) :-
+	setup_call_cleanup(
+	    open(File, read, Stream, [type(binary)]),
+	    Goal,
+	    close(Stream)).
+
+skip_to_cert(In) :-				% Skip to a line starting with
+	between(1, 1000, _),			% '-'.  Should not be needed!
+	(   peek_char(In, '-')
+	->  !
+	;   skip(In, 0'\n),
+	    fail
+	).
+
+test(private_key, Key = key(private_key(_,_,_,_,_,_,_,_)) ) :-
+	from_file('etc/server/server-key.pem', In,
+		  load_private_key(In, "apenoot1", Key)).
+test(certificate, true) :-
+	from_file('etc/server/server-cert.pem', In,
+		  ( skip_to_cert(In),		% FIXME
+		    load_certificate(In, Cert)
+		  )),
+	assertion(is_certificate(Cert)).
+test(trip_private_public, In == Out) :-
+	In = 'Hello World!',
+	from_file('etc/server/server-key.pem', S1,
+		  load_private_key(S1, "apenoot1", key(PrivateKey))),
+	from_file('etc/server/server-cert.pem', S2,
+		  ( skip_to_cert(S2),		% FIXME
+		    load_certificate(S2, Cert)
+		  )),
+	memberchk(key(PublicKey), Cert),
+	rsa_private_encrypt(PrivateKey, In, Encrypted),
+	rsa_public_decrypt(PublicKey, Encrypted, Out).
+test(trip_public_private, In == Out) :-
+	In = 'Hello World!',
+	from_file('etc/server/server-key.pem', S1,
+		  load_private_key(S1, "apenoot1", key(PrivateKey))),
+	from_file('etc/server/server-cert.pem', S2,
+		  ( skip_to_cert(S2),		% FIXME
+		    load_certificate(S2, Cert)
+		  )),
+	memberchk(key(PublicKey), Cert),
+	rsa_public_encrypt(PublicKey, In, Encrypted),
+	rsa_private_decrypt(PrivateKey, Encrypted, Out).
+
+:- end_tests(ssl_keys).
 
 :- begin_tests(ssl_server).
 
@@ -248,3 +308,41 @@ get_client_pwd(_SSL, "apenoot2") :-
 	debug(passwd, 'Returning password from client passwd hook', []).
 
 :- end_tests(ssl_server).
+
+
+		 /*******************************
+		 *	       UTIL		*
+		 *******************************/
+
+is_certificate(Cert) :-
+	is_list(Cert),
+	memberchk(version(V), Cert), integer(V),
+	memberchk(notbefore(NB), Cert), integer(NB),
+	memberchk(notafter(NA), Cert), integer(NA),
+	memberchk(subject(Subj), Cert), is_subject(Subj),
+	memberchk(hash(H), Cert), atom(H),
+	memberchk(signature(S), Cert), atom(S),
+	memberchk(issuer_name(Issuer), Cert), is_issuer(Issuer),
+	memberchk(key(K), Cert), is_public_key(K).
+
+is_subject(Subj) :-
+	is_list(Subj),
+	memberchk('CN' = CN, Subj), atom(CN).
+
+is_issuer(Issuer) :-
+	is_list(Issuer),
+	memberchk('CN' = CN, Issuer), atom(CN).
+
+is_public_key(Term) :-
+	functor(Term, public_key, 5),
+	Term =.. [_|Args],
+	maplist(is_bignum, Args).
+
+is_bignum('-').					% NULL
+is_bignum(Text) :-
+	string_codes(Text, Codes),
+	maplist(is_hex, Codes).
+
+is_hex(C) :- between(0'0, 0'9, C), !.
+is_hex(C) :- between(0'A, 0'F, C), !.
+is_hex(C) :- between(0'a, 0'f, C), !.
