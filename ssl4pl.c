@@ -66,8 +66,9 @@ static functor_t FUNCTOR_notafter1;
 static functor_t FUNCTOR_subject1;
 static functor_t FUNCTOR_issuername1;
 static functor_t FUNCTOR_serial1;
-static functor_t FUNCTOR_public_key5;
-static functor_t FUNCTOR_private_key8;
+static functor_t FUNCTOR_public_key1;
+static functor_t FUNCTOR_private_key1;
+static functor_t FUNCTOR_rsa8;
 static functor_t FUNCTOR_key1;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_next_update1;
@@ -191,17 +192,17 @@ unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
 
 
 static int
-recover_private_key(term_t private_key, RSA** rsap)
+recover_rsa(term_t t, RSA** rsap)
 { RSA *rsa = RSA_new();
 
-  if ( get_bn_arg(1, private_key, &rsa->n) &&
-       get_bn_arg(2, private_key, &rsa->e) &&
-       get_bn_arg(3, private_key, &rsa->d) &&
-       get_bn_arg(4, private_key, &rsa->p) &&
-       get_bn_arg(5, private_key, &rsa->q) &&
-       get_bn_arg(6, private_key, &rsa->dmp1) &&
-       get_bn_arg(7, private_key, &rsa->dmq1) &&
-       get_bn_arg(8, private_key, &rsa->iqmp)
+  if ( get_bn_arg(1, t, &rsa->n) &&
+       get_bn_arg(2, t, &rsa->e) &&
+       get_bn_arg(3, t, &rsa->d) &&
+       get_bn_arg(4, t, &rsa->p) &&
+       get_bn_arg(5, t, &rsa->q) &&
+       get_bn_arg(6, t, &rsa->dmp1) &&
+       get_bn_arg(7, t, &rsa->dmq1) &&
+       get_bn_arg(8, t, &rsa->iqmp)
      )
   { *rsap = rsa;
     return TRUE;
@@ -213,62 +214,49 @@ recover_private_key(term_t private_key, RSA** rsap)
 
 
 static int
-unify_private_rsa(term_t item, RSA* rsa)
-{ term_t pk;
+recover_private_key(term_t t, RSA** rsap)
+{ if ( PL_is_functor(t, FUNCTOR_private_key1) )
+  { term_t arg;
 
-  if ( (pk=PL_new_term_ref()) &&
-       PL_unify_functor(pk, FUNCTOR_private_key8) &&
-       unify_bignum_arg(1, pk, rsa->n) &&
-       unify_bignum_arg(2, pk, rsa->e) &&
-       unify_bignum_arg(3, pk, rsa->d) &&
-       unify_bignum_arg(4, pk, rsa->p) &&
-       unify_bignum_arg(5, pk, rsa->q) &&
-       unify_bignum_arg(6, pk, rsa->dmp1) &&
-       unify_bignum_arg(7, pk, rsa->dmq1) &&
-       unify_bignum_arg(8, pk, rsa->iqmp) )
-  { return PL_unify_term(item, PL_FUNCTOR, FUNCTOR_key1,
-			         PL_TERM, pk);
+    if ( (arg = PL_new_term_ref()) &&
+	 PL_get_arg(1, t, arg) )
+      return recover_rsa(arg, rsap);
+
+    return FALSE;
   }
 
-  return FALSE;
+  return PL_type_error("private_key", t);
 }
 
 
 static int
-recover_public_key(term_t public_key, RSA** rsap)
-{ RSA *rsa = RSA_new();
+recover_public_key(term_t t, RSA** rsap)
+{ if ( PL_is_functor(t, FUNCTOR_public_key1) )
+  { term_t arg;
 
-  if ( get_bn_arg(1, public_key, &rsa->n) &&
-       get_bn_arg(2, public_key, &rsa->e) &&
-       get_bn_arg(3, public_key, &rsa->dmp1) &&  /* Does not seem to be used? */
-       get_bn_arg(4, public_key, &rsa->dmq1) &&
-       get_bn_arg(5, public_key, &rsa->iqmp)
-     )
-  { *rsap = rsa;
-    return TRUE;
+    if ( (arg = PL_new_term_ref()) &&
+	 PL_get_arg(1, t, arg) )
+      return recover_rsa(arg, rsap);
+
+    return FALSE;
   }
 
-  RSA_free(rsa);
-  return FALSE;
+  return PL_type_error("public_key", t);
 }
 
 
 static int
-unify_public_rsa(term_t item, RSA* rsa)
-{ term_t pk;
-
-  if ( (pk=PL_new_term_ref()) &&
-       PL_unify_functor(pk, FUNCTOR_public_key5) &&
-       unify_bignum_arg(1, pk, rsa->n) &&
-       unify_bignum_arg(2, pk, rsa->e) &&
-       unify_bignum_arg(3, pk, rsa->dmp1) &&
-       unify_bignum_arg(4, pk, rsa->dmq1) &&
-       unify_bignum_arg(5, pk, rsa->iqmp) )
-  { return PL_unify_term(item, PL_FUNCTOR, FUNCTOR_key1,
-			         PL_TERM, pk);
-  }
-
-  return FALSE;
+unify_rsa(term_t item, RSA* rsa)
+{ return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
+	   unify_bignum_arg(1, item, rsa->n) &&
+	   unify_bignum_arg(2, item, rsa->e) &&
+	   unify_bignum_arg(3, item, rsa->d) &&
+	   unify_bignum_arg(4, item, rsa->p) &&
+	   unify_bignum_arg(5, item, rsa->q) &&
+	   unify_bignum_arg(6, item, rsa->dmp1) &&
+	   unify_bignum_arg(7, item, rsa->dmq1) &&
+	   unify_bignum_arg(8, item, rsa->iqmp)
+	 );
 }
 
 
@@ -532,118 +520,63 @@ unify_crl(term_t term, X509_CRL* crl)
   return result && PL_unify_nil(list);
 }
 
-int unify_public_key(EVP_PKEY* key, term_t item)
-{
+
+static int
+unify_key(EVP_PKEY* key, functor_t type, term_t item)
+{ if ( !PL_unify_functor(item, type) ||
+       !PL_get_arg(1, item, item) )
+    return FALSE;
+
  /* EVP_PKEY_get1_* returns a copy of the existing key */
   switch (EVP_PKEY_type(key->type))
-  {
+  { int rc;
 #ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
-    { RSA* rsa;
-      rsa = EVP_PKEY_get1_RSA(key);
-      if (!unify_public_rsa(item, rsa))
-      { RSA_free(rsa);
-        return FALSE;
-      }
-      break;
+    { RSA* rsa = EVP_PKEY_get1_RSA(key);
+      rc = unify_rsa(item, rsa);
+      RSA_free(rsa);
+      return rc;
     }
 #endif
 #ifndef OPENSSL_NO_EC
     case EVP_PKEY_EC:
-    { EC_KEY* ec;
-      ec = EVP_PKEY_get1_EC_KEY(key);
-      if (!PL_unify_atom_chars(item, "<ec key>"))
-      { EC_KEY_free(ec);
-        return FALSE;
-      }
-      break;
+    { EC_KEY* ec = EVP_PKEY_get1_EC_KEY(key);
+      rc = PL_unify_atom_chars(item, "ec_key");
+      EC_KEY_free(ec);
+      return rc;
     }
 #endif
 #ifndef OPENSSL_NO_DH
-   case EVP_PKEY_DH:
-   { DH* dh;
-      dh = EVP_PKEY_get1_DH(key);
-      if (!PL_unify_atom_chars(item, "<dh key>"))
-      { DH_free(dh);
-        return FALSE;
-      }
-      break;
+    case EVP_PKEY_DH:
+    { DH* dh = EVP_PKEY_get1_DH(key);
+      rc = PL_unify_atom_chars(item, "dh_key");
+      DH_free(dh);
+      return rc;
     }
 #endif
 #ifndef OPENSSL_NO_DSA
     case EVP_PKEY_DSA:
-    { DSA* dsa;
-      dsa = EVP_PKEY_get1_DSA(key);
-      if (!PL_unify_atom_chars(item, "<dsa key>"))
-      { DSA_free(dsa);
-        return FALSE;
-      }
-      break;
+    { DSA* dsa = EVP_PKEY_get1_DSA(key);
+      rc = PL_unify_atom_chars(item, "dsa_key");
+      DSA_free(dsa);
+      return rc;
     }
 #endif
   default:
     /* Unknown key type */
-    return FALSE;
+    return PL_representation_error("ssl_key");
   }
   return TRUE;
 }
 
+static int
+unify_public_key(EVP_PKEY* key, term_t item)
+{ return unify_key(key, FUNCTOR_public_key1, item);
+}
 
 static int
 unify_private_key(EVP_PKEY* key, term_t item)
-{
- /* EVP_PKEY_get1_* returns a copy of the existing key */
-  switch (EVP_PKEY_type(key->type))
-  {
-#ifndef OPENSSL_NO_RSA
-    case EVP_PKEY_RSA:
-    { RSA* rsa;
-      rsa = EVP_PKEY_get1_RSA(key);
-      if (!unify_private_rsa(item, rsa))
-      { RSA_free(rsa);
-        return FALSE;
-      }
-      break;
-    }
-#endif
-#ifndef OPENSSL_NO_EC
-    case EVP_PKEY_EC:
-    { EC_KEY* ec;
-      ec = EVP_PKEY_get1_EC_KEY(key);
-      if (!PL_unify_atom_chars(item, "<ec key>"))
-      { EC_KEY_free(ec);
-        return FALSE;
-      }
-      break;
-    }
-#endif
-#ifndef OPENSSL_NO_DH
-   case EVP_PKEY_DH:
-   { DH* dh;
-      dh = EVP_PKEY_get1_DH(key);
-      if (!PL_unify_atom_chars(item, "<dh key>"))
-      { DH_free(dh);
-        return FALSE;
-      }
-      break;
-    }
-#endif
-#ifndef OPENSSL_NO_DSA
-    case EVP_PKEY_DSA:
-    { DSA* dsa;
-      dsa = EVP_PKEY_get1_DSA(key);
-      if (!PL_unify_atom_chars(item, "<dsa key>"))
-      { DSA_free(dsa);
-        return FALSE;
-      }
-      break;
-    }
-#endif
-  default:
-    /* Unknown key type */
-    return FALSE;
-  }
-  return TRUE;
+{ return unify_key(key, FUNCTOR_private_key1, item);
 }
 
 
@@ -739,7 +672,9 @@ unify_certificate(term_t cert, X509* data)
     return FALSE;
   /* X509_extract_key returns a copy of the existing key */
   key = X509_extract_key(data);
-  if (!unify_public_key(key, item))
+  if ( !PL_unify_functor(item, FUNCTOR_key1) ||
+       !PL_get_arg(1, item, item) ||
+       !unify_public_key(key, item) )
     return FALSE;
   EVP_PKEY_free(key);
 
@@ -1756,8 +1691,9 @@ install_ssl4pl()
   FUNCTOR_issuername1	  = PL_new_functor(PL_new_atom("issuer_name"), 1);
   FUNCTOR_serial1	  = PL_new_functor(PL_new_atom("serial"), 1);
   FUNCTOR_key1	          = PL_new_functor(PL_new_atom("key"), 1);
-  FUNCTOR_public_key5     = PL_new_functor(PL_new_atom("public_key"), 5);
-  FUNCTOR_private_key8    = PL_new_functor(PL_new_atom("private_key"), 8);
+  FUNCTOR_public_key1     = PL_new_functor(PL_new_atom("public_key"), 1);
+  FUNCTOR_private_key1    = PL_new_functor(PL_new_atom("private_key"), 1);
+  FUNCTOR_rsa8		  = PL_new_functor(PL_new_atom("rsa"), 8);
   FUNCTOR_hash1	          = PL_new_functor(PL_new_atom("hash"), 1);
   FUNCTOR_next_update1    = PL_new_functor(PL_new_atom("next_update"), 1);
   FUNCTOR_signature1      = PL_new_functor(PL_new_atom("signature"), 1);

@@ -107,9 +107,10 @@ skip_to_pem_cert(In) :-
 	    at_end_of_stream(In), !
 	).
 
-test(private_key, Key = key(private_key(_,_,_,_,_,_,_,_)) ) :-
+test(private_key) :-
 	from_file('etc/server/server-key.pem', In,
-		  load_private_key(In, "apenoot1", Key)).
+		  load_private_key(In, "apenoot1", Key)),
+	is_private_key(Key).
 test(certificate, true) :-
 	from_file('etc/server/server-cert.pem', In,
 		  ( skip_to_pem_cert(In),
@@ -119,7 +120,7 @@ test(certificate, true) :-
 test(trip_private_public, In == Out) :-
 	In = 'Hello World!',
 	from_file('etc/server/server-key.pem', S1,
-		  load_private_key(S1, "apenoot1", key(PrivateKey))),
+		  load_private_key(S1, "apenoot1", PrivateKey)),
 	from_file('etc/server/server-cert.pem', S2,
 		  ( skip_to_pem_cert(S2),
 		    load_certificate(S2, Cert)
@@ -130,7 +131,7 @@ test(trip_private_public, In == Out) :-
 test(trip_public_private, In == Out) :-
 	In = 'Hello World!',
 	from_file('etc/server/server-key.pem', S1,
-		  load_private_key(S1, "apenoot1", key(PrivateKey))),
+		  load_private_key(S1, "apenoot1", PrivateKey)),
 	from_file('etc/server/server-cert.pem', S2,
 		  ( skip_to_pem_cert(S2),
 		    load_certificate(S2, Cert)
@@ -340,9 +341,24 @@ is_issuer(Issuer) :-
 	memberchk('CN' = CN, Issuer), atom(CN).
 
 is_public_key(Term) :-
-	functor(Term, public_key, 5),
-	Term =.. [_|Args],
+	nonvar(Term),
+	Term = public_key(Key),
+	is_key(Key).
+
+is_private_key(Term) :-
+	nonvar(Term),
+	Term = private_key(Key),
+	is_key(Key).
+
+is_key(Term) :-
+	var(Term), !, fail.
+is_key(RSA) :-
+	functor(RSA, rsa, 8), !,
+	RSA =.. [_|Args],
 	maplist(is_bignum, Args).
+is_key(ec_key).
+is_key(dh_key).
+is_key(dsa_key).
 
 is_bignum('-').					% NULL
 is_bignum(Text) :-
@@ -352,3 +368,5 @@ is_bignum(Text) :-
 is_hex(C) :- between(0'0, 0'9, C), !.
 is_hex(C) :- between(0'A, 0'F, C), !.
 is_hex(C) :- between(0'a, 0'f, C), !.
+
+
