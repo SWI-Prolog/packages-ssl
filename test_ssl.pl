@@ -118,7 +118,7 @@ test(certificate, true) :-
 		  )),
 	assertion(is_certificate(Cert)).
 test(trip_private_public, In == Out) :-
-	In = 'Hello World!',
+	In = "Hello World!",
 	from_file('etc/server/server-key.pem', S1,
 		  load_private_key(S1, "apenoot1", PrivateKey)),
 	from_file('etc/server/server-cert.pem', S2,
@@ -129,7 +129,7 @@ test(trip_private_public, In == Out) :-
 	rsa_private_encrypt(PrivateKey, In, Encrypted),
 	rsa_public_decrypt(PublicKey, Encrypted, Out).
 test(trip_public_private, In == Out) :-
-	In = 'Hello World!',
+	In = "Hello World!",
 	from_file('etc/server/server-key.pem', S1,
 		  load_private_key(S1, "apenoot1", PrivateKey)),
 	from_file('etc/server/server-cert.pem', S2,

@@ -323,7 +323,7 @@ ssl_context(Role, SSL, Module:Options) :-
 %	with  public_key(KeyTerm)  where  KeyTerm  is    an  rsa/8  term
 %	representing an RSA key.
 
-%% rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
+%%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
 %
 %	Decrypt  a  message  using  the   private  RSA  key  PrivateKey.
 %	CipherText is an atom containing  the   data  to decrypt, and if

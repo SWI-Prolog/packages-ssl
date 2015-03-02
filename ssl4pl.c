@@ -1407,7 +1407,8 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain_t)
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = PL_unify_atom_nchars(plain_t, outsize, (char*)plain);
+  retval = PL_unify_chars(plain_t, PL_STRING|REP_ISO_LATIN_1,
+			  outsize, (char*)plain);
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
@@ -1443,7 +1444,8 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t)
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = PL_unify_atom_nchars(plain_t, outsize, (char*)plain);
+  retval = PL_unify_chars(plain_t, PL_STRING|REP_ISO_LATIN_1,
+			  outsize, (char*)plain);
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
@@ -1481,7 +1483,8 @@ pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t)
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = PL_unify_atom_nchars(cipher_t, outsize, (char*)cipher);
+  retval = PL_unify_chars(cipher_t, PL_STRING|REP_ISO_LATIN_1,
+			  outsize, (char*)cipher);
   ssl_deb(1, "Freeing plaintext");
   PL_free(cipher);
   ssl_deb(1, "Done");
@@ -1517,7 +1520,8 @@ pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher_t)
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = PL_unify_atom_nchars(cipher_t, outsize, (char*)cipher);
+  retval = PL_unify_chars(cipher_t, PL_STRING|REP_ISO_LATIN_1,
+			  outsize, (char*)cipher);
   ssl_deb(1, "Freeing plaintext");
   PL_free(cipher);
   ssl_deb(1, "Done");
