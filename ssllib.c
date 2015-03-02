@@ -90,42 +90,38 @@ static int ctx_idx;
  * ssl_error_term(long ex) returns a Prolog term representing the SSL
  * error.  If there is already a pending exception, this is returned.
  *
- * FIXME: we are putting 0-bytes in the result of ERR_error_string().
- * This suggests this is a copy, but we do not free the error string?
- * FIXME: What if there are not enough fields in the error string?
  */
 static int
 ssl_error_term(long e)
 { term_t ex;
-  char* buffer;
+  char buffer[256];
   char* colon;
-  char *component[5];
+  char *component[5] = {NULL, "unknown", "unknown", "unknown", "unknown"};
   int n = 0;
 
   if ( (ex=PL_exception(0)) )
     return ex;					/* already pending exception */
 
-  buffer = ERR_error_string(e, NULL);
+  ERR_error_string_n(e, buffer, 256);
 
   /*
    * Disect the following error string:
    *
    * error:[error code]:[library name]:[function name]:[reason string]
    */
-
   if ( (ex=PL_new_term_ref()) )
-  { for (colon = buffer, n = 0; n < 5; n++)
+  { for (colon = buffer, n = 0; n < 5 && colon != NULL; n++)
     { component[n] = colon;
       if ((colon = strchr(colon, ':')) == NULL) break;
       *colon++ = 0;
     }
     if ( PL_unify_term(ex,
 		       PL_FUNCTOR, FUNCTOR_error2,
-		         PL_FUNCTOR, FUNCTOR_ssl_error4,
-		           PL_CHARS, component[1],
-		           PL_CHARS, component[2],
-		           PL_CHARS, component[3],
-		           PL_CHARS, component[4],
+		       PL_FUNCTOR, FUNCTOR_ssl_error4,
+		       PL_CHARS, component[1],
+		       PL_CHARS, component[2],
+		       PL_CHARS, component[3],
+		       PL_CHARS, component[4],
 		       PL_VARIABLE) )
     { return ex;
     }
