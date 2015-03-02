@@ -263,6 +263,21 @@ ssl_context(Role, SSL, Module:Options) :-
 %	notbefore/1,  notafter/1,  serial/1,   subject/1    and   key/1.
 %	subject/1  and  issuer_name  are  both    lists   of  =/2  terms
 %	representing the name.
+%
+%	Note that the OpenSSL `CA.pl`  utility creates certificates that
+%	have a human readable textual representation in front of the PEM
+%	representation. You can  use  the  following   to  skip  to  the
+%	certificate if you know it is a PEM certificate:
+%
+%	  ==
+%	  skip_to_pem_cert(In) :-
+%		repeat,
+%		(   peek_char(In, '-')
+%		->  !
+%		;   skip(In, 0'\n),
+%		    at_end_of_stream(In), !
+%		).
+%	  ==
 
 %%	load_crl(+Stream, -CRL) is det.
 %

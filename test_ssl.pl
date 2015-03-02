@@ -93,12 +93,18 @@ from_file(File, Stream, Goal) :-
 	    Goal,
 	    close(Stream)).
 
-skip_to_cert(In) :-				% Skip to a line starting with
-	between(1, 1000, _),			% '-'.  Should not be needed!
+%%	skip_to_pem_cert(+Stream) is det.
+%
+%	Skip to "\n-", the beginning of   the PEM representation that is
+%	embedded in certificates as produced using `CA.pl`.  If there is
+%	no "\n-", real to the end of the file.
+
+skip_to_pem_cert(In) :-
+	repeat,
 	(   peek_char(In, '-')
 	->  !
 	;   skip(In, 0'\n),
-	    fail
+	    at_end_of_stream(In), !
 	).
 
 test(private_key, Key = key(private_key(_,_,_,_,_,_,_,_)) ) :-
@@ -106,7 +112,7 @@ test(private_key, Key = key(private_key(_,_,_,_,_,_,_,_)) ) :-
 		  load_private_key(In, "apenoot1", Key)).
 test(certificate, true) :-
 	from_file('etc/server/server-cert.pem', In,
-		  ( skip_to_cert(In),		% FIXME
+		  ( skip_to_pem_cert(In),
 		    load_certificate(In, Cert)
 		  )),
 	assertion(is_certificate(Cert)).
@@ -115,7 +121,7 @@ test(trip_private_public, In == Out) :-
 	from_file('etc/server/server-key.pem', S1,
 		  load_private_key(S1, "apenoot1", key(PrivateKey))),
 	from_file('etc/server/server-cert.pem', S2,
-		  ( skip_to_cert(S2),		% FIXME
+		  ( skip_to_pem_cert(S2),
 		    load_certificate(S2, Cert)
 		  )),
 	memberchk(key(PublicKey), Cert),
@@ -126,7 +132,7 @@ test(trip_public_private, In == Out) :-
 	from_file('etc/server/server-key.pem', S1,
 		  load_private_key(S1, "apenoot1", key(PrivateKey))),
 	from_file('etc/server/server-cert.pem', S2,
-		  ( skip_to_cert(S2),		% FIXME
+		  ( skip_to_pem_cert(S2),
 		    load_certificate(S2, Cert)
 		  )),
 	memberchk(key(PublicKey), Cert),
