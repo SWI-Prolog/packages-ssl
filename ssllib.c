@@ -1262,6 +1262,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
   { free(*instance);
     return raise_ssl_error(ERR_get_error());
   }
+  SSL_set_session_id_context((*instance)->ssl, (unsigned char*)"SWI-Prolog", 10);
   ssl_deb(1, "allocated ssl layer\n");
 
   SSL_set_ex_data((*instance)->ssl, ssl_idx, config);
