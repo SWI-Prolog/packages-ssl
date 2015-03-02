@@ -311,6 +311,9 @@ ssl_new(void)
         new->pl_ssl_password            = NULL;
 
         new->use_system_cacert          = FALSE;
+        new->pl_ssl_host                = NULL;
+        new->pl_ssl_port                = -1;
+
         new->pl_ssl_cacert              = NULL;
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
@@ -335,6 +338,7 @@ ssl_free(PL_SSL *config)
 { if ( config )
   { assert(config->magic == SSL_CONFIG_MAGIC);
     config->magic = 0;
+    free(config->pl_ssl_host);
     free(config->pl_ssl_cacert);
     free(config->pl_ssl_certf);
     free(config->pl_ssl_keyf);
@@ -472,6 +476,28 @@ ssl_set_password(PL_SSL *config, const char *password)
     return config->pl_ssl_password;
 }
 
+char *
+ssl_set_host(PL_SSL *config, const char *host)
+/*
+ * Store supplied host in config storage
+ */
+{
+    if (host) {
+        if (config->pl_ssl_host) free(config->pl_ssl_host);
+        config->pl_ssl_host = ssl_strdup(host);
+    }
+    return config->pl_ssl_host;
+}
+
+int
+ssl_set_port(PL_SSL *config, int port)
+/*
+ * Store supplied port in config storage
+ */
+{
+    return config->pl_ssl_port = port;
+}
+
 BOOL
 ssl_set_cert(PL_SSL *config, BOOL required)
 /*
@@ -527,6 +553,7 @@ ssl_set_cb_cert_verify( PL_SSL *config
     return TRUE;
 }
 
+
 static int
 ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 /*
@@ -535,6 +562,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 {
     SSL    * ssl    = NULL;
     PL_SSL * config = NULL;
+    const char * application_error = NULL;
     /*
      * Get our config data
      */
@@ -546,6 +574,88 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
     ssl_deb(1, " ---- INIT Handling certificate verification\n");
     ssl_deb(1, "      Certificate preverified %sok\n",
 	    preverify_ok ? "" : "NOT ");
+#ifndef HAVE_X509_CHECK_HOST    
+    /* If OpenSSL does not have X509_check_host then the hostname has not yet been verified.
+       Ideally, we would try and do that here if preverify_ok is 1, which may end up
+       setting it back to 0. Unfortunately we cannot set the error to X509_V_ERR_HOSTNAME_MISMATCH
+       since it will also not be defined. Instead set X509_V_ERR_APPLICATION_VERIFICATION and
+       use a second-tier variable to hold the actual error so we can pass it to Prolog.
+    */
+    if ( preverify_ok )
+    {
+      /* This is a vastly simplified version. All we do is:
+         1) For each alt subject name: If it is the same length as the hostname and strcmp() matches, then PASS
+         2)                          : If it begins "*." and the hostname contains at least one ., and strcmp() 
+                                       matches from the first . in both expressions, AND the SAN contains no embedded
+                                       NULLs, then PASS.
+         3) Get the subject name. If it is the same length as the hostname and strcmp() matches, then PASS
+         4) Otherwise, FAIL.
+      */
+      int i;
+      X509 *cert = ctx->cert;
+      STACK_OF(GENERAL_NAME) *alt_names = X509_get_ext_d2i((X509 *)cert, NID_subject_alt_name, NULL, NULL);
+      int alt_names_count = 0;
+
+      /* First, set preverify_ok back to 0, since the hostname has actually not been checked yet */
+      preverify_ok = 0;
+      if ( config->pl_ssl_host != NULL)
+      { if (alt_names != NULL)
+        { alt_names_count = sk_GENERAL_NAME_num(alt_names);
+          for (i=0; i < alt_names_count && !preverify_ok; i++)
+          { const GENERAL_NAME *name = sk_GENERAL_NAME_value(alt_names, i);
+            /* We are only interested in DNS names. We may also want to do IP addresses in future, by extending
+               the type of config->pl_ssl_host 
+            */
+            if (name->type == GEN_DNS)
+            { const char* hostname = (const char*)ASN1_STRING_data(name->d.dNSName);
+              size_t hostlen = ASN1_STRING_length(name->d.dNSName);
+              if (hostlen == strlen(config->pl_ssl_host) &&
+                  strcmp(config->pl_ssl_host, hostname) == 0)
+              { preverify_ok = 1;
+                ssl_deb(3, "Host that matches found in SAN %d: %s\n", i, ASN1_STRING_data(name->d.dNSName));
+              } else if (hostlen > 2 && hostname[0] == '*' && hostname[1] == '.' && strlen(hostname) == hostlen)
+              { char* subdomain = strchr(config->pl_ssl_host, '.');
+                if (subdomain != NULL && strcmp(&hostname[1], subdomain) == 0)
+                { preverify_ok = 1;
+                  ssl_deb(3, "Host that matches with wildcard found in SAN %d: %s\n", i, hostname);
+                }
+              }
+              else
+                ssl_deb(3, "Host does not match SAN %d: %s\n", i, ASN1_STRING_data(name->d.dNSName));
+            }
+          }
+        }
+        
+        /* If that didnt work, try the subject name itself. Naturally this has a completely different API */
+        if ( !preverify_ok )
+        { X509_NAME_ENTRY *common_name_entry;
+          X509_NAME* subject_name = X509_get_subject_name((X509 *)cert);
+          int common_name_index = X509_NAME_get_index_by_NID(subject_name, NID_commonName, -1);
+          if (common_name_index != -1)
+          { common_name_entry = X509_NAME_get_entry(subject_name, common_name_index);
+            if (common_name_entry != NULL)
+            { ASN1_STRING *common_name_asn1 = X509_NAME_ENTRY_get_data(common_name_entry);
+              if (common_name_asn1 != NULL)
+              { if (ASN1_STRING_length(common_name_asn1) == strlen(config->pl_ssl_host) &&
+                    strcmp(config->pl_ssl_host, (const char*)ASN1_STRING_data(common_name_asn1)) == 0)
+                { preverify_ok = 1;
+                  ssl_deb(3, "Hostname in SN matches: %s\n", ASN1_STRING_data(common_name_asn1));
+                }
+                else
+                  ssl_deb(3, "Hostname in SN does not match: %s vs %s\n", ASN1_STRING_data(common_name_asn1), config->pl_ssl_host);
+              }
+            }
+          }
+        }
+      }
+      if ( !preverify_ok )
+        { ssl_deb(3, "Hostname could not be verified!\n");
+        X509_STORE_CTX_set_error(ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+        application_error = "hostname_mismatch";
+      }
+    }
+#endif
+    
     if ( !preverify_ok || config->pl_ssl_cb_cert_verify_data != NULL ) {
         X509 *cert = NULL;
         int   err;
@@ -564,7 +674,11 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 	{ error = "verified";
 	} else
 	{ err   = X509_STORE_CTX_get_error(ctx);
-	  error = X509_verify_cert_error_string(err);
+          if (err == X509_V_ERR_APPLICATION_VERIFICATION)
+          { error = application_error;
+          } else
+          { error = X509_verify_cert_error_string(err);
+          }
 	}
 
         if (config->pl_ssl_cb_cert_verify) {
@@ -1249,6 +1363,9 @@ int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE** instance)
 { BIO* rbio = NULL;
   BIO* wbio = NULL;
+#ifdef HAVE_X509_CHECK_HOST
+  X509_VERIFY_PARAM *param = NULL;
+#endif
 
   if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
     return PL_resource_error("memory");
@@ -1262,6 +1379,13 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
   { free(*instance);
     return raise_ssl_error(ERR_get_error());
   }
+
+#ifdef HAVE_X509_CHECK_HOST
+  param = SSL_get0_param((*instance)->ssl);
+  X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+  X509_VERIFY_PARAM_set1_host(param, config->pl_ssl_host, 0);
+#endif
+  
   SSL_set_session_id_context((*instance)->ssl, (unsigned char*)"SWI-Prolog", 10);
   ssl_deb(1, "allocated ssl layer\n");
 

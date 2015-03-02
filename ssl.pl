@@ -68,7 +68,9 @@
 	ssl_context(+, -, :).
 
 :- predicate_options(ssl_context/3, 3,
-		     [ certificate_file(atom),
+		     [ host(atom),
+		       port(integer),
+		       certificate_file(atom),
 		       key_file(atom),
 		       password(any),
 		       pem_password_hook(callable),
@@ -78,11 +80,7 @@
 		       peer_cert(boolean),
 		       close_parent(boolean)
 		     ]).
-:- predicate_options(ssl_init/3, 3,
-		     [ host(atom),
-		       port(integer),
-		       pass_to(ssl_context/3, 3)
-		     ]).
+:- predicate_options(ssl_init/3, 3, [pass_to(ssl_context/3, 3)]).
 
 /** <module> Secure Socket Layer (SSL) library
 

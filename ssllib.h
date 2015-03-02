@@ -65,6 +65,14 @@ typedef struct pl_ssl {
     X509 *              pl_ssl_peer_cert;
 
     /*
+     * In case of the server the hosts we're accepting (NULL for any),
+     * in case of the client the host we're connecting to.
+     * We also store the socket file descriptor.
+     */
+    char *              pl_ssl_host;
+    int                 pl_ssl_port;
+
+    /*
      * Various parameters affecting the SSL layer
      */
     int                 use_system_cacert;
@@ -126,6 +134,9 @@ ssize_t         ssl_read         (void *handle, char *buf, size_t size);
 ssize_t         ssl_write        (void *handle, char *buf, size_t size);
 int		ssl_thread_setup (void);
 
+char *          ssl_set_host     (PL_SSL *config, const char *host);
+int             ssl_set_port     (PL_SSL *config, int port);
+
 char *          ssl_set_cacert   (PL_SSL *config, const char *cacert);
 int             ssl_set_use_system_cacert(PL_SSL *config, int use_system_cacert);
 char *          ssl_set_certf    (PL_SSL *config, const char *certf);
@@ -147,6 +158,7 @@ BOOL            ssl_set_cb_cert_verify
                                                    )
                                  , void *
                                  ) ;
+
 BOOL            ssl_set_cb_pem_passwd
                                  ( PL_SSL *config
                                  , char * (*callback)( PL_SSL *
