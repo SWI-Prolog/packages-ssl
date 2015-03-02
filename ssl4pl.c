@@ -260,6 +260,32 @@ unify_rsa(term_t item, RSA* rsa)
 }
 
 
+static int
+unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
+{ char tmp[512];
+  char *out, *o;
+  static const char *tohex = "0123456789ABCDEF";
+  const unsigned char *end = data+len;
+  int rc;
+
+  if ( len*2 <= sizeof(tmp) )
+    out = tmp;
+  else if ( !(out = malloc(len*2)) )
+    return PL_resource_error("memory");
+
+  for(o=out ; data < end; data++)
+  { *o++ = tohex[(*data >> 4) & 0xf];
+    *o++ = tohex[(*data >> 0) & 0xf];
+  }
+
+  rc = PL_unify_chars(t, PL_STRING|REP_ISO_LATIN_1, len*2, out);
+  if ( out != tmp )
+    free(out);
+
+  return rc;
+}
+
+
 /* Note that while this might seem incredibly hacky, it is
    essentially the same algorithm used by X509_cmp_time to
    parse the date. Some
@@ -421,8 +447,7 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   }
   EVP_MD_CTX_cleanup(&ctx);
   PL_free(digest_buffer);
-  return PL_unify_term(hash,
-                       PL_NCHARS, (size_t)digest_length, digest);
+  return unify_bytes_hex(hash, digest_length, digest);
 }
 
 static int
@@ -466,6 +491,7 @@ unify_crl(term_t term, X509_CRL* crl)
   term_t revocations = PL_new_term_ref();
   term_t list = PL_copy_term_ref(revocations);
   term_t next_update = PL_new_term_ref();
+  term_t signature = PL_new_term_ref();
 
   int result = 1;
   long n;
@@ -481,12 +507,13 @@ unify_crl(term_t term, X509_CRL* crl)
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
         unify_hash(hash, crl->sig_alg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
         unify_asn1_time(next_update, X509_CRL_get_nextUpdate(crl)) &&
+	unify_signature(signature, crl->signature->length, crl->signature->data) &&
         PL_unify_term(term,
                       PL_LIST, 5,
                       PL_FUNCTOR, FUNCTOR_issuername1,
                       PL_TERM, issuer,
                       PL_FUNCTOR, FUNCTOR_signature1,
-                      PL_NCHARS, (size_t)crl->signature->length, crl->signature->data,
+                      PL_TERM, signature,
                       PL_FUNCTOR, FUNCTOR_hash1,
                       PL_TERM, hash,
                       PL_FUNCTOR, FUNCTOR_next_update1,
@@ -592,6 +619,7 @@ unify_certificate(term_t cert, X509* data)
   term_t hash;
   term_t not_before;
   term_t not_after;
+  term_t signature;
   unsigned int crl_ext_id;
   unsigned char *p;
   X509_EXTENSION * crl_ext = NULL;
@@ -652,10 +680,13 @@ unify_certificate(term_t cert, X509* data)
                       PL_FUNCTOR, FUNCTOR_hash1,
                       PL_TERM, hash)))
      return FALSE;
-  if (!(PL_unify_list(list, item, list) &&
+  if (!((signature = PL_new_term_ref()) &&
+	unify_signature(signature,
+			data->signature->length, data->signature->data) &&
+	PL_unify_list(list, item, list) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_signature1,
-                      PL_NCHARS, (size_t)data->signature->length, data->signature->data)
+                      PL_TERM, signature)
          ))
      return FALSE;
 
