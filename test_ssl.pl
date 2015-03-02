@@ -327,8 +327,8 @@ is_certificate(Cert) :-
 	memberchk(notbefore(NB), Cert), integer(NB),
 	memberchk(notafter(NA), Cert), integer(NA),
 	memberchk(subject(Subj), Cert), is_subject(Subj),
-	memberchk(hash(H), Cert), atom(H),
-	memberchk(signature(S), Cert), atom(S),
+	memberchk(hash(H), Cert), is_hex_string(H),
+	memberchk(signature(S), Cert), is_hex_string(S),
 	memberchk(issuer_name(Issuer), Cert), is_issuer(Issuer),
 	memberchk(key(K), Cert), is_public_key(K).
 
@@ -364,6 +364,12 @@ is_bignum('-').					% NULL
 is_bignum(Text) :-
 	string_codes(Text, Codes),
 	maplist(is_hex, Codes).
+
+is_hex_string(S) :-
+	string(S),
+	string_codes(S, Codes),
+	maplist(is_hex, Codes).
+
 
 is_hex(C) :- between(0'0, 0'9, C), !.
 is_hex(C) :- between(0'A, 0'F, C), !.

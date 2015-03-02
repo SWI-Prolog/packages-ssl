@@ -507,7 +507,7 @@ unify_crl(term_t term, X509_CRL* crl)
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
         unify_hash(hash, crl->sig_alg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
         unify_asn1_time(next_update, X509_CRL_get_nextUpdate(crl)) &&
-	unify_signature(signature, crl->signature->length, crl->signature->data) &&
+	unify_bytes_hex(signature, crl->signature->length, crl->signature->data) &&
         PL_unify_term(term,
                       PL_LIST, 5,
                       PL_FUNCTOR, FUNCTOR_issuername1,
@@ -681,7 +681,7 @@ unify_certificate(term_t cert, X509* data)
                       PL_TERM, hash)))
      return FALSE;
   if (!((signature = PL_new_term_ref()) &&
-	unify_signature(signature,
+	unify_bytes_hex(signature,
 			data->signature->length, data->signature->data) &&
 	PL_unify_list(list, item, list) &&
         PL_unify_term(item,
