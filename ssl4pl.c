@@ -906,9 +906,7 @@ pl_load_crl(term_t source, term_t list)
   bio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(bio, 0, stream);
   /* Determine the format of the CRL */
-  c = Sgetc(stream);
-  if (c != EOF)
-     Sungetc(c, stream);
+  c = Speekcode(stream);
   if (c == 0x30)  /* ASN.1 sequence, so assume DER */
      crl = d2i_X509_CRL_bio(bio, NULL);
   else
@@ -936,9 +934,7 @@ pl_load_certificate(term_t source, term_t cert)
   bio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(bio, 0, stream);
   /* Determine format */
-  c = Sgetc(stream);
-  if (c != EOF)
-     Sungetc(c, stream);
+  c = Speekcode(stream);
   if (c == 0x30)  /* ASN.1 sequence, so assume DER */
      x509 = d2i_X509_bio(bio, NULL);
   else
