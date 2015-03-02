@@ -328,54 +328,36 @@ ssl_context(Role, SSL, Module:Options) :-
 %	representing an RSA key.
 
 %%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
+%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
+%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText) is det.
+%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText) is det.
 %%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Enc) is det.
+%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Enc) is det.
+%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Enc) is det.
+%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText, +Enc) is det.
 %
-%	Decrypt  a  message  using  the   private  RSA  key  PrivateKey.
-%	CipherText is an atom containing  the   data  to decrypt, and if
-%	successful, PlainText will be the  decrypted data. If decryption
-%	fails, then rsa_private_decrypt/3 will fail. This predicate will
-%	be  able  to  decrypt  a  message    which   was  encrypted  via
-%	rsa_public_encrypt/3  using  the  public  key  corresponding  to
-%	PrivateKey.
+%	RSA Public key encryption and   decryption  primitives. A string
+%	can be safely communicated by first   encrypting it and have the
+%	peer decrypt it with the matching  key and predicate. The length
+%	of the string is limited by  the   key  length.  Text is encoded
+%	using encoding Enc, which is one   of  `octet`, `text` or `utf8`
+%	(default).
+%
+%	@see load_private_key/3, load_public_key/2 can be use to load
+%	keys from a file.  The predicate load_certificate/2 can be used
+%	to obtain the public key from a certificate.
+%
+%	@error ssl_error(Code, LibName, FuncName, Reason)   is raised if
+%	there is an error, e.g., if the text is too long for the key.
 
 rsa_private_decrypt(PrivateKey, CipherText, PlainText) :-
 	rsa_private_decrypt(PrivateKey, CipherText, PlainText, utf8).
 
-%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
-%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Enc) is det.
-%
-%	Encrypt  a  message  using  the   private  RSA  key  PrivateKey.
-%	PlainText is an atom containing  the   data  to  encrypt, and if
-%	successful,  CipherText  will  be  the    encrypted   daQta.  If
-%	encryption  fails,  then   rsa_private_encrypt/3    will   fail.
-%	CipherText will be able to be decrypted via rsa_public_decrypt/3
-%	using the public key which corresponds to PrivateKey.
-
 rsa_private_encrypt(PrivateKey, PlainText, CipherText) :-
 	rsa_private_encrypt(PrivateKey, PlainText, CipherText, utf8).
 
-%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText) is det.
-%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Enc) is det.
-%
-%	Decrypt a message using the public RSA key PublicKey. CipherText
-%	is an atom containing the data   to  decrypt, and if successful,
-%	PlainText will be the decrypted data.  If decryption fails, then
-%	rsa_public_decrypt/3 will fail. This predicate   will be able to
-%	decrypt a message which was  encrypted via rsa_private_encrypt/3
-%	using the private key corresponding to PublicKey.
-
 rsa_public_decrypt(PublicKey, CipherText, PlainText) :-
 	rsa_public_decrypt(PublicKey, CipherText, PlainText, utf8).
-
-%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText) is det.
-%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText, +Enc) is det.
-%
-%	Encrypt a message using the public  RSA key PublicKey. PlainText
-%	is an atom containing the data   to  encrypt, and if successful,
-%	CipherText will be the encrypted data. If encryption fails, then
-%	rsa_public_encrypt/3 will fail. CipherText will   be  able to be
-%	decrypted via rsa_private_decrypt/3 using the  private key which
-%	corresponds to PublicKey.
 
 rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
 	rsa_public_encrypt(PublicKey, PlainText, CipherText, utf8).

@@ -1484,7 +1484,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   { ssl_deb(1, "Failure to decrypt!");
     RSA_free(key);
     PL_free(plain);
-    PL_fail;
+    return raise_ssl_error(ERR_get_error());
   }
   ssl_deb(1, "decrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
@@ -1521,7 +1521,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   { ssl_deb(1, "Failure to decrypt!");
     RSA_free(key);
     PL_free(plain);
-    return FALSE;
+    return raise_ssl_error(ERR_get_error());
   }
   ssl_deb(1, "decrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
@@ -1559,7 +1559,7 @@ pl_rsa_public_encrypt(term_t public_t,
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(cipher);
     RSA_free(key);
-    return FALSE;
+    return raise_ssl_error(ERR_get_error());
   }
   ssl_deb(1, "encrypted bytes: %d\n", outsize);
   ssl_deb(1, "Freeing RSA");
@@ -1597,7 +1597,7 @@ pl_rsa_private_encrypt(term_t private_t,
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(cipher);
     RSA_free(key);
-    return FALSE;
+    return raise_ssl_error(ERR_get_error());
   }
   ssl_deb(1, "encrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
