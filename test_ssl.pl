@@ -128,6 +128,18 @@ test(trip_private_public, In == Out) :-
 	memberchk(key(PublicKey), Cert),
 	rsa_private_encrypt(PrivateKey, In, Encrypted),
 	rsa_public_decrypt(PublicKey, Encrypted, Out).
+test(trip_private_public, In == Out) :-
+	numlist(1040, 1060, L),
+	string_codes(In, L),
+	from_file('etc/server/server-key.pem', S1,
+		  load_private_key(S1, "apenoot1", PrivateKey)),
+	from_file('etc/server/server-cert.pem', S2,
+		  ( skip_to_pem_cert(S2),
+		    load_certificate(S2, Cert)
+		  )),
+	memberchk(key(PublicKey), Cert),
+	rsa_private_encrypt(PrivateKey, In, Encrypted),
+	rsa_public_decrypt(PublicKey, Encrypted, Out).
 test(trip_public_private, In == Out) :-
 	In = "Hello World!",
 	from_file('etc/server/server-key.pem', S1,

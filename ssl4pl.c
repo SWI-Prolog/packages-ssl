@@ -53,6 +53,9 @@ static atom_t ATOM_tlsv1;
 static atom_t ATOM_tlsv1_1;
 static atom_t ATOM_tlsv1_2;
 static atom_t ATOM_minus;			/* "-" */
+static atom_t ATOM_text;
+static atom_t ATOM_octet;
+static atom_t ATOM_utf8;
 
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_system1;
@@ -1409,8 +1412,57 @@ pl_ssl_negotiate(term_t config,
   return TRUE;
 }
 
+
+		 /*******************************
+		 *       RSA ENCRYPT/DECRYPT	*
+		 *******************************/
+
+static int
+get_text_representation(term_t t, int *rep)
+{ atom_t a;
+
+  if ( PL_get_atom_ex(t, &a) )
+  { if      ( a == ATOM_octet ) *rep = REP_ISO_LATIN_1;
+    else if ( a == ATOM_utf8  ) *rep = REP_UTF8;
+    else if ( a == ATOM_text  ) *rep = REP_MB;
+    else return PL_domain_error("encoding", t);
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+
+static int
+get_enc_text(term_t text, term_t enc, size_t *len, unsigned char **data)
+{ int flags;
+
+  if ( get_text_representation(enc, &flags) )
+  { flags |= CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
+    return PL_get_nchars(text, len, (char**)data, flags);
+  }
+
+  return FALSE;
+}
+
+
+static int
+unify_enc_text(term_t text, term_t enc, size_t len, unsigned char *data)
+{ int flags;
+
+  if ( get_text_representation(enc, &flags) )
+  { flags |= PL_STRING;
+    return PL_unify_chars(text, flags, len, (char*)data);
+  }
+
+  return FALSE;
+}
+
+
 static foreign_t
-pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain_t)
+pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
+		       term_t plain_t, term_t enc)
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1438,8 +1490,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain_t)
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = PL_unify_chars(plain_t, PL_STRING|REP_ISO_LATIN_1,
-			  outsize, (char*)plain);
+  retval = unify_enc_text(plain_t, enc, outsize, plain);
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
@@ -1447,7 +1498,8 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t, term_t plain_t)
 }
 
 static foreign_t
-pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t)
+pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
+		      term_t plain_t, term_t enc)
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1475,8 +1527,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t)
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = PL_unify_chars(plain_t, PL_STRING|REP_ISO_LATIN_1,
-			  outsize, (char*)plain);
+  retval = unify_enc_text(plain_t, enc, outsize, plain);
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
@@ -1484,7 +1535,8 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t, term_t plain_t)
 }
 
 static foreign_t
-pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t)
+pl_rsa_public_encrypt(term_t public_t,
+		      term_t plain_t, term_t cipher_t, term_t enc)
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
@@ -1494,8 +1546,7 @@ pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t)
 
   ssl_deb(1, "Generating terms");
   ssl_deb(1, "Collecting plaintext");
-  if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
-		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+  if ( !get_enc_text(plain_t, enc, &plain_length, &plain) )
      return FALSE;
   if (!recover_public_key(public_t, &key))
      return FALSE;
@@ -1524,15 +1575,16 @@ pl_rsa_public_encrypt(term_t public_t, term_t plain_t, term_t cipher_t)
 
 
 static foreign_t
-pl_rsa_private_encrypt(term_t private_t, term_t plain_t, term_t cipher_t)
+pl_rsa_private_encrypt(term_t private_t,
+		       term_t plain_t, term_t cipher_t, term_t enc)
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
   int outsize;
   RSA* key;
   int retval;
-  if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
-		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION))
+
+  if ( !get_enc_text(plain_t, enc, &plain_length, &plain))
     return FALSE;
   if (!recover_private_key(private_t, &key))
     return FALSE;
@@ -1714,6 +1766,9 @@ install_ssl4pl()
   ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
   ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
   ATOM_minus		  = PL_new_atom("-");
+  ATOM_text		  = PL_new_atom("text");
+  ATOM_octet		  = PL_new_atom("octet");
+  ATOM_utf8		  = PL_new_atom("utf8");
 
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
@@ -1757,10 +1812,10 @@ install_ssl4pl()
   PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
-  PL_register_foreign("rsa_private_decrypt", 3, pl_rsa_private_decrypt, 0);
-  PL_register_foreign("rsa_private_encrypt", 3, pl_rsa_private_encrypt, 0);
-  PL_register_foreign("rsa_public_decrypt", 3, pl_rsa_public_decrypt, 0);
-  PL_register_foreign("rsa_public_encrypt", 3, pl_rsa_public_encrypt, 0);
+  PL_register_foreign("rsa_private_decrypt", 4, pl_rsa_private_decrypt, 0);
+  PL_register_foreign("rsa_private_encrypt", 4, pl_rsa_private_encrypt, 0);
+  PL_register_foreign("rsa_public_decrypt", 4, pl_rsa_public_decrypt, 0);
+  PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
 
   /*

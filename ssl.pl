@@ -41,6 +41,10 @@
             rsa_private_encrypt/3,      % +Key, +Plaintext, -Ciphertext
             rsa_public_decrypt/3,       % +Key, +Ciphertext, -Plaintext
             rsa_public_encrypt/3,       % +Key, +Plaintext, -Ciphertext
+            rsa_private_decrypt/4,      % +Key, +Ciphertext, -Plaintext, +Enc
+            rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
+            rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
+            rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
             ssl_context/3,		% +Role, -Config, :Options
             ssl_init/3,                 % -Config, +Role, :Options
             ssl_accept/3,               % +Config, -Socket, -Peer
@@ -324,6 +328,7 @@ ssl_context(Role, SSL, Module:Options) :-
 %	representing an RSA key.
 
 %%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
+%%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Enc) is det.
 %
 %	Decrypt  a  message  using  the   private  RSA  key  PrivateKey.
 %	CipherText is an atom containing  the   data  to decrypt, and if
@@ -333,7 +338,11 @@ ssl_context(Role, SSL, Module:Options) :-
 %	rsa_public_encrypt/3  using  the  public  key  corresponding  to
 %	PrivateKey.
 
+rsa_private_decrypt(PrivateKey, CipherText, PlainText) :-
+	rsa_private_decrypt(PrivateKey, CipherText, PlainText, utf8).
+
 %%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
+%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Enc) is det.
 %
 %	Encrypt  a  message  using  the   private  RSA  key  PrivateKey.
 %	PlainText is an atom containing  the   data  to  encrypt, and if
@@ -342,7 +351,11 @@ ssl_context(Role, SSL, Module:Options) :-
 %	CipherText will be able to be decrypted via rsa_public_decrypt/3
 %	using the public key which corresponds to PrivateKey.
 
+rsa_private_encrypt(PrivateKey, PlainText, CipherText) :-
+	rsa_private_encrypt(PrivateKey, PlainText, CipherText, utf8).
+
 %%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText) is det.
+%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Enc) is det.
 %
 %	Decrypt a message using the public RSA key PublicKey. CipherText
 %	is an atom containing the data   to  decrypt, and if successful,
@@ -351,8 +364,11 @@ ssl_context(Role, SSL, Module:Options) :-
 %	decrypt a message which was  encrypted via rsa_private_encrypt/3
 %	using the private key corresponding to PublicKey.
 
+rsa_public_decrypt(PublicKey, CipherText, PlainText) :-
+	rsa_public_decrypt(PublicKey, CipherText, PlainText, utf8).
 
 %%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText) is det.
+%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText, +Enc) is det.
 %
 %	Encrypt a message using the public  RSA key PublicKey. PlainText
 %	is an atom containing the data   to  encrypt, and if successful,
@@ -361,6 +377,8 @@ ssl_context(Role, SSL, Module:Options) :-
 %	decrypted via rsa_private_decrypt/3 using the  private key which
 %	corresponds to PublicKey.
 
+rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
+	rsa_public_encrypt(PublicKey, PlainText, CipherText, utf8).
 
 /*
   These predicates are here to support backward compatibility with the previous
