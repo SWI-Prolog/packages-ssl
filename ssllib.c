@@ -586,7 +586,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
        and then proceed to the next error (if there is one). This means that behaviour will be consistent after
        upgrading to OpenSSL 1.0.2
     */
-    if ( config->hostname_check_status == 0 ) /* Not yet checked */
+    if ( config->hostname_check_status == 0 && config->pl_ssl_role == PL_SSL_CLIENT ) /* Not yet checked, and is a client - do not check for server */
     {
       /* This is a vastly simplified version. All we do is:
          1) For each alt subject name: If it is the same length as the hostname and strcmp() matches, then PASS
@@ -1389,14 +1389,16 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
   }
 
 #ifdef HAVE_X509_CHECK_HOST
-  param = SSL_get0_param((*instance)->ssl);
-  /* This could in theory be user-configurable. The documentation at
-     https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
-     says that the flag is 'usually 0', however
-  */
-  /* X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS); */
-  X509_VERIFY_PARAM_set_hostflags(param, 0);
-  X509_VERIFY_PARAM_set1_host(param, config->pl_ssl_host, 0);
+  if ( config->pl_ssl_role == PL_SSL_CLIENT )
+  { param = SSL_get0_param((*instance)->ssl);
+    /* This could in theory be user-configurable. The documentation at
+       https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
+       says that the flag is 'usually 0', however
+    */
+    /* X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS); */
+    X509_VERIFY_PARAM_set_hostflags(param, 0);
+    X509_VERIFY_PARAM_set1_host(param, config->pl_ssl_host, 0);
+  }
 #endif
 
   SSL_set_session_id_context((*instance)->ssl, (unsigned char*)"SWI-Prolog", 10);
