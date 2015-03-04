@@ -90,6 +90,7 @@ typedef struct pl_ssl {
                                                 , X509*
                                                 , X509_STORE_CTX*
                                                 , const char *error
+                                                , int error_unknown
                                                 ) ;
     void *              pl_ssl_cb_cert_verify_data;
     char *              (*pl_ssl_cb_pem_passwd) ( struct pl_ssl *
@@ -158,6 +159,7 @@ BOOL            ssl_set_cb_cert_verify
                                                    , X509*
                                                    , X509_STORE_CTX*
                                                    , const char *
+                                                   , int
                                                    )
                                  , void *
                                  ) ;

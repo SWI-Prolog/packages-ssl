@@ -88,6 +88,7 @@ static functor_t FUNCTOR_session_id1;
 static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
+static functor_t FUNCTOR_unknown1;
 
 static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
 {
@@ -1059,9 +1060,11 @@ static BOOL
 pl_cert_verify_hook(PL_SSL *config,
                     X509 * cert,
 		    X509_STORE_CTX * ctx,
-		    const char *error)
+		    const char *error,
+                    int error_unknown)
 { fid_t fid = PL_open_foreign_frame();
   term_t av = PL_new_term_refs(5);
+  term_t error_term = PL_new_term_ref();
   predicate_t pred = (predicate_t) config->pl_ssl_cb_cert_verify_data;
   int val;
   STACK_OF(X509)* stack;
@@ -1076,11 +1079,17 @@ pl_cert_verify_hook(PL_SSL *config,
    */
 
   put_conf(av+0, config);
+  if ( error_unknown )
+    val = PL_unify_term(error_term,
+                        PL_FUNCTOR, FUNCTOR_unknown1,
+                        PL_CHARS, error);
+  else
+    val = PL_unify_atom_chars(error_term, error);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
-  val = ( unify_certificate(av+1, cert) &&
-          unify_certificates(av+2, av+3, stack) &&
-	  PL_unify_atom_chars(av+4, error) &&
-	  PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) );
+  val &= ( unify_certificate(av+1, cert) &&
+           unify_certificates(av+2, av+3, stack) &&
+           PL_unify(av+4, error_term) &&
+           PL_call_predicate(NULL, PL_Q_CATCH_EXCEPTION, pred, av) );
 
   /* free any items still on stack, since X509_STORE_CTX_get1_chain returns a copy */
   sk_X509_pop_free(stack, X509_free);
@@ -1827,6 +1836,7 @@ install_ssl4pl()
   FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
   FUNCTOR_system1         = PL_new_functor(PL_new_atom("system"), 1);
+  FUNCTOR_unknown1         = PL_new_functor(PL_new_atom("unknown"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
 
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);

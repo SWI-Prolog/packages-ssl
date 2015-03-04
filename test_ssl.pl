@@ -444,6 +444,19 @@ verify_client_1(SSL, PlainIn, PlainOut):-
                              close(SSLIn, [force(true)])
                            )).
 
+zz(Goal):-
+        setup_call_catcher_cleanup(format('CALL : ~q~n', [Goal]),
+                                   Goal,
+                                   Catcher,
+                                   ( Catcher = exception(E) -> format('ERROR: ~q (~q)~n', [Goal, E])
+                                   ; Catcher == fail-> format('FAIL : ~q~n', [Goal])
+                                   ; format('EXIT : ~q~n', [Goal]))
+                                  ),
+        ( var(Catcher)->
+            format('PEND : ~q~n', [Goal])
+        ; true
+        ).
+
 
 test_verify_hook(_,_,_,_,Error):-
         assert(certificate_verification_result(Error)).
@@ -463,37 +476,37 @@ test('Valid certificate, correct hostname in CN, signed by trusted CA', Verifica
 test('Valid certificate, correct hostname in SAN, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
         do_verification_test(2, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Valid certificate, incorrect hostname in CN, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Valid certificate, incorrect hostname in CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(3, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Valid certificate, incorrect hostname in SAN and CN, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Valid certificate, incorrect hostname in SAN and CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(4, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, correct wildcard hostname in SAN, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
         do_verification_test(5, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Valid certificate, incorrect wildcard hostname in SAN, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Valid certificate, incorrect wildcard hostname in SAN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(6, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Valid certificate, wildcard hostname in SAN with wildcard too high, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Valid certificate, wildcard hostname in SAN with wildcard too high, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(7, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Valid certificate, wildcard hostname in SAN with wildcard too low, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Valid certificate, wildcard hostname in SAN with wildcard too low, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(8, try_ssl_client('www.bad.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, wildcard hostname in SAN with wildcard in right level of domain, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
         do_verification_test(9, try_ssl_client('www.good.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Valid certificate, illegal wildcard hostname in CN, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Valid certificate, illegal wildcard hostname in CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(10, try_ssl_client('www.good.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Hostname containing embedded NULL, signed by trusted CA', VerificationResults:Status == ['Hostname mismatch', verified, verified]:true):-
+test('Hostname containing embedded NULL, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(11, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [verified, 'certificate has expired', verified]:true):-
+test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [verified, expired, verified]:true):-
         do_verification_test(12, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Certificate which is not yet valid, signed by trusted CA', VerificationResults:Status == [verified, 'certificate is not yet valid', verified]:true):-
+test('Certificate which is not yet valid, signed by trusted CA', VerificationResults:Status == [verified, not_yet_valid, verified]:true):-
         do_verification_test(13, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Certificate is not issued by trusted CA'):-
@@ -506,13 +519,13 @@ test('Certificate is not issued by trusted CA'):-
             true
         ).
 
-test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [verified, 'certificate signature failure', verified]:true):-
+test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [verified, bad_signature, verified]:true):-
         do_verification_test(15, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 %test('Certificate has been revoked', VerificationResults:Status == [verified, verified]:true):-
 %        do_verification_test(16, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Certificate is not intended for SSL', VerificationResults:Status == ['unsupported certificate purpose', verified, verified]:true):-
+test('Certificate is not intended for SSL', VerificationResults:Status == [bad_certificate_use, verified, verified]:true):-
         do_verification_test(17, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Certificate signed not-explicitly-trusted intermediary requiring us to follow the chain', VerificationResults:Status == [verified, verified, verified]:true):-
@@ -521,13 +534,13 @@ test('Certificate signed not-explicitly-trusted intermediary requiring us to fol
 %test('Chain involving revoked intermediary', VerificationResults:Status == [verified, verified]:true):-
 %        do_verification_test(19, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Chain involving expired intermediary', VerificationResults:Status == [verified, 'certificate has expired', verified, verified]:true):-
+test('Chain involving expired intermediary', VerificationResults:Status == [verified, expired, verified, verified]:true):-
         do_verification_test(20, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Chain involving not-yet-valid intermediary', VerificationResults:Status == [verified, 'certificate is not yet valid', verified, verified]:true):-
+test('Chain involving not-yet-valid intermediary', VerificationResults:Status == [verified, not_yet_valid, verified, verified]:true):-
         do_verification_test(21, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Chain involving intermediary not authorized to sign certificates', VerificationResults:Status == ['invalid CA certificate','unsupported certificate purpose',verified,verified,verified]:true):-
+test('Chain involving intermediary not authorized to sign certificates', VerificationResults:Status == [invalid_ca, bad_certificate_use, verified, verified, verified]:true):-
         do_verification_test(22, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Confirm that a failure in the verification callback triggers a connection abort', Status = error(_)):-

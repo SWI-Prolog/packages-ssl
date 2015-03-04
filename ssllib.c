@@ -543,6 +543,7 @@ ssl_set_cb_cert_verify( PL_SSL *config
                                         , X509 *
                                         , X509_STORE_CTX *
                                         , const char *
+                                        , int
                                         )
                       , void *data
                       )
@@ -660,7 +661,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
       { ssl_deb(3, "Hostname could not be verified!\n");
         if ( config->pl_ssl_cb_cert_verify_data != NULL )
         { X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
-          preverify_ok = ((config->pl_ssl_cb_cert_verify)(config, cert, ctx, "Hostname mismatch") != 0);
+          preverify_ok = ((config->pl_ssl_cb_cert_verify)(config, cert, ctx, "hostname_mismatch", 0) != 0);
         }
         else
           /* Reject the whole chain if the hostname verification fails and there is no hook to override it */
@@ -673,7 +674,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
         X509 *cert = NULL;
         const char *error;
         int err;
-
+        int error_unknown = 0;
         /*
          * Get certificate
          */
@@ -687,11 +688,65 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 	{ error = "verified";
 	} else
 	{ err   = X509_STORE_CTX_get_error(ctx);
-          error = X509_verify_cert_error_string(err);
+          switch(err)
+          {
+          case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
+          case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
+          case X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE:
+            error = "unknown_issuer";
+            break;
+          case X509_V_ERR_UNABLE_TO_GET_CRL:
+            error = "unknown_crl";
+            break;
+          case X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE:
+          case X509_V_ERR_CRL_SIGNATURE_FAILURE:
+            error = "bad_crl_signature";
+            break;
+          case X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY:
+            error = "bad_issuer_key";
+            break;
+          case X509_V_ERR_CERT_SIGNATURE_FAILURE:
+          case X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE:
+            error = "bad_signature";
+            break;
+          case X509_V_ERR_CERT_NOT_YET_VALID:
+            error = "not_yet_valid";
+            break;
+          case X509_V_ERR_CERT_HAS_EXPIRED:
+            error = "expired";
+            break;
+          case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
+          case X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD:
+          case X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD:
+          case X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
+            error = "bad_time";
+            break;
+          case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
+          case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
+            error = "self_signed_cert";
+            break;
+          case X509_V_ERR_CERT_REVOKED:
+            error = "revoked";
+            break;
+          case X509_V_ERR_INVALID_CA:
+            error = "invalid_ca";
+            break;
+          case X509_V_ERR_INVALID_PURPOSE:
+            error = "bad_certificate_use";
+            break;
+#ifdef HAVE_X509_CHECK_HOST
+          case X509_V_ERR_HOSTNAME_MISMATCH:
+            error = "hostname_mismatch";
+            break;
+#endif
+          default:
+            error_unknown = 1;
+            error = X509_verify_cert_error_string(err);
+          }
 	}
 
         if (config->pl_ssl_cb_cert_verify) {
-           preverify_ok = ((config->pl_ssl_cb_cert_verify)(config, cert, ctx, error) != 0);
+          preverify_ok = ((config->pl_ssl_cb_cert_verify)(config, cert, ctx, error, error_unknown) != 0);
         } else {
             char  subject[256];
             char  issuer [256];
