@@ -1,0 +1,3 @@
+*.csr
+*.der
+test_certs/

@@ -94,6 +94,7 @@ ssllib.tex:	ssl.pl
 ################################################################
 
 check::
+		(cd tests && ./mkcerts.sh >& /dev/null)
 		$(PL) -q -f test_ssl.pl -F none -g test_ssl,halt -t 'halt(1)'
 
 ################################################################

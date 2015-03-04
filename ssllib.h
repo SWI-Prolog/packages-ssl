@@ -97,6 +97,9 @@ typedef struct pl_ssl {
                                                 , int
                                                 ) ;
     void *              pl_ssl_cb_pem_passwd_data;
+#ifndef HAVE_X509_CHECK_HOST
+    int                 hostname_check_status;
+#endif
 } PL_SSL;
 
 typedef struct ssl_instance {
