@@ -690,6 +690,9 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 	{ err   = X509_STORE_CTX_get_error(ctx);
           switch(err)
           {
+          case X509_V_ERR_CERT_UNTRUSTED:
+            error = "not_trusted";
+            break;
           case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
           case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
           case X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE:
