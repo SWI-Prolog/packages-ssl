@@ -1089,7 +1089,7 @@ pl_cert_verify_hook(PL_SSL *config,
   val &= ( unify_certificate(av+1, cert) &&
            unify_certificates(av+2, av+3, stack) &&
            PL_unify(av+4, error_term) &&
-           PL_call_predicate(NULL, PL_Q_CATCH_EXCEPTION, pred, av) );
+           PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) );
 
   /* free any items still on stack, since X509_STORE_CTX_get1_chain returns a copy */
   sk_X509_pop_free(stack, X509_free);
