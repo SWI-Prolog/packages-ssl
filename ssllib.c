@@ -1560,7 +1560,7 @@ code is based on mttest.c distributed with the OpenSSL library.
 static pthread_mutex_t *lock_cs;
 static long *lock_count;
 static void (*old_locking_callback)(int, int, const char*, int) = NULL;
-#if OPENSSL_VERSION_NUMBER >= 0x10000000
+#ifdef HAVE_CRYPTO_THREADID_GET_CALLBACK
 static void (*old_id_callback)(CRYPTO_THREADID*) = NULL;
 #else
 static unsigned long (*old_id_callback)(void) = NULL;
@@ -1592,7 +1592,7 @@ pthreads_locking_callback(int mode, int type, const char *file, int line)
 */
 
 #ifndef __WINDOWS__
-#if OPENSSL_VERSION_NUMBER >= 0x10000000
+#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
 static void
 pthreads_thread_id(CRYPTO_THREADID* id)
 { CRYPTO_THREADID_set_numeric(id, (unsigned long)pthread_self());
@@ -1630,14 +1630,14 @@ ssl_thread_setup(void)
   { lock_count[i]=0;
     pthread_mutex_init(&(lock_cs[i]), NULL);
   }
-#if OPENSSL_VERSION_NUMBER >= 0x10000000
+#ifdef HAVE_CRYPTO_THREADID_GET_CALLBACK
   old_id_callback = CRYPTO_THREADID_get_callback();
 #else
   old_id_callback = CRYPTO_get_id_callback();
 #endif
   old_locking_callback = CRYPTO_get_locking_callback();
 #ifndef __WINDOWS__
-#if OPENSSL_VERSION_NUMBER >= 0x10000000
+#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
   CRYPTO_THREADID_set_callback(pthreads_thread_id);
 #else
   CRYPTO_set_id_callback(pthreads_thread_id);
@@ -1674,7 +1674,7 @@ ssl_lib_exit(void)
  */
 #ifdef _REENTRANT
 #ifndef __WINDOWS__
-#if OPENSSL_VERSION_NUMBER >= 0x10000000
+#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
     CRYPTO_THREADID_set_callback(old_id_callback);
 #else
     CRYPTO_set_id_callback(old_id_callback);
