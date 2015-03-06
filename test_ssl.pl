@@ -500,7 +500,12 @@ test('Valid certificate, wildcard hostname in SAN with wildcard in right level o
 test('Valid certificate, illegal wildcard hostname in CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
         do_verification_test(10, try_ssl_client('www.good.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-test('Hostname containing embedded NULL, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
+test('Hostname containing embedded NULL, signed by trusted CA',
+     [ true(VerificationResults:Status ==
+	    [hostname_mismatch,verified,verified]:true),
+       condition((size_file('tests/test_certs/11-cert.pem', Size),
+		  Size > 0))
+     ]):-
         do_verification_test(11, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [verified, expired, verified]:true):-
