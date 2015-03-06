@@ -1862,6 +1862,9 @@ install_ssl4pl()
    * Initialize ssllib
    */
   (void) ssl_lib_init();
+
+  PL_set_prolog_flag("ssl_library_version", PL_ATOM,
+		     SSLeay_version(SSLEAY_VERSION));
 }
 
 install_t

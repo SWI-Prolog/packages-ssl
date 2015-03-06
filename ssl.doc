@@ -95,7 +95,15 @@ is up-to-date. Most other systems ship with the OpenSSL library and
 SWI-Prolog uses the system version. This applies for the binaries we
 distribute for MacOSX and Linux, as well as official Linux packages.
 Check the origin and version of the OpenSSL libraries if SWI-Prolog was
-compiled from source.
+compiled from source. The OpenSSL library version as reported by
+SSLeay_version() is available in the Prolog flag
+\const{ssl_library_version} as illustrated below on Ubuntu 14.04.
+
+\begin{code}
+?- [library(ssl)].
+?- current_prolog_flag(ssl_library_version, X).
+X = 'OpenSSL 1.0.1f 6 Jan 2014'.
+\end{code}
 
 Whether you are talking to the right address is a complicated issue. The
 core of the validation is that the server provides a
