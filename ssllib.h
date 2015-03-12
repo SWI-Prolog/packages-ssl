@@ -47,6 +47,19 @@ typedef enum
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+typedef struct X509_list
+{ struct X509_list *next;
+  X509 *cert;
+} X509_list;
+
+typedef struct X509_crl_list
+{ struct X509_crl_list *next;
+  X509_CRL *crl;
+} X509_crl_list;
+
+int list_add_X509_crl(X509_CRL *crl, X509_crl_list **head, X509_crl_list **tail);
+
+
 typedef struct pl_ssl {
     long	        magic;
     /*
@@ -79,8 +92,10 @@ typedef struct pl_ssl {
     char *              pl_ssl_cacert;
     char *              pl_ssl_certf;
     char *              pl_ssl_keyf;
+    X509_crl_list *     pl_ssl_crl_list;
     char *              pl_ssl_password;
     BOOL                pl_ssl_cert_required;
+    BOOL                pl_ssl_crl_required;
     BOOL                pl_ssl_peer_cert_required;
 
     /*
@@ -114,10 +129,7 @@ typedef struct ssl_instance {
     int                  close_needed;
 } PL_SSL_INSTANCE;
 
-typedef struct X509_list
-{ struct X509_list *next;
-  X509 *cert;
-} X509_list;
+
 
 /*
  * The PL-SSL API
@@ -147,6 +159,8 @@ char *          ssl_set_certf    (PL_SSL *config, const char *certf);
 char *          ssl_set_keyf     (PL_SSL *config, const char *keyf);
 char *          ssl_set_password (PL_SSL *config, const char *password);
 BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
+BOOL            ssl_set_crl_required(PL_SSL *config, BOOL required);
+X509_crl_list*  ssl_set_crl_list (PL_SSL *config, X509_crl_list* list);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
 BOOL		ssl_set_close_parent(PL_SSL *config, int closeparent);
 void            ssl_set_method_options(PL_SSL *config, int options);

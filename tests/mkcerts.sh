@@ -60,7 +60,7 @@ openssl req -outform PEM -inform DER -in 11.der -out 11.csr
 openssl ca -config 11.cnf -batch -key apenoot -policy policy_anything -out test_certs/11-cert.pem -infiles 11.csr
 
 # Certificates 18-22 are all about intermediaries
-for i in $(seq 18 22 ); do
+for i in $(seq 18 22); do
     # First, generate the intermediary
     mkdir -p test_certs/${i}_CA/{certs,crl,newcerts,private}
     touch test_certs/${i}_CA/index.txt
@@ -76,6 +76,50 @@ for i in $(seq 18 22 ); do
     # Finally put the CA and the server cert into one file
     cat test_certs/${i}-tail-cert.pem test_certs/${i}_CA/cacert.pem  > test_certs/${i}-cert.pem
 done
+
+# Certificates 23-24 are about CRLs
+for i in $(seq 23 24); do
+    openssl req -new -config ${i}.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
+    openssl ca -config ${i}.cnf -batch -notext -key apenoot -policy policy_anything -out test_certs/${i}-cert.pem -infiles ${i}.csr
+done
+
+# Certificate 23 has a CRL but has not been revoked
+# Certificate 24 has a CRL and HAS been revoked
+openssl ca -config 24.cnf -revoke test_certs/24-cert.pem -batch -notext -key apenoot
+
+# Certificates 25-27 needs their own CA
+for i in $(seq 25 27); do
+    # First, generate the intermediary
+    mkdir -p test_certs/${i}_CA/{certs,crl,newcerts,private}
+    touch test_certs/${i}_CA/index.txt
+    echo "01" > test_certs/${i}_CA/crlnumber
+    echo 1000 > test_certs/${i}_CA/serial
+    openssl req -new -config ${i}.cnf -nodes -keyout test_certs/${i}_CA/private/cakey.pem -out test_certs/${i}_CA/careq.pem
+    openssl ca -config ${i}.cnf -notext -create_serial -batch -key apenoot -extensions v3_ca -out test_certs/${i}_CA/cacert.pem -infiles test_certs/${i}_CA/careq.pem
+    
+    # Generate a CSR (All of these tests relate to the intermediate CA, not the certificate at the end of the chain
+    openssl req -new -config ${i}_tail.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
+    # Sign the CSR. We need our own config here because we want copy_extensions on so we can preserve SubjectAltNames
+    openssl ca -config ${i}_tail.cnf -notext -batch -key apenoot -policy policy_anything -out test_certs/${i}-tail-cert.pem -infiles ${i}.csr
+    # Finally put the CA and the server cert into one file
+    cat test_certs/${i}-tail-cert.pem test_certs/${i}_CA/cacert.pem  > test_certs/${i}-cert.pem
+done
+
+# Revoke the 27 CA certificate from the root
+openssl ca -config 27.cnf -revoke test_certs/27_CA/cacert.pem -batch -notext -key apenoot
+
+# Revoke the 26 tail certificate from the 26 CA
+openssl ca -config 26_tail.cnf -revoke test_certs/26-tail-cert.pem -batch -notext -key apenoot
+
+# Generate the root CRL
+openssl ca -config 23.cnf -gencrl -out test_certs/rootCA-crl.pem
+
+# Generate the 25-27 CA CRLS
+for i in $(seq 25 27); do
+    openssl ca -config ${i}_tail.cnf -gencrl -out test_certs/${i}-crl.pem
+done
+
+
 
 # Finally, generate the certificates for all the pre-existing tests:
 # The server

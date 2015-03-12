@@ -75,6 +75,8 @@
 		       password(any),
 		       pem_password_hook(callable),
 		       cacert_file(any),
+                       crl(any),
+                       require_crl(boolean),
 		       cert_verify_hook(callable),
 		       cert(boolean),
 		       peer_cert(boolean),
@@ -142,6 +144,19 @@ easily be used.
 %	  supplied predicate will be called to fetch it. The predicate
 %	  is called as call(PredicateName, Password) and typically
 %	  unifies `Password` with a _string_ containing the password.
+%	  * require_crl(+Boolean)
+%         If true (default is false), then all certificates will be
+%         considered invalid unless they can be verified as not being
+%         revoked. You can do this explicity by passing a list of CRL
+%         filenames via the crl/1 option, or by doing it yourself in
+%         the cert_verify_hook. If you specify require_crl(true) and
+%         provide neither of these options, verification will necessarily
+%         fail
+%	  * crl(+ListOfFileNames)
+%         Provide a list of filenames of PEM-encoded CRLs that will be
+%         given to the context to attempt to establish that a chain of
+%         certificates is not revoked. You must also set require_crl(true)
+%         if you want CRLs to actually be checked by OpenSSL.
 %	  * cacert_file(+FileName)
 %	  Specify a file containing certificate keys of _trusted_
 %	  certificates. The peer is trusted if its certificate is

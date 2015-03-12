@@ -415,13 +415,15 @@ dispatch_client(SSL, PlainIn, PlainOut):-
         close(SSLIn).
 
 try_ssl_client(Hostname, Port, Hook):-
+        try_ssl_client(Hostname, Port, Hook, []).
+
+try_ssl_client(Hostname, Port, Hook, Options):-
         setup_call_cleanup(ssl_context(client,
                                        SSL,
                                        [ host(Hostname),
                                          port(Port),
                                          cert_verify_hook(Hook),
-                                         cacert_file('tests/test_certs/rootCA/cacert.pem')
-                                       ]),
+                                         cacert_file('tests/test_certs/rootCA/cacert.pem')|Options]),
                            % Always connect to localhost
                            verify_client(localhost:Port, SSL),
                            ssl_exit(SSL)).
@@ -469,6 +471,16 @@ abort_verify_hook(_,_,_,_,Error):-
             true
         ; throw(error(certificate_error(Error), _))
         ).
+
+test_crl_hook(_, _, _, _, verified).
+test_crl_hook(_SSL, Cert, _Chain, _Tail, revoked):-
+        setup_call_cleanup(open('tests/test_certs/rootCA-crl.pem', read, Stream),
+                           load_crl(Stream, CRL),
+                           close(Stream)),
+        memberchk(serial(Serial), Cert),
+        memberchk(revocations(Revocations), CRL),
+        \+memberchk(revoked(Serial, _RevocationTime), Revocations).
+
 
 test('Valid certificate, correct hostname in CN, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
         do_verification_test(1, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
@@ -527,17 +539,11 @@ test('Certificate is not issued by trusted CA'):-
 test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [verified, bad_signature, verified]:true):-
         do_verification_test(15, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
-%test('Certificate has been revoked', VerificationResults:Status == [verified, verified]:true):-
-%        do_verification_test(16, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
-
 test('Certificate is not intended for SSL', VerificationResults:Status == [bad_certificate_use, verified, verified]:true):-
         do_verification_test(17, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Certificate signed not-explicitly-trusted intermediary requiring us to follow the chain', VerificationResults:Status == [verified, verified, verified]:true):-
         do_verification_test(18, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
-
-%test('Chain involving revoked intermediary', VerificationResults:Status == [verified, verified]:true):-
-%        do_verification_test(19, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
 
 test('Chain involving expired intermediary', VerificationResults:Status == [verified, expired, verified, verified]:true):-
         do_verification_test(20, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
@@ -553,6 +559,44 @@ test('Confirm that a failure in the verification callback triggers a connection 
 
 test('Confirm that an exception in the verification callback triggers a connection abort', Status = error(_)):-
         do_verification_test(17, try_ssl_client('www.example.com', 2443, abort_verify_hook), _, Status).
+
+
+test('Certificate has a CRL but has not been revoked. We do not provide the CRL', VerificationResults:Status == [unknown_crl, unknown_crl, verified, verified]:true):-
+        do_verification_test(23, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true)]), VerificationResults, Status).
+
+test('Certificate has a CRL but has not been revoked. We do provide the CRL', VerificationResults:Status == [verified, verified]:true):-
+        do_verification_test(23, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+
+test('Certificate has a CRL and has been revoked. We do not provide the CRL', VerificationResults:Status == [unknown_crl, unknown_crl, verified, verified]:true):-
+        do_verification_test(24, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true)]), VerificationResults, Status).
+
+test('Certificate has a CRL and has been revoked. We do provide the CRL', VerificationResults:Status == [revoked, verified, verified]:true):-
+        do_verification_test(24, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+
+test('Certificate has a CRL but we want to ignore it', VerificationResults:Status == [verified, verified]:true):-
+        do_verification_test(24, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+
+test('Certificate has an illegal CRL', VerificationResults:Status == [bad_certificate_use, verified, verified, verified]:true):-
+        do_verification_test(25, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/25-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+
+test('Intermediate CA has revoked the certificate', VerificationResults:Status == [revoked, verified, verified, verified]:true):-
+        do_verification_test(26, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/26-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+
+test('root CA has revoked the intermediate CA', VerificationResults:Status == [revoked, verified, verified, verified]:true):-
+        do_verification_test(27, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/27-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+
+
+test('Accept a non-revoked certificate ourselves in a callback', VerificationResults:Status == []:true):-
+        do_verification_test(23, try_ssl_client('www.example.com', 2443, test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+
+test('Reject a revoked certificate ourselves in a callback', Status = error(_)):-
+        do_verification_test(24, try_ssl_client('www.example.com', 2443, test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), _, Status).
+
+% It would be really nice if there were some way of adding the CRL to the context and retrying, but I dont think this is possible.
+% Looking at the code in x509_vfy.c, once the callback is called for X509_V_ERR_UNABLE_TO_GET_CRL, regardless of the callback status, it goes to err, skipping the
+% rest of the validation. This implies that the callback has necessarily handled not only obtaining the CRL, but also checking that the certificate in question is
+% not revoked
+
 
 :- end_tests(ssl_certificates).
 

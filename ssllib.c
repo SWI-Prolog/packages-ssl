@@ -77,6 +77,7 @@ typedef enum
 #define DEBUG 1
 #endif
 
+void free_X509_crl_list(X509_crl_list *list);
 static X509_list *system_root_store = NULL;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -318,7 +319,9 @@ ssl_new(void)
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
         new->pl_ssl_keyf                = NULL;
+        new->pl_ssl_crl_list            = NULL;
         new->pl_ssl_peer_cert_required  = FALSE;
+        new->pl_ssl_crl_required        = FALSE;
         new->pl_ssl_cb_cert_verify      = NULL;
         new->pl_ssl_cb_cert_verify_data = NULL;
         new->pl_ssl_cb_pem_passwd       = NULL;
@@ -345,6 +348,7 @@ ssl_free(PL_SSL *config)
     free(config->pl_ssl_cacert);
     free(config->pl_ssl_certf);
     free(config->pl_ssl_keyf);
+    free_X509_crl_list(config->pl_ssl_crl_list);
     free(config->pl_ssl_password);
     if ( config->pl_ssl_peer_cert )
       X509_free(config->pl_ssl_peer_cert);
@@ -466,6 +470,22 @@ ssl_set_keyf(PL_SSL *config, const char *keyf)
     return config->pl_ssl_keyf;
 }
 
+X509_crl_list *
+ssl_set_crl_list(PL_SSL *config, X509_crl_list *crl)
+/*
+ * Store CRL location in config storage
+ */
+{
+    if (crl)
+    { if (config->pl_ssl_crl_list)
+      { free_X509_crl_list(config->pl_ssl_crl_list);
+      }
+      config->pl_ssl_crl_list = crl;
+    }
+    return config->pl_ssl_crl_list;
+}
+
+
 char *
 ssl_set_password(PL_SSL *config, const char *password)
 /*
@@ -518,6 +538,16 @@ ssl_set_peer_cert(PL_SSL *config, BOOL required)
 {
     return config->pl_ssl_peer_cert_required = required;
 }
+
+BOOL
+ssl_set_crl_required(PL_SSL *config, BOOL required)
+/*
+ * Do we require the CRL to be checked if listed on the certificate
+ */
+{
+    return config->pl_ssl_crl_required = required;
+}
+
 
 BOOL
 ssl_set_cb_pem_passwd( PL_SSL *config
@@ -734,6 +764,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
           case X509_V_ERR_INVALID_CA:
             error = "invalid_ca";
             break;
+          case X509_V_ERR_KEYUSAGE_NO_CRL_SIGN:
           case X509_V_ERR_INVALID_PURPOSE:
             error = "bad_certificate_use";
             break;
@@ -1018,6 +1049,26 @@ list_add_X509(X509 *cert, X509_list **head, X509_list **tail)
   return FALSE;
 }
 
+int
+list_add_X509_crl(X509_CRL *crl, X509_crl_list **head, X509_crl_list **tail)
+{ X509_crl_list *cell = malloc(sizeof(*cell));
+
+  if ( cell )
+  { cell->crl = crl;
+    cell->next = NULL;
+    if ( *head )
+    { (*tail)->next = cell;
+      (*tail) = cell;
+    } else
+    { *head = *tail = cell;
+    }
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 
 static X509_list *
 ssl_system_verify_locations(void)
@@ -1151,6 +1202,20 @@ ssl_init_verify_locations(PL_SSL *config)
                                   NULL);
     ssl_deb(1, "certificate authority(s) installed\n");
   }
+  if ( config->pl_ssl_crl_list )
+  { X509_STORE *store = SSL_CTX_get_cert_store(config->pl_ssl_ctx);
+    X509_crl_list* head;
+    for (head = config->pl_ssl_crl_list; head; head=head->next)
+    { X509_STORE_add_crl(store, head->crl);
+    /*
+      Sdprintf("Added a CRL...\n");
+      BIO * bio = BIO_new_fp(stdout, BIO_NOCLOSE);
+      X509_CRL_print(bio, head->crl);
+      BIO_free(bio);
+    */
+    }
+  }
+
 }
 
 
@@ -1429,9 +1494,7 @@ int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE** instance)
 { BIO* rbio = NULL;
   BIO* wbio = NULL;
-#ifdef HAVE_X509_CHECK_HOST
   X509_VERIFY_PARAM *param = NULL;
-#endif
 
   if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
     return PL_resource_error("memory");
@@ -1440,6 +1503,11 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
   BIO_set_ex_data(rbio, 0, sread);
   wbio = BIO_new(&bio_write_functions);
   BIO_set_ex_data(wbio, 0, swrite);
+
+  if ( config->pl_ssl_crl_required )
+  { X509_STORE_set_flags(SSL_CTX_get_cert_store(config->pl_ssl_ctx), X509_V_FLAG_CRL_CHECK|X509_V_FLAG_CRL_CHECK_ALL);
+  }
+
 
   if (((*instance)->ssl = SSL_new(config->pl_ssl_ctx)) == NULL)
   { free(*instance);

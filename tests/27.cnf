@@ -6,11 +6,11 @@ default_ca	= CA_default		# The default ca section
 
 [ CA_default ]
 
-dir		= ./test_certs/rootCA	# Where everything is kept
+dir		= ./test_certs/rootCA		# Where everything is kept
 certs		= $dir/certs		# Where the issued certs are kept
 crl_dir		= $dir/crl		# Where the issued crl are kept
 database	= $dir/index.txt	# database index file.
-unique_subject	= no			# Set to 'no' to allow creation of
+#unique_subject	= no			# Set to 'no' to allow creation of
 					# several ctificates with same subject.
 new_certs_dir	= $dir/newcerts		# default place for new certs.
 certificate	= $dir/cacert.pem 	# The CA certificate
@@ -64,10 +64,9 @@ O=SWI-Prolog
 L=Edinburgh
 ST=Scotland
 C=UK
-CN=Testing Root CA
+CN=Testing Intermediary
  
 [ v3_req ]
- 
 basicConstraints = CA:TRUE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment, keyCertSign, cRLSign
 
@@ -77,6 +76,7 @@ subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid,issuer
 
 [ v3_ca ]
+
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid:always,issuer
-basicConstraints = CA:TRUE
+basicConstraints = CA:true

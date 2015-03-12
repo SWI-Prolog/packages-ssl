@@ -40,6 +40,8 @@ static atom_t ATOM_port;
 static atom_t ATOM_cert;
 static atom_t ATOM_peer_cert;
 static atom_t ATOM_cacert_file;
+static atom_t ATOM_require_crl;
+static atom_t ATOM_crl;
 static atom_t ATOM_certificate_file;
 static atom_t ATOM_key_file;
 static atom_t ATOM_pem_password_hook;
@@ -1191,6 +1193,31 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_peer_cert(conf, val);
+    } else if ( name == ATOM_require_crl && arity == 1 )
+    { int val;
+
+      if ( !get_bool_arg(1, head, &val) )
+	return FALSE;
+
+      ssl_set_crl_required(conf, val);
+    } else if ( name == ATOM_crl && arity == 1 )
+    { X509_crl_list *x_head=NULL, *x_tail=NULL;
+      term_t list_head = PL_new_term_ref();
+      term_t list_tail = PL_new_term_ref();
+      _PL_get_arg(1, head, list_tail);
+      while( PL_get_list(list_tail, list_head, list_tail) )
+      { atom_t crl_name;
+        X509_CRL *crl;
+        if (PL_is_atom(list_head) && PL_get_atom(list_head, &crl_name))
+        { FILE *file = fopen(PL_atom_chars(crl_name), "rb");
+          if ( file )
+          { crl = PEM_read_X509_CRL(file, NULL, NULL, NULL);
+            list_add_X509_crl(crl, &x_head, &x_tail);
+          } else
+            return PL_existence_error("file", list_head);
+        }
+      }
+      ssl_set_crl_list(conf, x_head);
     } else if ( name == ATOM_cacert_file && arity == 1 )
     { term_t val = PL_new_term_ref();
       char *file;
@@ -1808,6 +1835,8 @@ install_ssl4pl()
   ATOM_text		  = PL_new_atom("text");
   ATOM_octet		  = PL_new_atom("octet");
   ATOM_utf8		  = PL_new_atom("utf8");
+  ATOM_require_crl	  = PL_new_atom("require_crl");
+  ATOM_crl	          = PL_new_atom("crl");
 
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
