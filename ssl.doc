@@ -62,11 +62,11 @@ plain protocol over (SSL) encrypted streams.
 
 Cryptography is a difficult topic. If you just want to download
 documents from an HTTPS server without worrying much about security,
-http_open/3 will do the job for you. As soon as you have higher security
-demands we strongly recomment you to read enough background material to
-understand what you are doing. See \secref{ssl-security} for some
-remarks regarding this implementation. This \url[The Linux Documentation
-Project
+http_open/3 will do the job for you. As soon as you have higher
+security demands we strongly recommend you to read enough background
+material to understand what you are doing. See \secref{ssl-security}
+for some remarks regarding this implementation. This \url[The Linux
+Documentation Project
 page]{http://www.tldp.org/HOWTO/SSL-Certificates-HOWTO/index.html}
 provides some additional background and tips for managing certificates
 and keys.
@@ -105,32 +105,98 @@ SSLeay_version() is available in the Prolog flag
 X = 'OpenSSL 1.0.1f 6 Jan 2014'.
 \end{code}
 
-Whether you are talking to the right address is a complicated issue. The
-core of the validation is that the server provides a
+Whether you are talking to the right address is a complicated
+issue. The core of the validation is that the server provides a
 \jargon{certificate} that identifies the server. This certificate is
 digitally \jargon{signed} by another certificate, and ultimately by a
-\jargon{root certificate}.  Verifying the peer implies:
+\jargon{root certificate}. (There may be additional links in this
+chain as well, or there may just be one certificate signed by itself)
+Verifying the peer implies:
 
 \begin{enumerate}
     \item Verifying the chain or digital signatures until a trusted
-    root certificate is found.
+    root certificate is found, taking care that the chain does not
+    contain any invalid certificates, such as certificates which have
+    expired, are not yet valid, have altered or forged signatures,
+    are valid for the purposes of SSL (and in the case of an issuer,
+    issuing child certificates)
     \item Verifying that the signer of a certificate did not \jargon{revoke}
     the signed certificate.
     \item Verifying that the host we connected to is indeed the host
     claimed in the certificate.
 \end{enumerate}
 
-The default https client plugin (\pllib{http/http_ssl_plugin}) registers
-the system trusted root certificate with OpenSSL. This is achieved using
-the option \term{cacert_file}{system(root_certificates)} of
-ssl_context/3. The verification is left to OpenSSL. To the best of our
-knowledge, the current (1.0) version of OpenSSL \textbf{only} implements
-step (1) of the verification process outlined above. This implies that
-an attacker that can control DNS mapping (host name to IP) or routing
-(IP to physical machine) can fake to be a secure host as long as they
-manage to obtain a certificate that is signed from a recognised
-authority.   The predicate ssl_peer_certificate/2 can be used to obtain
-the peer certificate and inspect its properties.
+The default https client plugin (\pllib{http/http_ssl_plugin})
+registers the system trusted root certificate with OpenSSL. This is
+achieved using the option
+\term{cacert_file}{system(root_certificates)} of ssl_context/3. The
+verification is left to OpenSSL. To the best of our knowledge, the
+current (1.0) version of OpenSSL \textbf{only} implements step (1) of
+the verification process outlined above. This implies that an attacker
+that can control DNS mapping (host name to IP) or routing (IP to
+physical machine) can fake to be a secure host as long as they manage
+to obtain a certificate that is signed from a recognised
+authority. Version 1.0.2 supports hostname checking, and will not
+validate a certificate chain if the leaf certificate does not match
+the hostname. 'Match' here is not a simple string comparison;
+certificates are allowed (subject to many rules) to have wildcards in
+their SubjectAltName field. Care must also be taken to ensure that the
+name we are checking against does not contain embedded NULLs. If
+SWI-Prolog is compiled against a version of OpenSSL that does NOT have
+hostname checking (ie 1.0.0 or earlier), it will attempt to do the
+validation itself. This is not guaranteed to be perfect, and it only
+supports a small subset of allowed wildcards. If security is
+important, use OpenSSL 1.0.2 or higher.
+
+After validation, the predicate ssl_peer_certificate/2 can be used to
+obtain the peer certificate and inspect its properties.
+
+\subsection{CRLs and Revocation}
+\label{sec:crl}
+Certificates must sometimes be revoked. Unfortunately this means that
+the elegant chain-of-trust model breaks down, since the information
+you need to determine whether a certificate is trustworthy no longer
+depends on just the certificate and whether the issuer is trustworthy,
+but now on a third piece of data - whether the certificate has been
+revoked. These are managed in two ways in OpenSSL: CRLs and
+OCSP. SWI-Prolog supports CRLs only. (Typically OCSP responders are
+configured in such a way as to just consult CRLs anyway. This gives
+the illusion of up-to-the-minute revocation information because OCSP
+is an interactive, online, real-time protocol. However the information
+provided can still be several \emph{weeks} out of date!)
+
+To do CRL checking, pass require_crl(true) as an option to the
+ssl_context/3 (or http_open/3) option list. If you do this, a
+certificate will not be validated unless it can be \emph{checked} for
+on a revocation list. There are two options for this:
+
+First, you can pass a list of filenames in as the option crl/1. If the
+CRL corresponds to an issuer in the chain, and the issued certificate
+is not on the CRL, then it is assumed to not be revoked. Note that
+this does NOT prove the certificate is actually trustworthy - the CRL
+you pass may be out of date! This is quite awkward to get right, since
+you do not necessarily know in advance what the chain of certificates
+the other party will present are, so you cannot reasonably be expected
+to know which CRLs to pass in.
+
+Secondly, you can handle the CRL checking in the cert_verify_hook when
+the Error is bound to unknown_crl. At this point you can obtain the
+issuer certificate (also given in the hook), find the CRL distribution
+point on it (the crl/1 argument), try downloading the CRL (the URL can
+have literally any protocol, most commonly HTTP and LDAP, but
+theoretically anything else, too, including the possibility that the
+certificate has no CRL distribution point given, and you are expected
+to obtain the CRL by email, fax, or telegraph. Therefore how to
+actually obtain a CRL is out of scope of this document), load it
+using load_crl/2, then check to see whether the certificate currently
+under scrutiny appears in the list of revocations. It is up to the
+application to determine what to do if the CRL cannot be obtained -
+either because the protocol to obtain it is not supported or because
+the place you are obtaining it from is not responding. Just because
+the CRL server is not responding does not mean that your certificate
+is safe, of course - it has been suggested that an ideal way to extend
+the life of a stolen certificate key would be to force a denial of
+service of the CRL server.
 
 
 \subsubsection{Disabling certificate checking}
@@ -139,16 +205,49 @@ the peer certificate and inspect its properties.
 In some cases clients are not really interested in host validation of
 the peer and whether or not the certificate can be trusted.  In these
 cases the client can pass \term{cert_verify_hook}{cert_accept_any},
-calling cert_accept_any/5 which accepts any certificate.
+calling cert_accept_any/5 which accepts any certificate. Note that
+this will accept literally ANY certificate presented - including ones
+which have expired, have been revoked, and have forged
+signatures. This is probably not a good idea!
 
 
 \subsubsection{Establishing a safe connection}
 \label{sec:ssl-safe-connection}
 
 Applications that exchange sensitive data with e.g., a backend server
-typically need to ensure they have a secure connection to their peer.
+typically need to ensure they have a secure connection to their
+peer. To do this, first obtain a non-secure connection to the peer (eg
+via a TCP socket connection). Then create an SSL context via
+ssl_context/3. For the client initiating the connection, the role is
+'client', and you should pass options host/1, port/1 and cacert_file/1
+at the very least. If you expect the peer to have a certificate which
+would be accepted by your host system, you can pass
+cacert_file(system(root_certificates)), otherwise you will need a copy
+of the CA certificate which was used to sign the peer's
+certificate. Alternatively, you can pass cert_verify_hook/1 to write
+your own custom validation for the peer's certificate. Depending on
+the requirements, you may also have to provide your /own/ certificate
+if the peer demands mutual authentication. This is done via the
+certificate_file/1, key_file/1 and either password/1 or
+pem_password_hook/1.
 
-TODO: How to deal with this?
+Once you have the SSL context and the non-secure stream, you can call
+ssl_negotiate/5 to obtain a secure stream. ssl_negotiate/5 will raise
+an exception if there were any certificate errors that could not be
+resolved.
+
+The peer behaves in a symmetric fashion: First, a non-secure
+connection is obtained, and a context is created using ssl_context/3
+with the role set to server. In the server case, you must provide
+certificate_file/1 and key_file/1, and then either password/1 or
+pem_password_hook/1. If you require the other party to present a
+certificate as well, then peer_cert(true) should be provided. If the
+peer does not present a certificate, or the certificate cannot be
+validated as trusted, the connection will be rejected.
+
+By default, revocation is not checked. To enable certificate
+revocation checking, pass require_crl(true) when creating the SSL
+context. See \secref{crl} for more information about revocations.
 
 
 \section{Example code}
@@ -262,7 +361,6 @@ running on a machine that is not directly connected to the internet
 visible. It is not needed to decrypt the traffic using port forwarding,
 but it is also not possible to realise \jargon{virtual hosts} or
 \jargon{path-based} proxy rules.
-
 
 \section{Acknowledgments}
 \label{sec:ssl-acknowledgments}
