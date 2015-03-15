@@ -1494,7 +1494,9 @@ int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE** instance)
 { BIO* rbio = NULL;
   BIO* wbio = NULL;
+#ifdef HAVE_X509_CHECK_HOST
   X509_VERIFY_PARAM *param = NULL;
+#endif
 
   if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
     return PL_resource_error("memory");
