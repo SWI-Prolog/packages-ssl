@@ -33,6 +33,7 @@
 :- use_module(library(debug)).
 :- use_module(library(option)).
 :- use_module(library(http/thread_httpd)).
+:- use_module(library(http/http_header)).
 
 /** <module> SSL plugin for HTTP libraries
 
@@ -49,7 +50,7 @@ SWI-Prolog installation directory.
 	thread_httpd:make_socket_hook/3,
 	thread_httpd:accept_hook/2,
 	thread_httpd:open_client_hook/5,
-        http:http_protocol_hook/7,
+        http:http_protocol_hook/5,
 	http:open_options/2.
 
 
@@ -67,13 +68,19 @@ SWI-Prolog installation directory.
 
 thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
 	memberchk(ssl(SSLOptions), Options0), !,
-	ssl_init(SSL, server,
-		 M:[ port(Port),
-		     close_parent(true)
-		   | SSLOptions
-		   ]),
+	ssl_context(server,
+                    SSL,
+                    M:[ port(Port),
+                        close_parent(true)
+                      | SSLOptions
+                      ]),
 	atom_concat('httpsd', Port, Queue),
+        tcp_socket(Socket),
+	tcp_setopt(Socket, reuseaddr),
+	tcp_bind(Socket, Port),
+	tcp_listen(Socket, 5),
 	Options = [ queue(Queue),
+                    tcp_socket(Socket),
 		    ssl_instance(SSL)
 		  | Options0
 		  ].
@@ -85,7 +92,8 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
 thread_httpd:accept_hook(Goal, Options) :-
 	memberchk(ssl_instance(SSL), Options), !,
 	memberchk(queue(Queue), Options),
-	ssl_accept(SSL, Client, Peer),
+        memberchk(tcp_socket(Socket), Options),
+        tcp_accept(Socket, Client, Peer),
 	debug(http(connection), 'New HTTPS connection from ~p', [Peer]),
 	http_enough_workers(Queue, accept, Peer),
 	thread_send_message(Queue, ssl_client(SSL, Client, Goal, Peer)).
@@ -93,24 +101,26 @@ thread_httpd:accept_hook(Goal, Options) :-
 thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 			      Goal, In, Out,
 			      [peer(Peer), protocol(https)]) :-
-	ssl_open(SSL, Client, In, Out).
+        tcp_open_socket(Client, Read, Write),
+        ssl_negotiate(SSL, Read, Write, In, Out).
+
 
 
 		 /*******************************
 		 *	   CLIENT HOOKS		*
 		 *******************************/
 
-%%	http:http_protocol_hook(+Scheme, +Parts, +PlainIn, +PlainOut,
-%%				-In, -Out, +Options) is semidet.
+%%	http:http_protocol_hook(+Scheme, +Parts, +PlainStreamPair,
+%%				-StreamPair, +Options) is semidet.
 %
 %	Hook for http_open/3 to connect  to   an  HTTPS (SSL-based HTTP)
 %	server.   This   plugin   also   passes   the   default   option
 %	`cacert_file(system(root_certificates))` to ssl_context/3.
 
-http:http_protocol_hook(https, Parts, PlainIn, PlainOut, In, Out, Options):-
-	ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options).
+http:http_protocol_hook(https, Parts, PlainStreamPair, StreamPair, Options):-
+	ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options).
 
-ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options) :-
+ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
         memberchk(host(Host), Parts),
         option(port(Port), Parts, 443),
 	ssl_context(client, SSL, [ host(Host),
@@ -118,9 +128,11 @@ ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options) :-
                                    close_parent(true)
 				 | Options
 				 ]),
+        stream_pair(PlainStreamPair, PlainIn, PlainOut),
         catch(ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
               Exception,
-              ( ssl_exit(SSL), throw(Exception)) ).
+              ( ssl_exit(SSL), throw(Exception)) ),
+        stream_pair(StreamPair, In, Out).
 
 %%	http:open_options(Parts, Options) is nondet.
 %
@@ -131,4 +143,29 @@ ssl_protocol_hook(Parts, PlainIn, PlainOut, In, Out, Options) :-
 http:open_options(Parts, Options) :-
 	memberchk(scheme(https), Parts),
 	Options = [cacert_file(system(root_certificates))].
+
+
+:-multifile(http:http_connection_over_proxy/6).
+http:http_connection_over_proxy(proxy(ProxyHost, ProxyPort), Parts, Host:Port, StreamPair, Options, Options):-
+        memberchk(scheme(https), Parts),
+        !,
+        % Connection is via an HTTP proxy for SSL: Use HTTP CONNECT
+        % Note that most proxies will only support this for connecting on port 443
+        tcp_connect(ProxyHost:ProxyPort, StreamPair, [bypass_proxy(true)]),
+        catch(negotiate_http_connect(StreamPair, Host:Port),
+              Error,
+              ( close(StreamPair, [force(true)]),
+                throw(Error)
+              )).
+
+negotiate_http_connect(StreamPair, Address):-
+        format(StreamPair, 'CONNECT ~w HTTP/1.1\r\n\r\n', [Address]),
+        flush_output(StreamPair),
+        http_read_reply_header(StreamPair, Header),
+        memberchk(status(_, Status, Message), Header),
+        ( Status == ok ->
+            true
+        ; throw(error(proxy_rejection(Message), _))
+        ).
+
 
