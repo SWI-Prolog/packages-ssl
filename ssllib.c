@@ -77,7 +77,7 @@ typedef enum
 #define DEBUG 1
 #endif
 
-void free_X509_crl_list(X509_crl_list *list);
+static void free_X509_crl_list(X509_crl_list *list);
 static X509_list *system_root_store = NULL;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -1069,6 +1069,16 @@ list_add_X509_crl(X509_CRL *crl, X509_crl_list **head, X509_crl_list **tail)
   return FALSE;
 }
 
+static void
+free_X509_crl_list(X509_crl_list *list)
+{ X509_crl_list *next;
+
+  for(; list; list=next)
+  { next = list->next;
+    X509_CRL_free(list->crl);
+    free(list);
+  }
+}
 
 static X509_list *
 ssl_system_verify_locations(void)
