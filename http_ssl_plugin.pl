@@ -30,6 +30,7 @@
 
 :- module(http_ssl_plugin, []).
 :- use_module(library(ssl)).
+:- use_module(library(socket)).
 :- use_module(library(debug)).
 :- use_module(library(option)).
 :- use_module(library(http/thread_httpd)).
@@ -51,7 +52,8 @@ SWI-Prolog installation directory.
 	thread_httpd:accept_hook/2,
 	thread_httpd:open_client_hook/5,
         http:http_protocol_hook/5,
-	http:open_options/2.
+	http:open_options/2,
+	http:http_connection_over_proxy/6.
 
 
 		 /*******************************
@@ -144,13 +146,16 @@ http:open_options(Parts, Options) :-
 	memberchk(scheme(https), Parts),
 	Options = [cacert_file(system(root_certificates))].
 
+%%	http:http_connection_over_proxy(+Proxy, +Parts, +HostPort, -StreamPair,
+%%					+OptionsIn, -OptionsOut)
+%
+%	Facilitate an HTTPS connection via a   proxy using HTTP CONNECT.
+%	Note that most proxies will only  support this for connecting on
+%	port 443
 
-:-multifile(http:http_connection_over_proxy/6).
-http:http_connection_over_proxy(proxy(ProxyHost, ProxyPort), Parts, Host:Port, StreamPair, Options, Options):-
-        memberchk(scheme(https), Parts),
-        !,
-        % Connection is via an HTTP proxy for SSL: Use HTTP CONNECT
-        % Note that most proxies will only support this for connecting on port 443
+http:http_connection_over_proxy(proxy(ProxyHost, ProxyPort), Parts,
+				Host:Port, StreamPair, Options, Options) :-
+        memberchk(scheme(https), Parts), !,
         tcp_connect(ProxyHost:ProxyPort, StreamPair, [bypass_proxy(true)]),
         catch(negotiate_http_connect(StreamPair, Host:Port),
               Error,
@@ -163,9 +168,9 @@ negotiate_http_connect(StreamPair, Address):-
         flush_output(StreamPair),
         http_read_reply_header(StreamPair, Header),
         memberchk(status(_, Status, Message), Header),
-        ( Status == ok ->
-            true
-        ; throw(error(proxy_rejection(Message), _))
+        (   Status == ok
+	->  true
+        ;   throw(error(proxy_rejection(Message), _))
         ).
 
 
