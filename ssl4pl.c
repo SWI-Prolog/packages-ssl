@@ -156,8 +156,8 @@ get_predicate_arg(int a, module_t m, term_t t, int arity, predicate_t *pred)
   atom_t name;
 
   _PL_get_arg(a, t, t2);
-  PL_strip_module(t2, &m, t2);
-  if ( !PL_get_atom_ex(t2, &name) )
+  if ( !PL_strip_module(t2, &m, t2) ||
+       !PL_get_atom_ex(t2, &name) )
     return FALSE;
 
   *pred = PL_pred(PL_new_functor(name, arity), m);
@@ -1112,7 +1112,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   atom_t method_name;
   const SSL_METHOD *ssl_method = NULL;
 
-  PL_strip_module(options, &module, options);
+  if ( !PL_strip_module(options, &module, options) )
+    return FALSE;
   tail = PL_copy_term_ref(options);
 
   if ( !PL_get_atom_ex(role, &a) )
