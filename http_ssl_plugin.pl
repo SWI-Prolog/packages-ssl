@@ -70,10 +70,7 @@ SWI-Prolog installation directory.
 
 thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
 	memberchk(ssl(SSLOptions), Options0), !,
-        tcp_socket(Socket),
-	tcp_setopt(Socket, reuseaddr),
-	tcp_bind(Socket, Port),
-	tcp_listen(Socket, 5),
+	make_socket(Port, Socket, Options0),
 	ssl_context(server,
                     SSL,
                     M:[ port(Port),
@@ -86,6 +83,15 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
 		    ssl_instance(SSL)
 		  | Options0
 		  ].
+
+make_socket(_Port, Socket, Options) :-
+	option(tcp_socket(Socket), Options), !.
+make_socket(Port, Socket, _Options) :-
+	tcp_socket(Socket),
+	tcp_setopt(Socket, reuseaddr),
+	tcp_bind(Socket, Port),
+	tcp_listen(Socket, 5).
+
 
 %%	thread_httpd:accept_hook(:Goal, +Options) is semidet.
 %
