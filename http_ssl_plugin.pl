@@ -110,8 +110,14 @@ thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 			      Goal, In, Out,
 			      [peer(Peer), protocol(https)]) :-
         tcp_open_socket(Client, Read, Write),
-        ssl_negotiate(SSL, Read, Write, In, Out).
+	catch(ssl_negotiate(SSL, Read, Write, In, Out),
+	      E,
+	      ssl_failed(Read, Write, E)).
 
+ssl_failed(Read, Write, E) :-
+	close(Write, [force(true)]),
+	close(Read,  [force(true)]),
+	throw(E).
 
 
 		 /*******************************
