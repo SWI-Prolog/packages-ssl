@@ -20,7 +20,7 @@ case "$PLARCH" in
 	;;
 esac
 
-AC_CHECK_HEADERS(unistd.h fcntl.h)
+AC_CHECK_HEADERS(unistd.h fcntl.h Security/Security.h)
 
 AC_CHECK_LIB(crypto, main)
 AC_CHECK_LIB(ssl, SSL_library_init)

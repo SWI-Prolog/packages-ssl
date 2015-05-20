@@ -39,7 +39,7 @@
 #include <windows.h>
 #include <wincrypt.h>
 #endif
-#ifdef __APPLE__
+#ifdef HAVE_SECURITY_SECURITY_H /*__APPLE__*/
 #include <Security/Security.h>
 #endif
 #define perror(x) Sdprintf("%s: %s\n", x, strerror(errno));
@@ -80,6 +80,7 @@ typedef enum
 
 static void free_X509_crl_list(X509_crl_list *list);
 static X509_list *system_root_store = NULL;
+static int system_root_store_fetched = FALSE;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
@@ -1106,7 +1107,7 @@ ssl_system_verify_locations(void)
 
     CertCloseStore(hSystemStore, 0);
   }
-#elif defined(__APPLE__)
+#elif defined(HAVE_SECURITY_SECURITY_H)	/* __APPLE__ */
   SecKeychainRef keychain = NULL;
   OSStatus status;
   status = SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &keychain);
@@ -1180,8 +1181,9 @@ ssl_system_verify_locations(void)
 X509_list *
 system_root_certificates(void)
 { pthread_mutex_lock(&root_store_lock);
-  if ( !system_root_store )
-  { system_root_store = ssl_system_verify_locations();
+  if ( !system_root_store_fetched )
+  { system_root_store_fetched = TRUE;
+    system_root_store = ssl_system_verify_locations();
   }
   pthread_mutex_unlock(&root_store_lock);
 
