@@ -313,9 +313,11 @@ ssl_context(Role, SSL, Module:Options) :-
 %	    - On Windows, CertOpenSystemStore() is used to import
 %	      the `"ROOT"` certificates from the OS.
 %	    - On MacOSX, the trusted keys are loaded from the
-%	      _SystemRootCertificates_ key chain.
+%	      _SystemRootCertificates_ key chain.  The Apple API
+%	      for this requires the SSL interface to be compiled
+%	      with an XCode compiler, i.e., *not* with native gcc.
 %	    - Otherwise, certificates are loaded from the file
-%	      =/etc/ssl/certs/ca-certificates.crt=.  This
+%	      =|/etc/ssl/certs/ca-certificates.crt|=.  This
 %	      location is the default on Linux.
 
 %%      load_private_key(+Stream, +Password, -PrivateKey) is det.
