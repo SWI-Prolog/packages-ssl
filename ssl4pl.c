@@ -1810,7 +1810,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
 
 install_t
-install_ssl4pl()
+install_ssl4pl(void)
 { ATOM_server             = PL_new_atom("server");
   ATOM_client             = PL_new_atom("client");
   ATOM_password           = PL_new_atom("password");
@@ -1895,9 +1895,11 @@ install_ssl4pl()
 
   PL_set_prolog_flag("ssl_library_version", PL_ATOM,
 		     SSLeay_version(SSLEAY_VERSION));
+  PL_set_prolog_flag("system_cacert_filename", PL_ATOM,
+		     SYSTEM_CACERT_FILENAME);
 }
 
 install_t
-uninstall_ssl4pl()
+uninstall_ssl4pl(void)
 { ssl_lib_exit();
 }

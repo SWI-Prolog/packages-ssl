@@ -316,9 +316,17 @@ ssl_context(Role, SSL, Module:Options) :-
 %	      _SystemRootCertificates_ key chain.  The Apple API
 %	      for this requires the SSL interface to be compiled
 %	      with an XCode compiler, i.e., *not* with native gcc.
-%	    - Otherwise, certificates are loaded from the file
-%	      =|/etc/ssl/certs/ca-certificates.crt|=.  This
-%	      location is the default on Linux.
+%	    - Otherwise, certificates are loaded from a file defined
+%	      by the Prolog flag `system_cacert_filename`.  The initial
+%	      value of this flag is operating system dependent.  For
+%	      security reasons, the flag can only be set prior to using
+%	      the SSL library.  For example:
+%
+%	        ==
+%	        :- use_module(library(ssl)).
+%	        :- set_prolog_flag(system_cacert_filename,
+%				   '/home/jan/ssl/ca-bundle.crt').
+%	        ==
 
 %%      load_private_key(+Stream, +Password, -PrivateKey) is det.
 %

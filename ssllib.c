@@ -1084,10 +1084,48 @@ free_X509_crl_list(X509_crl_list *list)
   }
 }
 
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Extract   the   system   certificate   file   from   the   Prolog   flag
+system_cacert_filename
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+static const char *
+system_cacert_filename(void)
+{ fid_t fid;
+  static char *cacert_filename = NULL;
+
+  if ( !cacert_filename )
+  { if ( (fid = PL_open_foreign_frame()) )
+    { term_t av = PL_new_term_refs(2);
+      PL_put_atom_chars(av+0, "system_cacert_filename");
+
+      if ( PL_call_predicate(NULL, PL_Q_NORMAL,
+			     PL_predicate("current_prolog_flag", 2, "system"),
+			     av) )
+      { char *s;
+
+	if ( PL_get_atom_chars(av+1, &s) )
+	{ char *old = cacert_filename;
+	  cacert_filename = strdup(s);
+	  free(old);
+	}
+      }
+
+      PL_close_foreign_frame(fid);
+    }
+  }
+
+  return cacert_filename;
+}
+
+
+
 static X509_list *
 ssl_system_verify_locations(void)
 { X509_list *head=NULL, *tail=NULL;
   int ok = TRUE;
+  const	char *cacert_filename;
 
 #ifdef __WINDOWS__
   HCERTSTORE hSystemStore;
@@ -1156,19 +1194,22 @@ ssl_system_verify_locations(void)
     CFRelease(keychain);
   }
 #else
-#ifdef SYSTEM_CACERT_FILENAME
-  X509 *cert = NULL;
-  FILE *cafile = fopen(SYSTEM_CACERT_FILENAME, "rb");
-  if (cafile != NULL)
-  { while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
-    { if ( !list_add_X509(cert, &head, &tail) )
-      { ok = FALSE;
-	break;
+  if ( (cacert_filename = system_cacert_filename()) )
+  { X509 *cert = NULL;
+    FILE *cafile = fopen(cacert_filename, "rb");
+
+    ssl_deb(1, "cacert_filename = %s\n", cacert_filename);
+
+    if ( cafile != NULL )
+    { while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
+      { if ( !list_add_X509(cert, &head, &tail) )
+	{ ok = FALSE;
+	  break;
+	}
       }
+      fclose(cafile);
     }
-    fclose(cafile);
   }
-#endif
 #endif
 
   if ( ok )
