@@ -39,8 +39,10 @@
 #include <windows.h>
 #include <wincrypt.h>
 #endif
-#ifdef HAVE_SECURITY_SECURITY_H /*__APPLE__*/
+#if defined(HAVE_SECURITY_SECURITY_H) && defined(HAVE_KSECCLASS) /*__APPLE__*/
 #include <Security/Security.h>
+#else
+#undef HAVE_SECURITY_SECURITY_H
 #endif
 #define perror(x) Sdprintf("%s: %s\n", x, strerror(errno));
 

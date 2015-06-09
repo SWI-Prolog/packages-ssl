@@ -21,6 +21,16 @@ case "$PLARCH" in
 esac
 
 AC_CHECK_HEADERS(unistd.h fcntl.h Security/Security.h)
+AC_MSG_CHECKING(kSecClass)
+AC_TRY_COMPILE(
+[ #include <sys/types.h>
+  #include <Security/Security.h>
+],
+[ const void *key = kSecClass;
+], AC_DEFINE(HAVE_KSECCLASS, 1,
+	     [Define if Security/Security.h supplies kSecClass])
+   AC_MSG_RESULT(yes),
+   AC_MSG_RESULT(no))
 
 AC_CHECK_LIB(crypto, main)
 AC_CHECK_LIB(ssl, SSL_library_init)
