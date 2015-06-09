@@ -26,7 +26,9 @@
 #include "../clib/nonblockio.h"
 
 #define SSL_CONFIG_MAGIC 0x539dbe3a
+#ifndef SYSTEM_CACERT_FILENAME
 #define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
+#endif
 
 typedef int BOOL;
 #ifndef TRUE

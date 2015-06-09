@@ -69,6 +69,22 @@ AC_CHECK_FUNCS(CRYPTO_THREADID_get_callback CRYPTO_THREADID_set_callback)
 
 AC_CHECK_TYPES(CRYPTO_THREADID)
 
+AC_MSG_CHECKING(system certificate file)
+SYSTEM_CACERT_FILENAME=/etc/ssl/certs/ca-certificates.crt
+cert_candidates="/etc/ssl/certs/ca-certificates.crt"
+cert_candidates+=" /etc/pki/tls/certs/ca-bundle.crt"
+cert_candidates+=" /etc/ssl/ca-bundle.pem"
+
+for f in $cert_candidates; do
+  if test -f $f; then
+    SYSTEM_CACERT_FILENAME=$f
+    break
+  fi
+done
+AC_DEFINE_UNQUOTED(SYSTEM_CACERT_FILENAME, "$SYSTEM_CACERT_FILENAME",
+		   [Location of the system certificate file])
+AC_MSG_RESULT($SYSTEM_CACERT_FILENAME)
+
 PLTARGETS=`echo $TARGETS | sed "s/4pl\.$SO/.pl/g"`
 
 AC_OUTPUT(Makefile)
