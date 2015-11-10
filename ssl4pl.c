@@ -84,7 +84,9 @@ static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
 static functor_t FUNCTOR_revoked2;
+#ifndef OPENSSL_NO_SSL2
 static functor_t FUNCTOR_session_key1;
+#endif
 static functor_t FUNCTOR_master_key1;
 static functor_t FUNCTOR_session_id1;
 static functor_t FUNCTOR_client_random1;
@@ -1736,9 +1738,11 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 		      PL_INTEGER, (int)session->ssl_version))
     return FALSE;
 
+#ifndef OPENSSL_NO_SSL2
   if ( !add_key_string(list_t, FUNCTOR_session_key1,
 		       session->key_arg_length, session->key_arg) )
     return FALSE;
+#endif
 
   if ( !add_key_string(list_t, FUNCTOR_master_key1,
 		       session->master_key_length, session->master_key) )
@@ -1860,7 +1864,9 @@ install_ssl4pl(void)
   FUNCTOR_crl1            = PL_new_functor(PL_new_atom("crl"), 1);
   FUNCTOR_revoked2        = PL_new_functor(PL_new_atom("revoked"), 2);
   FUNCTOR_revocations1    = PL_new_functor(PL_new_atom("revocations"), 1);
+#ifndef OPENSSL_NO_SSL2
   FUNCTOR_session_key1    = PL_new_functor(PL_new_atom("session_key"), 1);
+#endif
   FUNCTOR_master_key1     = PL_new_functor(PL_new_atom("master_key"), 1);
   FUNCTOR_session_id1     = PL_new_functor(PL_new_atom("session_id"), 1);
   FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
