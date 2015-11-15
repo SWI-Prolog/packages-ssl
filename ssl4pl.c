@@ -22,6 +22,7 @@
 */
 
 
+#include <config.h>
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
 #include <assert.h>
@@ -1156,7 +1157,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
     return PL_resource_error("memory");
   while( PL_get_list(tail, head, tail) )
   { atom_t name;
-    int arity;
+    size_t arity;
 
     if ( !PL_get_name_arity(head, &name, &arity) )
       return PL_type_error("ssl_option", head);
