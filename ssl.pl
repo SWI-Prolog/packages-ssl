@@ -142,8 +142,9 @@ easily be used.
 %	  * pem_password_hook(:PredicateName)
 %	  In case a password is required to access the private key the
 %	  supplied predicate will be called to fetch it. The predicate
-%	  is called as call(PredicateName, Password) and typically
-%	  unifies `Password` with a _string_ containing the password.
+%	  is called as call(+PredicateName, +SSL, -Password) and
+%	  typically unifies `Password` with a _string_ containing the
+%	  password.
 %	  * require_crl(+Boolean)
 %         If true (default is false), then all certificates will be
 %         considered invalid unless they can be verified as not being
