@@ -1048,9 +1048,11 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
   if ( PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) )
   { if ( PL_get_nchars(av+1, &len, &passwd, CVT_ALL) )
     { if ( len >= (unsigned int)size )
-	PL_warning("pem_passwd too long");
-      else
-	memcpy(buf, passwd, len);
+      { PL_warning("pem_passwd too long");
+      } else
+      { memcpy(buf, passwd, len);
+	passwd = buf;
+      }
     } else
       PL_warning("pem_passwd_hook returned wrong type");
   }
