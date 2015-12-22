@@ -514,7 +514,7 @@ ssl_exit(SSL) :-
 %	  ==
 
 cert_accept_any(_SSL,
-		_ProblemCertificate, _AllCertificates, _FirstCertificate,
+		_ProblemCertificate, _VerifiedCertificates, _TestCertificate,
 		_Error).
 
 
