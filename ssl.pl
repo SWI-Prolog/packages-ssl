@@ -33,7 +33,7 @@
             load_private_key/3,         % +Stream, +Password, -Key
             load_public_key/2,          % +Stream, -Key
             load_crl/2,                 % +Stream, -Crl
-	    system_root_certificates/1, % -List
+	    system_test1_certificates/1, % -List
 	    cert_accept_any/5,		% +SSL, +ProblemCertificate,
 					% +AllCertificates, +FirstCertificate,
 					% +Error
