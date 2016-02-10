@@ -78,6 +78,7 @@
 		       certificate_file(atom),
 		       key_file(atom),
 		       password(any),
+		       cipher_list(any),
 		       pem_password_hook(callable),
 		       cacert_file(any),
                        crl(any),
@@ -191,6 +192,9 @@ easily be used.
 %	  predicate succeeds. See load_certificate/2 for a description
 %	  of the certificate terms. See cert_accept_any/5 for a dummy
 %	  implementation that accepts any certificate.
+%	  * cipher_list(+Atom)
+%	  Specify a cipher preference list (one or more cipher strings
+%	  separated by colons, commas or spaces).
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate specified by
 %	  certificate_file(FileName).  Sending is automatic for the
