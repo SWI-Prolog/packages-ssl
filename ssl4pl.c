@@ -60,6 +60,7 @@ static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
 static atom_t ATOM_disable_ssl_methods;
+static atom_t ATOM_cipher_list;
 static atom_t ATOM_root_certificates;
 
 static atom_t ATOM_sslv2;
@@ -1182,6 +1183,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_password(conf, s);
+    } else if ( name == ATOM_cipher_list && arity == 1 )
+    { char *s;
+
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
+
+      ssl_set_cipher_list(conf, s);
     } else if ( name == ATOM_host && arity == 1 )
     { char *s;
 
@@ -1426,6 +1434,7 @@ pl_ssl_get_socket(term_t config, term_t data)
     return FALSE;
   return PL_unify_integer(data, conf->sock);
 }
+
 
 /**
  * FIXME: if anything goes wrong, the instance is not reclaimed.
@@ -1843,6 +1852,7 @@ install_ssl4pl(void)
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
   ATOM_disable_ssl_methods= PL_new_atom("disable_ssl_methods");
+  ATOM_cipher_list	  = PL_new_atom("cipher_list");
   ATOM_root_certificates  = PL_new_atom("root_certificates");
   ATOM_sslv2              = PL_new_atom("sslv2");
   ATOM_sslv23             = PL_new_atom("sslv23");
