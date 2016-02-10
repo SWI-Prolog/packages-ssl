@@ -206,7 +206,7 @@ easily be used.
 %	  Default is `false`.
 %	  * disable_ssl_methods(+List)
 %	  A list of methods to disable. Unsupported methods will be
-%	  ignored. Methods include `sslv2`, `sslv2`, `sslv23`,
+%	  ignored. Methods include `sslv2`, `sslv3`, `sslv23`,
 %	  `tlsv1`, `tlsv1_1` and `tlsv1_2`.
 %	  * ssl_method(+Method)
 %	  Specify the explicit Method to use when negotiating. For
