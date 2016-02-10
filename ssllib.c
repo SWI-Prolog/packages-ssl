@@ -335,6 +335,7 @@ ssl_new(void)
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
         new->pl_ssl_keyf                = NULL;
+        new->pl_ssl_cipher_list         = NULL;
         new->pl_ssl_crl_list            = NULL;
         new->pl_ssl_peer_cert_required  = FALSE;
         new->pl_ssl_crl_required        = FALSE;
@@ -501,6 +502,15 @@ ssl_set_crl_list(PL_SSL *config, X509_crl_list *crl)
     return config->pl_ssl_crl_list;
 }
 
+char *
+ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
+{
+    if (cipher_list) {
+        if (config->pl_ssl_cipher_list) free(config->pl_ssl_cipher_list);
+        config->pl_ssl_cipher_list = ssl_strdup(cipher_list);
+    }
+    return config->pl_ssl_cipher_list;
+}
 
 char *
 ssl_set_password(PL_SSL *config, const char *password)
@@ -1319,6 +1329,10 @@ ssl_config(PL_SSL *config, term_t options)
       return raise_ssl_error(ERR_get_error());
     }
     ssl_deb(1, "certificate installed successfully\n");
+
+    if (config->pl_ssl_cipher_list &&
+        !SSL_CTX_set_cipher_list(config->pl_ssl_ctx, config->pl_ssl_cipher_list))
+      return raise_ssl_error(ERR_get_error());
   }
 
   (void) SSL_CTX_set_verify(config->pl_ssl_ctx,
