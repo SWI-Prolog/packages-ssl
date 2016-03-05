@@ -1145,7 +1145,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
      return PL_domain_error("ssl_method", method);
   if (method_name == ATOM_sslv3)
     ssl_method = SSLv3_method();
-#ifdef HAVE_SSLV2_METHOD
+#ifndef OPENSSL_NO_SSL2
   else if (method_name == ATOM_sslv2)
     ssl_method = SSLv2_method();
 #endif

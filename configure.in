@@ -63,7 +63,7 @@ AC_TRY_COMPILE(
    AC_MSG_RESULT(yes),
    AC_MSG_RESULT(no))
 
-AC_CHECK_FUNCS(timegm SSLv2_method ERR_remove_state ERR_remove_thread_state)
+AC_CHECK_FUNCS(timegm ERR_remove_state ERR_remove_thread_state)
 AC_CHECK_FUNCS(X509_check_host)
 AC_CHECK_FUNCS(CRYPTO_THREADID_get_callback CRYPTO_THREADID_set_callback)
 
