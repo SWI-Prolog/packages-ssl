@@ -336,6 +336,7 @@ ssl_new(void)
         new->pl_ssl_certf               = NULL;
         new->pl_ssl_keyf                = NULL;
         new->pl_ssl_cipher_list         = NULL;
+        new->pl_ssl_ecdh_curve          = NULL;
         new->pl_ssl_crl_list            = NULL;
         new->pl_ssl_peer_cert_required  = FALSE;
         new->pl_ssl_crl_required        = FALSE;
@@ -510,6 +511,16 @@ ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
         config->pl_ssl_cipher_list = ssl_strdup(cipher_list);
     }
     return config->pl_ssl_cipher_list;
+}
+
+char *
+ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve)
+{
+    if (ecdh_curve) {
+	if (config->pl_ssl_ecdh_curve) free(config->pl_ssl_ecdh_curve);
+	config->pl_ssl_ecdh_curve = ssl_strdup(ecdh_curve);
+    }
+    return config->pl_ssl_ecdh_curve;
 }
 
 char *
@@ -1329,11 +1340,21 @@ ssl_config(PL_SSL *config, term_t options)
       return raise_ssl_error(ERR_get_error());
     }
     ssl_deb(1, "certificate installed successfully\n");
+  }
 
-    if (config->pl_ssl_cipher_list &&
-        !SSL_CTX_set_cipher_list(config->pl_ssl_ctx, config->pl_ssl_cipher_list))
+  {
+    EC_KEY *ecdh;
+    int nid = OBJ_sn2nid(config->pl_ssl_ecdh_curve
+			 ? config->pl_ssl_ecdh_curve : "prime256v1");
+    ecdh = EC_KEY_new_by_curve_name(nid);
+    if (ecdh == NULL) return raise_ssl_error(ERR_get_error());
+    if (!SSL_CTX_set_tmp_ecdh(config->pl_ssl_ctx, ecdh))
       return raise_ssl_error(ERR_get_error());
   }
+
+  if (config->pl_ssl_cipher_list &&
+      !SSL_CTX_set_cipher_list(config->pl_ssl_ctx, config->pl_ssl_cipher_list))
+    return raise_ssl_error(ERR_get_error());
 
   (void) SSL_CTX_set_verify(config->pl_ssl_ctx,
 			    config->pl_ssl_peer_cert_required ?

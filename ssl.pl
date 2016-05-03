@@ -79,6 +79,7 @@
 		       key_file(atom),
 		       password(any),
 		       cipher_list(any),
+		       ecdh_curve(any),
 		       pem_password_hook(callable),
 		       cacert_file(any),
                        crl(any),
@@ -195,6 +196,8 @@ easily be used.
 %	  * cipher_list(+Atom)
 %	  Specify a cipher preference list (one or more cipher strings
 %	  separated by colons, commas or spaces).
+%	  * ecdh_curve(+Atom)
+%	  Specify a curve for ECDHE ciphers. The default is `prime256v1`.
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate specified by
 %	  certificate_file(FileName).  Sending is automatic for the
