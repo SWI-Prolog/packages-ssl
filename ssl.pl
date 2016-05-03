@@ -3,7 +3,7 @@
     Author:        Jan van der Steen, Matt Lilley and Jan Wielemaker,
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2015, SWI-Prolog Foundation
+    Copyright (c)  2004-2016, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -79,6 +79,7 @@
 		       key_file(atom),
 		       password(any),
 		       cipher_list(any),
+		       ecdh_curve(any),
 		       pem_password_hook(callable),
 		       cacert_file(any),
                        crl(any),
@@ -195,6 +196,8 @@ easily be used.
 %	  * cipher_list(+Atom)
 %	  Specify a cipher preference list (one or more cipher strings
 %	  separated by colons, commas or spaces).
+%	  * ecdh_curve(+Atom)
+%	  Specify a curve for ECDHE ciphers. The default is `prime256v1`.
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate specified by
 %	  certificate_file(FileName).  Sending is automatic for the
