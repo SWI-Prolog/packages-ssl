@@ -78,6 +78,8 @@
 		       certificate_file(atom),
 		       key_file(atom),
 		       password(any),
+		       cipher_list(any),
+		       ecdh_curve(any),
 		       pem_password_hook(callable),
 		       cacert_file(any),
                        crl(any),
@@ -191,6 +193,11 @@ easily be used.
 %	  predicate succeeds. See load_certificate/2 for a description
 %	  of the certificate terms. See cert_accept_any/5 for a dummy
 %	  implementation that accepts any certificate.
+%	  * cipher_list(+Atom)
+%	  Specify a cipher preference list (one or more cipher strings
+%	  separated by colons, commas or spaces).
+%	  * ecdh_curve(+Atom)
+%	  Specify a curve for ECDHE ciphers. The default is `prime256v1`.
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate specified by
 %	  certificate_file(FileName).  Sending is automatic for the
@@ -206,7 +213,7 @@ easily be used.
 %	  Default is `false`.
 %	  * disable_ssl_methods(+List)
 %	  A list of methods to disable. Unsupported methods will be
-%	  ignored. Methods include `sslv2`, `sslv2`, `sslv23`,
+%	  ignored. Methods include `sslv2`, `sslv3`, `sslv23`,
 %	  `tlsv1`, `tlsv1_1` and `tlsv1_2`.
 %	  * ssl_method(+Method)
 %	  Specify the explicit Method to use when negotiating. For
