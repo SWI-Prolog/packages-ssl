@@ -1160,7 +1160,6 @@ static X509_list *
 ssl_system_verify_locations(void)
 { X509_list *head=NULL, *tail=NULL;
   int ok = TRUE;
-  const	char *cacert_filename;
 
 #ifdef __WINDOWS__
   HCERTSTORE hSystemStore;
@@ -1229,6 +1228,7 @@ ssl_system_verify_locations(void)
     CFRelease(keychain);
   }
 #else
+{ const	char *cacert_filename;
   if ( (cacert_filename = system_cacert_filename()) )
   { X509 *cert = NULL;
     FILE *cafile = fopen(cacert_filename, "rb");
@@ -1245,6 +1245,7 @@ ssl_system_verify_locations(void)
       fclose(cafile);
     }
   }
+}
 #endif
 
   if ( ok )
