@@ -1624,7 +1624,8 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   }
 
   if ( config->pl_ssl_role == PL_SSL_CLIENT )
-  {
+  { if ( config->pl_ssl_host )
+      SSL_set_tlsext_host_name(instance->ssl, config->pl_ssl_host);
 #ifdef HAVE_X509_CHECK_HOST
     X509_VERIFY_PARAM *param = SSL_get0_param((*instance)->ssl);
     /* This could in theory be user-configurable. The documentation at
