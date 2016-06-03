@@ -1594,17 +1594,17 @@ BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
 
 
 /*
- * Establish an SSL session using the given read and write streams and the role
+ * Establish an SSL session using the given read and write streams
+ * and the role
  */
 int
-ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE** instance)
+ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
+	    PL_SSL_INSTANCE** instancep)
 { BIO* rbio = NULL;
   BIO* wbio = NULL;
-#ifdef HAVE_X509_CHECK_HOST
-  X509_VERIFY_PARAM *param = NULL;
-#endif
+  PL_SSL_INSTANCE *instance;
 
-  if ((*instance = ssl_instance_new(config, sread, swrite)) == NULL)
+  if ( !(instance=ssl_instance_new(config, sread, swrite)) )
     return PL_resource_error("memory");
 
   rbio = BIO_new(&bio_read_functions);
@@ -1613,33 +1613,37 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
   BIO_set_ex_data(wbio, 0, swrite);
 
   if ( config->pl_ssl_crl_required )
-  { X509_STORE_set_flags(SSL_CTX_get_cert_store(config->pl_ssl_ctx), X509_V_FLAG_CRL_CHECK|X509_V_FLAG_CRL_CHECK_ALL);
+  { X509_STORE_set_flags(SSL_CTX_get_cert_store(config->pl_ssl_ctx),
+			 X509_V_FLAG_CRL_CHECK|X509_V_FLAG_CRL_CHECK_ALL);
   }
 
 
-  if (((*instance)->ssl = SSL_new(config->pl_ssl_ctx)) == NULL)
-  { free(*instance);
+  if ( !(instance->ssl = SSL_new(config->pl_ssl_ctx)) )
+  { free(instance);
     return raise_ssl_error(ERR_get_error());
   }
 
-#ifdef HAVE_X509_CHECK_HOST
   if ( config->pl_ssl_role == PL_SSL_CLIENT )
-  { param = SSL_get0_param((*instance)->ssl);
+  {
+#ifdef HAVE_X509_CHECK_HOST
+    X509_VERIFY_PARAM *param = SSL_get0_param((*instance)->ssl);
     /* This could in theory be user-configurable. The documentation at
        https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
        says that the flag is 'usually 0', however
     */
-    /* X509_VERIFY_PARAM_set_hostflags(param, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS); */
+ /* X509_VERIFY_PARAM_set_hostflags(param,
+				    X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+ */
     X509_VERIFY_PARAM_set_hostflags(param, 0);
     X509_VERIFY_PARAM_set1_host(param, config->pl_ssl_host, 0);
-  }
 #endif
+  }
 
-  SSL_set_session_id_context((*instance)->ssl, (unsigned char*)"SWI-Prolog", 10);
+  SSL_set_session_id_context(instance->ssl, (unsigned char*)"SWI-Prolog", 10);
   ssl_deb(1, "allocated ssl layer\n");
 
-  SSL_set_ex_data((*instance)->ssl, ssl_idx, config);
-  SSL_set_bio((*instance)->ssl, rbio, wbio); /* No return value */
+  SSL_set_ex_data(instance->ssl, ssl_idx, config);
+  SSL_set_bio(instance->ssl, rbio, wbio); /* No return value */
   ssl_deb(1, "allocated ssl fd\n");
 
   for(;;)
@@ -1648,20 +1652,21 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite, PL_SSL_INSTANCE**
     ssl_deb(1, "Negotiating %s ...\n",
 	    config->pl_ssl_role == PL_SSL_SERVER ? "server" : "client");
     ssl_ret = (config->pl_ssl_role == PL_SSL_SERVER ?
-		 SSL_accept((*instance)->ssl) :
-		 SSL_connect((*instance)->ssl));
+		 SSL_accept(instance->ssl) :
+		 SSL_connect(instance->ssl));
 
-    switch( ssl_inspect_status(*instance, ssl_ret, STAT_NEGOTIATE) )
+    switch( ssl_inspect_status(instance, ssl_ret, STAT_NEGOTIATE) )
     { case SSL_PL_OK:
 	ssl_deb(1, "established ssl connection\n");
+        *instancep = instance;
         return TRUE;
       case SSL_PL_RETRY:
 	ssl_deb(1, "retry ssl connection\n");
 	continue;
       case SSL_PL_ERROR:
 	ssl_deb(1, "failed ssl connection\n");
-	SSL_free((*instance)->ssl);
-        free(*instance);
+	SSL_free(instance->ssl);
+        free(instance);
 	return FALSE;
     }
   }
