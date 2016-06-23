@@ -50,6 +50,7 @@
             rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
+	    rsa_sign/4,			% +Key, +Data, -Signature, +Options
             ssl_context/3,		% +Role, -Config, :Options
             ssl_init/3,                 % -Config, +Role, :Options
             ssl_accept/3,               % +Config, -Socket, -Peer
@@ -397,6 +398,41 @@ rsa_public_decrypt(PublicKey, CipherText, PlainText) :-
 
 rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
 	rsa_public_encrypt(PublicKey, PlainText, CipherText, utf8).
+
+%%	rsa_sign(+Key, +Data, -Signature, +Options) is det.
+%
+%	Create an RSA signature for Data.  Options:
+%
+%	  - type(+Type)
+%	  SHA algorithm used to compute the digest.  Values are the
+%	  same as for sha_hash/3: `sha1` (default), `sha224`, `sha256`,
+%	  `sha384` or `sha512`
+%
+%	  - encoding(+Encoding)
+%	  Encoding to use for Data.  Default is `octet`.  Alternatives
+%	  are `utf8` and `text`.
+%
+%	This predicate is used  to   compute  a  _sha1WithRSAEncryption_
+%	signature as follows:
+%
+%	  ```
+%	  sha1_with_rsa(PemKeyFile, KeyPassword, Data, Signature) :-
+%	      DigestAlgorithm = sha1,
+%	      read_key(PemKeyFile, KeyPassword, PrivateKey),
+%	      sha_hash(Data, Digest, [algorithm(DigestAlgorithm)]),
+%	      rsa_sign(Key, Digest, Signature, [type(DigestAlgorithm)]).
+%
+%	  read_key(PemKeyFile, KeyPassword, PrivateKey) :-
+%	      setup_call_cleanup(
+%	          open(File, read, In, [type(binary)]),
+%	          load_private_key(In, Password, Key),
+%	          close(In).
+%	  ```
+
+rsa_sign(Key, Data, Signature, Options) :-
+	option(type(Type), Options, sha1),
+	option(encoding(Enc), Options, octet),
+	rsa_sign(Key, Type, Enc, Data, Signature).
 
 /*
   These predicates are here to support backward compatibility with the previous

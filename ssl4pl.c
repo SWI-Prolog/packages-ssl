@@ -75,6 +75,12 @@ static atom_t ATOM_text;
 static atom_t ATOM_octet;
 static atom_t ATOM_utf8;
 
+static atom_t ATOM_sha1;
+static atom_t ATOM_sha224;
+static atom_t ATOM_sha256;
+static atom_t ATOM_sha384;
+static atom_t ATOM_sha512;
+
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_system1;
        functor_t FUNCTOR_error2;	/* also used in ssllib.c */
@@ -1704,10 +1710,66 @@ pl_rsa_private_encrypt(term_t private_t,
   ssl_deb(1, "Assembling plaintext");
   retval = PL_unify_chars(cipher_t, PL_STRING|REP_ISO_LATIN_1,
 			  outsize, (char*)cipher);
-  ssl_deb(1, "Freeing plaintext");
+  ssl_deb(1, "Freeing cipher");
   PL_free(cipher);
   ssl_deb(1, "Done");
   return retval;
+}
+
+
+static int
+get_digest_type(term_t t, int *type)
+{ atom_t a;
+
+  if ( PL_get_atom_ex(t, &a) )
+  { if      ( a == ATOM_sha1   ) *type = NID_sha1;
+    else if ( a == ATOM_sha224 ) *type = NID_sha224;
+    else if ( a == ATOM_sha256 ) *type = NID_sha256;
+    else if ( a == ATOM_sha384 ) *type = NID_sha384;
+    else if ( a == ATOM_sha512 ) *type = NID_sha512;
+    else
+    { PL_domain_error("digest_type", t);
+      return FALSE;
+    }
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+
+static foreign_t
+pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
+	    term_t Data, term_t Signature)
+{ unsigned char *data;
+  size_t data_len;
+  RSA *key;
+  unsigned char *signature;
+  unsigned int signature_len;
+  int rc;
+  int type;
+
+  if ( !get_enc_text(Data, Enc, &data_len, &data) ||
+       !recover_private_key(Private, &key) ||
+       !get_digest_type(Type, &type) )
+    return FALSE;
+
+  signature_len = RSA_size(key);
+  signature = PL_malloc(signature_len);
+  rc = RSA_sign(type,
+		data, (unsigned int)data_len,
+		signature, &signature_len, key);
+  RSA_free(key);
+  if ( rc != 1 )
+  { PL_free(signature);
+    return raise_ssl_error(ERR_get_error());
+  }
+  rc = PL_unify_chars(Signature, PL_STRING|REP_ISO_LATIN_1,
+		      signature_len, (char*)signature);
+  PL_free(signature);
+
+  return rc;
 }
 
 
@@ -1876,6 +1938,11 @@ install_ssl4pl(void)
   ATOM_utf8		  = PL_new_atom("utf8");
   ATOM_require_crl	  = PL_new_atom("require_crl");
   ATOM_crl	          = PL_new_atom("crl");
+  ATOM_sha1		  = PL_new_atom("sha1");
+  ATOM_sha224		  = PL_new_atom("sha224");
+  ATOM_sha256		  = PL_new_atom("sha256");
+  ATOM_sha384		  = PL_new_atom("sha384");
+  ATOM_sha512		  = PL_new_atom("sha512");
 
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
@@ -1927,6 +1994,7 @@ install_ssl4pl(void)
   PL_register_foreign("rsa_public_decrypt", 4, pl_rsa_public_decrypt, 0);
   PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
+  PL_register_foreign("rsa_sign", 5, pl_rsa_sign, 0);
 
   /*
    * Initialize ssllib
