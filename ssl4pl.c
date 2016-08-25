@@ -81,6 +81,12 @@ static atom_t ATOM_sha256;
 static atom_t ATOM_sha384;
 static atom_t ATOM_sha512;
 
+static atom_t ATOM_pkcs;
+static atom_t ATOM_pkcs_oaep;
+static atom_t ATOM_none;
+static atom_t ATOM_encoding;
+static atom_t ATOM_padding;
+
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_system1;
        functor_t FUNCTOR_error2;	/* also used in ssllib.c */
@@ -1538,6 +1544,23 @@ get_text_representation(term_t t, int *rep)
   return FALSE;
 }
 
+static int
+get_padding(term_t t, int *padding)
+{ atom_t a;
+
+  if ( PL_get_atom_ex(t, &a) )
+  { if      ( a == ATOM_pkcs )       *padding = RSA_PKCS1_PADDING;
+    else if ( a == ATOM_pkcs_oaep  ) *padding = RSA_PKCS1_OAEP_PADDING;
+    else if ( a == ATOM_none  )      *padding = RSA_NO_PADDING;
+    else if ( a == ATOM_sslv23  )    *padding = RSA_SSLV23_PADDING;
+    else return PL_domain_error("padding", t);
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 
 static int
 get_enc_text(term_t text, term_t enc, size_t *len, unsigned char **data)
@@ -1567,13 +1590,38 @@ unify_enc_text(term_t text, term_t enc, size_t len, unsigned char *data)
 
 static foreign_t
 pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
-		       term_t plain_t, term_t enc)
+		       term_t plain_t, term_t options_t)
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
   int outsize;
   RSA* key;
+  int rep = REP_UTF8;
+  int padding = RSA_PKCS1_PADDING;
   int retval;
+  term_t tail = PL_copy_term_ref(options_t);
+  term_t head = PL_new_term_ref();
+
+  while( PL_get_list_ex(tail, head, tail) )
+  { atom_t name;
+    size_t arity;
+    term_t arg = PL_new_term_ref();
+
+    if ( !PL_get_name_arity(head, &name, &arity) ||
+	 arity != 1 ||
+	 !PL_get_arg(1, head, arg) )
+      return PL_type_error("option", head);
+
+    if ( name == ATOM_encoding )
+    { if ( !get_text_representation(arg, &rep) )
+	return FALSE;
+    } else if ( name == ATOM_padding )
+    { if ( !get_padding(arg, &padding) )
+	return FALSE;
+    }
+  }
+  if ( !PL_get_nil_ex(tail) )
+    return FALSE;
 
   if( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
 		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
@@ -1585,7 +1633,8 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   ssl_deb(1, "Output size is going to be %d", outsize);
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
-  if ((outsize = RSA_private_decrypt((int)cipher_length, cipher, plain, key, RSA_PKCS1_PADDING)) <= 0)
+  if ((outsize = RSA_private_decrypt((int)cipher_length, cipher,
+				     plain, key, padding)) <= 0)
   { ssl_deb(1, "Failure to decrypt!");
     RSA_free(key);
     PL_free(plain);
@@ -1595,10 +1644,11 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = unify_enc_text(plain_t, enc, outsize, plain);
+  retval = PL_unify_chars(plain_t, rep | PL_STRING, outsize, (char*)plain);
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
+
   return retval;
 }
 
@@ -1615,14 +1665,15 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   if ( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
 		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
     return FALSE;
-  if (!recover_public_key(public_t, &key))
+  if ( !recover_public_key(public_t, &key) )
     return FALSE;
 
   outsize = RSA_size(key);
   ssl_deb(1, "Output size is going to be %d", outsize);
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
-  if ((outsize = RSA_public_decrypt((int)cipher_length, cipher, plain, key, RSA_PKCS1_PADDING)) <= 0)
+  if ((outsize = RSA_public_decrypt((int)cipher_length, cipher,
+				    plain, key, RSA_PKCS1_PADDING)) <= 0)
   { ssl_deb(1, "Failure to decrypt!");
     RSA_free(key);
     PL_free(plain);
@@ -1636,6 +1687,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
+
   return retval;
 }
 
@@ -1652,15 +1704,16 @@ pl_rsa_public_encrypt(term_t public_t,
   ssl_deb(1, "Generating terms");
   ssl_deb(1, "Collecting plaintext");
   if ( !get_enc_text(plain_t, enc, &plain_length, &plain) )
-     return FALSE;
-  if (!recover_public_key(public_t, &key))
-     return FALSE;
+    return FALSE;
+  if ( !recover_public_key(public_t, &key) )
+    return FALSE;
 
   outsize = RSA_size(key);
   ssl_deb(1, "Output size is going to be %d\n", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext\n", outsize);
-  if ((outsize = RSA_public_encrypt((int)plain_length, plain, cipher, key, RSA_PKCS1_PADDING)) <= 0)
+  if ((outsize = RSA_public_encrypt((int)plain_length, plain,
+				    cipher, key, RSA_PKCS1_PADDING)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(cipher);
     RSA_free(key);
@@ -1675,6 +1728,7 @@ pl_rsa_public_encrypt(term_t public_t,
   ssl_deb(1, "Freeing plaintext");
   PL_free(cipher);
   ssl_deb(1, "Done");
+
   return retval;
 }
 
@@ -1691,14 +1745,15 @@ pl_rsa_private_encrypt(term_t private_t,
 
   if ( !get_enc_text(plain_t, enc, &plain_length, &plain))
     return FALSE;
-  if (!recover_private_key(private_t, &key))
+  if ( !recover_private_key(private_t, &key) )
     return FALSE;
 
   outsize = RSA_size(key);
   ssl_deb(1, "Output size is going to be %d", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext", outsize);
-  if ((outsize = RSA_private_encrypt((int)plain_length, plain, cipher, key, RSA_PKCS1_PADDING)) <= 0)
+  if ((outsize = RSA_private_encrypt((int)plain_length, plain,
+				     cipher, key, RSA_PKCS1_PADDING)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(cipher);
     RSA_free(key);
@@ -1713,6 +1768,7 @@ pl_rsa_private_encrypt(term_t private_t,
   ssl_deb(1, "Freeing cipher");
   PL_free(cipher);
   ssl_deb(1, "Done");
+
   return retval;
 }
 
@@ -1943,6 +1999,11 @@ install_ssl4pl(void)
   ATOM_sha256		  = PL_new_atom("sha256");
   ATOM_sha384		  = PL_new_atom("sha384");
   ATOM_sha512		  = PL_new_atom("sha512");
+  ATOM_pkcs	          = PL_new_atom("pkcs");
+  ATOM_pkcs_oaep	  = PL_new_atom("pkcs_oaep");
+  ATOM_none	          = PL_new_atom("none");
+  ATOM_encoding	          = PL_new_atom("encoding");
+  ATOM_padding	          = PL_new_atom("padding");
 
   FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);

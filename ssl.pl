@@ -368,17 +368,28 @@ ssl_context(Role, SSL, Module:Options) :-
 %%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
 %%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText) is det.
 %%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText) is det.
-%%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Enc) is det.
-%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Enc) is det.
-%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Enc) is det.
-%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText, +Enc) is det.
+%%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Options) is det.
+%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Options) is det.
+%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Options) is det.
+%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText, +Options) is det.
 %
 %	RSA Public key encryption and   decryption  primitives. A string
 %	can be safely communicated by first   encrypting it and have the
 %	peer decrypt it with the matching  key and predicate. The length
-%	of the string is limited by  the   key  length.  Text is encoded
-%	using encoding Enc, which is one   of  `octet`, `text` or `utf8`
-%	(default).
+%	of the string is limited by  the   key  length.
+%
+%       Options:
+%
+%	  - encoding(+Encoding)
+%	  Encoding to use for Data.  Default is `utf8`.  Alternatives
+%	  are `utf8` and `octet`.
+%
+%	  - padding(+PaddingScheme)
+%	  Padding scheme to use.  Default is `pkcs1`.  Alternatives
+%	  are `pkcs1_oaep`, `sslv23` and `none`. Note that `none` should
+%         only be used if you implement cryptographically sound padding
+%         modes in your application code as encrypting unpadded data with
+%         RSA is insecure
 %
 %	@see load_private_key/3, load_public_key/2 can be use to load
 %	keys from a file.  The predicate load_certificate/2 can be used
@@ -388,16 +399,16 @@ ssl_context(Role, SSL, Module:Options) :-
 %	there is an error, e.g., if the text is too long for the key.
 
 rsa_private_decrypt(PrivateKey, CipherText, PlainText) :-
-	rsa_private_decrypt(PrivateKey, CipherText, PlainText, utf8).
+	rsa_private_decrypt(PrivateKey, CipherText, PlainText, [encoding(utf8)]).
 
 rsa_private_encrypt(PrivateKey, PlainText, CipherText) :-
-	rsa_private_encrypt(PrivateKey, PlainText, CipherText, utf8).
+	rsa_private_encrypt(PrivateKey, PlainText, CipherText, [encoding(utf8)]).
 
 rsa_public_decrypt(PublicKey, CipherText, PlainText) :-
-	rsa_public_decrypt(PublicKey, CipherText, PlainText, utf8).
+	rsa_public_decrypt(PublicKey, CipherText, PlainText, [encoding(utf8)]).
 
 rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
-	rsa_public_encrypt(PublicKey, PlainText, CipherText, utf8).
+	rsa_public_encrypt(PublicKey, PlainText, CipherText, [encoding(utf8)]).
 
 %%	rsa_sign(+Key, +Data, -Signature, +Options) is det.
 %
