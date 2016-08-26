@@ -64,7 +64,8 @@ test_ssl :-
 	run_tests([ ssl_server,
 		    ssl_keys,
 		    https_open,
-                    ssl_certificates
+                    ssl_certificates,
+		    evp_encrypt
 		  ]).
 :- dynamic
 	option/1,			% Options to test
@@ -604,6 +605,19 @@ test('Reject a revoked certificate ourselves in a callback', Status = error(_)):
 
 
 :- end_tests(ssl_certificates).
+
+
+:- begin_tests(evp_encrypt).
+
+test(roundtrip, RecoveredText == Text) :-
+	Key  = "sixteenbyteofkey",
+	IV   = "sixteenbytesofiv",
+	Text = "this is some input",
+
+	evp_encrypt(Text, 'aes-128-cbc', Key, IV, CipherText, []),
+	evp_decrypt(CipherText, 'aes-128-cbc', Key, IV, RecoveredText, []).
+
+:- end_tests(evp_encrypt).
 
 
 		 /*******************************

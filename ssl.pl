@@ -34,7 +34,9 @@
 */
 
 :- module(ssl,
-	  [ load_certificate/2,         % +Stream, -Certificate
+          [ evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+            evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+            load_certificate/2,         % +Stream, -Certificate
             load_private_key/3,         % +Stream, +Password, -Key
             load_public_key/2,          % +Stream, -Key
             load_crl/2,                 % +Stream, -Crl
@@ -576,6 +578,39 @@ cert_accept_any(_SSL,
 		_ProblemCertificate, _AllCertificates, _FirstCertificate,
 		_Error).
 
+
+
+%%	evp_decrypt(+CipherText,
+%%                  +Algorithm,
+%%                  +Key,
+%%                  +IV,
+%%                  -PlainText,
+%%                  +Options).
+%       Decrypt the given CipherText, using the symmetric algorithm Algorithm, key Key,
+%       and iv IV, to give PlainText. CipherText, Key and IV should all be strings, and
+%       PlainText is created as a string as well. Algorithm should be an algorithm which
+%       your copy of OpenSSL knows about. Examples are:
+%           * aes-128-cbc
+%           * aes-256-cbc
+%           * des3
+%       If the IV is not needed for your decryption algorithm (such as aes-128-ecb) then
+%       any string can be provided as it will be ignored by the underlying implementation
+%       Example of aes-128-cbc encryption:
+%       ?- evp_encrypt("this is some input", 'aes-128-cbc', "sixteenbyteofkey",
+%                      "sixteenbytesofiv", CipherText, []),
+%          evp_decrypt(CipherText, 'aes-128-cbc', "sixteenbyteofkey", "sixteenbytesofiv",
+%                      RecoveredText, []).
+%       CipherText = <binary string>
+%       RecoveredText = "this is some input".
+
+%%	evp_encrypt(+PlainText,
+%%                  +Algorithm,
+%%                  +Key,
+%%                  +IV,
+%%                  -CipherTExt,
+%%                  +Options).
+%       Encrypt the given PlainText, using the symmetric algorithm Algorithm, key Key,
+%       and iv IV, to give CipherText. See evp_decrypt/6.
 
 		 /*******************************
 		 *	     MESSAGES		*

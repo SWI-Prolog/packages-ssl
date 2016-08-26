@@ -1576,17 +1576,40 @@ get_enc_text(term_t text, term_t enc, size_t *len, unsigned char **data)
 
 
 static int
-unify_enc_text(term_t text, term_t enc, size_t len, unsigned char *data)
-{ int flags;
+parse_options(term_t options_t, int* rep, int* padding)
+{ assert(rep != NULL);
 
-  if ( get_text_representation(enc, &flags) )
-  { flags |= PL_STRING;
-    return PL_unify_chars(text, flags, len, (char*)data);
+  if ( PL_is_atom(options_t) ) /* Is really an encoding */
+  { if ( !get_text_representation(options_t, rep) )
+      return FALSE;
+  } else
+  { term_t tail = PL_copy_term_ref(options_t);
+    term_t head = PL_new_term_ref();
+
+    while( PL_get_list_ex(tail, head, tail) )
+    { atom_t name;
+      size_t arity;
+      term_t arg = PL_new_term_ref();
+
+      if ( !PL_get_name_arity(head, &name, &arity) ||
+           arity != 1 ||
+           !PL_get_arg(1, head, arg) )
+        return PL_type_error("option", head);
+
+      if ( name == ATOM_encoding )
+      { if ( !get_text_representation(arg, rep) )
+          return FALSE;
+      } else if ( name == ATOM_padding && padding != NULL)
+      { if ( !get_padding(arg, padding) )
+        return FALSE;
+      }
+    }
+    if ( !PL_get_nil_ex(tail) )
+      return FALSE;
   }
 
-  return FALSE;
+  return TRUE;
 }
-
 
 static foreign_t
 pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
@@ -1599,28 +1622,8 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   int rep = REP_UTF8;
   int padding = RSA_PKCS1_PADDING;
   int retval;
-  term_t tail = PL_copy_term_ref(options_t);
-  term_t head = PL_new_term_ref();
 
-  while( PL_get_list_ex(tail, head, tail) )
-  { atom_t name;
-    size_t arity;
-    term_t arg = PL_new_term_ref();
-
-    if ( !PL_get_name_arity(head, &name, &arity) ||
-	 arity != 1 ||
-	 !PL_get_arg(1, head, arg) )
-      return PL_type_error("option", head);
-
-    if ( name == ATOM_encoding )
-    { if ( !get_text_representation(arg, &rep) )
-	return FALSE;
-    } else if ( name == ATOM_padding )
-    { if ( !get_padding(arg, &padding) )
-	return FALSE;
-    }
-  }
-  if ( !PL_get_nil_ex(tail) )
+  if ( !parse_options(options_t, &rep, &padding))
     return FALSE;
 
   if( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
@@ -1654,14 +1657,18 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
 
 static foreign_t
 pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
-		      term_t plain_t, term_t enc)
+                      term_t plain_t, term_t options_t)
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
   int outsize;
   RSA* key;
+  int rep = REP_UTF8;
+  int padding = RSA_PKCS1_PADDING;
   int retval;
 
+  if ( !parse_options(options_t, &rep, &padding))
+    return FALSE;
   if ( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
 		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
     return FALSE;
@@ -1673,7 +1680,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
   if ((outsize = RSA_public_decrypt((int)cipher_length, cipher,
-				    plain, key, RSA_PKCS1_PADDING)) <= 0)
+                                    plain, key, padding)) <= 0)
   { ssl_deb(1, "Failure to decrypt!");
     RSA_free(key);
     PL_free(plain);
@@ -1683,7 +1690,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   ssl_deb(1, "Freeing RSA");
   RSA_free(key);
   ssl_deb(1, "Assembling plaintext");
-  retval = unify_enc_text(plain_t, enc, outsize, plain);
+  retval = PL_unify_chars(plain_t, rep | PL_STRING, outsize, (char*)plain);
   ssl_deb(1, "Freeing plaintext");
   PL_free(plain);
   ssl_deb(1, "Done");
@@ -1693,17 +1700,23 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
 
 static foreign_t
 pl_rsa_public_encrypt(term_t public_t,
-		      term_t plain_t, term_t cipher_t, term_t enc)
+                      term_t plain_t, term_t cipher_t, term_t options_t)
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
   int outsize;
   RSA* key;
+  int rep = REP_UTF8;
+  int padding = RSA_PKCS1_PADDING;
   int retval;
+
+  if ( !parse_options(options_t, &rep, &padding))
+    return FALSE;
 
   ssl_deb(1, "Generating terms");
   ssl_deb(1, "Collecting plaintext");
-  if ( !get_enc_text(plain_t, enc, &plain_length, &plain) )
+  if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
+		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION | rep))
     return FALSE;
   if ( !recover_public_key(public_t, &key) )
     return FALSE;
@@ -1712,8 +1725,8 @@ pl_rsa_public_encrypt(term_t public_t,
   ssl_deb(1, "Output size is going to be %d\n", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext\n", outsize);
-  if ((outsize = RSA_public_encrypt((int)plain_length, plain,
-				    cipher, key, RSA_PKCS1_PADDING)) <= 0)
+  if ( (outsize = RSA_public_encrypt((int)plain_length, plain,
+				     cipher, key, padding)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(cipher);
     RSA_free(key);
@@ -1735,15 +1748,21 @@ pl_rsa_public_encrypt(term_t public_t,
 
 static foreign_t
 pl_rsa_private_encrypt(term_t private_t,
-		       term_t plain_t, term_t cipher_t, term_t enc)
+                       term_t plain_t, term_t cipher_t, term_t options_t)
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
   int outsize;
   RSA* key;
+  int rep = REP_UTF8;
+  int padding = RSA_PKCS1_PADDING;
   int retval;
 
-  if ( !get_enc_text(plain_t, enc, &plain_length, &plain))
+  if ( !parse_options(options_t, &rep, &padding))
+    return FALSE;
+
+  if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
+		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION | rep))
     return FALSE;
   if ( !recover_private_key(private_t, &key) )
     return FALSE;
@@ -1753,7 +1772,7 @@ pl_rsa_private_encrypt(term_t private_t,
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext", outsize);
   if ((outsize = RSA_private_encrypt((int)plain_length, plain,
-				     cipher, key, RSA_PKCS1_PADDING)) <= 0)
+                                     cipher, key, padding)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
     PL_free(cipher);
     RSA_free(key);
@@ -1958,6 +1977,117 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 }
 
 
+static foreign_t
+pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
+	       term_t key_t, term_t iv_t, term_t plaintext_t,
+	       term_t options_t)
+{ EVP_CIPHER_CTX* ctx = NULL;
+  const EVP_CIPHER *cipher;
+  char* key;
+  char* iv;
+  char* ciphertext;
+  size_t cipher_length;
+  int plain_length;
+  char* algorithm;
+  char* plaintext;
+  int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
+  int rep = REP_UTF8;
+
+  if ( !parse_options(options_t, &rep, NULL))
+    return FALSE;
+
+  if ( !PL_get_chars(key_t, &key, cvt_flags) ||
+       !PL_get_chars(iv_t, &iv, cvt_flags) ||
+       !PL_get_nchars(ciphertext_t, &cipher_length, &ciphertext, cvt_flags) ||
+       !PL_get_chars(algorithm_t, &algorithm, cvt_flags) )
+    return FALSE;
+
+  if ( (cipher = EVP_get_cipherbyname(algorithm)) == NULL )
+    return PL_domain_error("cipher", algorithm_t);
+  if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
+    return FALSE;
+
+  EVP_CIPHER_CTX_init(ctx);
+  EVP_DecryptInit_ex(ctx, cipher, NULL,
+		     (const unsigned char*)key, (const unsigned char*)iv);
+
+  plaintext = PL_malloc(cipher_length + EVP_CIPHER_block_size(cipher));
+  if ( EVP_DecryptUpdate(ctx, (unsigned char*)plaintext, &plain_length,
+			 (unsigned char*)ciphertext, cipher_length) == 1 )
+  { int last_chunk;
+    int rc;
+
+    EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
+			&last_chunk);
+    EVP_CIPHER_CTX_free(ctx);
+
+    rc = PL_unify_chars(plaintext_t, rep | PL_STRING, plain_length + last_chunk,
+			      plaintext);
+    PL_free(plaintext);
+    return rc;
+  }
+
+  PL_free(plaintext);
+  EVP_CIPHER_CTX_free(ctx);
+
+  return FALSE;
+}
+
+static foreign_t
+pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
+               term_t key_t, term_t iv_t, term_t ciphertext_t,
+	       term_t options_t)
+{ EVP_CIPHER_CTX* ctx = NULL;
+  const EVP_CIPHER *cipher;
+  char* key;
+  char* iv;
+  char* ciphertext;
+  int cipher_length;
+  char* algorithm;
+  char* plaintext;
+  size_t plain_length;
+  int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
+  int rep = REP_UTF8;
+
+  if ( !parse_options(options_t, &rep, NULL))
+    return FALSE;
+
+  if ( !PL_get_chars(key_t, &key, cvt_flags) ||
+       !PL_get_chars(iv_t, &iv, cvt_flags) ||
+       !PL_get_nchars(plaintext_t, &plain_length, &plaintext, cvt_flags | rep) ||
+       !PL_get_chars(algorithm_t, &algorithm, cvt_flags) )
+    return FALSE;
+
+  if ( (cipher = EVP_get_cipherbyname(algorithm)) == NULL )
+    return PL_domain_error("cipher", algorithm_t);
+  if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
+    return FALSE;
+
+  EVP_CIPHER_CTX_init(ctx);
+  EVP_EncryptInit_ex(ctx, cipher, NULL,
+		     (const unsigned char*)key, (const unsigned char*)iv);
+
+  ciphertext = PL_malloc(plain_length + EVP_CIPHER_block_size(cipher));
+  if ( EVP_EncryptUpdate(ctx, (unsigned char*)ciphertext, &cipher_length,
+                         (unsigned char*)plaintext, plain_length) == 1 )
+  { int last_chunk;
+    int rc;
+
+    EVP_EncryptFinal_ex(ctx, (unsigned char*)(ciphertext + cipher_length),
+			&last_chunk);
+    EVP_CIPHER_CTX_free(ctx);
+    rc = PL_unify_chars(ciphertext_t,  PL_STRING|REP_ISO_LATIN_1,
+			cipher_length + last_chunk, ciphertext);
+    PL_free(ciphertext);
+    return rc;
+  }
+
+  PL_free(ciphertext);
+  EVP_CIPHER_CTX_free(ctx);
+
+  return FALSE;
+}
+
 		 /*******************************
 		 *	     INSTALL		*
 		 *******************************/
@@ -2056,6 +2186,8 @@ install_ssl4pl(void)
   PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
   PL_register_foreign("rsa_sign", 5, pl_rsa_sign, 0);
+  PL_register_foreign("evp_decrypt",        6, pl_evp_decrypt, 0);
+  PL_register_foreign("evp_encrypt",        6, pl_evp_encrypt, 0);
 
   /*
    * Initialize ssllib
