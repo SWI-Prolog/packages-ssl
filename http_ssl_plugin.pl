@@ -138,6 +138,8 @@ ssl_failed(Read, Write, E) :-
 
 http:http_protocol_hook(https, Parts, PlainStreamPair, StreamPair, Options):-
 	ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options).
+http:http_protocol_hook(wss, Parts, PlainStreamPair, StreamPair, Options):-
+	ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options).
 
 ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
         memberchk(host(Host), Parts),
@@ -160,7 +162,8 @@ ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
 %	root certificate database for validating an SSL certificate.
 
 http:open_options(Parts, Options) :-
-	memberchk(scheme(https), Parts),
+	memberchk(scheme(S), Parts),
+	memberchk(S, [https,wss]),
 	Options = [cacert_file(system(root_certificates))].
 
 %%	http:http_connection_over_proxy(+Proxy, +Parts, +HostPort, -StreamPair,
