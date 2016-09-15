@@ -136,12 +136,10 @@ ssl_failed(Read, Write, E) :-
 %	server.   This   plugin   also   passes   the   default   option
 %	`cacert_file(system(root_certificates))` to ssl_context/3.
 
-http:http_protocol_hook(Scheme, Parts, PlainStreamPair, StreamPair, Options) :-
-	ssl_scheme(Scheme),
+http:http_protocol_hook(https, Parts, PlainStreamPair, StreamPair, Options) :-
 	ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options).
-
-ssl_scheme(https).
-ssl_scheme(wss).
+http:http_protocol_hook(wss, Parts, PlainStreamPair, StreamPair, Options) :-
+	ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options).
 
 ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
         memberchk(host(Host), Parts),
@@ -167,6 +165,9 @@ http:open_options(Parts, Options) :-
 	memberchk(scheme(S), Parts),
 	ssl_scheme(S),
 	Options = [cacert_file(system(root_certificates))].
+
+ssl_scheme(https).
+ssl_scheme(wss).
 
 %%	http:http_connection_over_proxy(+Proxy, +Parts, +HostPort, -StreamPair,
 %%					+OptionsIn, -OptionsOut)
