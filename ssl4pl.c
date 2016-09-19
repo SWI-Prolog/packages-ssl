@@ -84,6 +84,7 @@ static atom_t ATOM_sha512;
 static atom_t ATOM_pkcs;
 static atom_t ATOM_pkcs_oaep;
 static atom_t ATOM_none;
+static atom_t ATOM_block;
 static atom_t ATOM_encoding;
 static atom_t ATOM_padding;
 
@@ -119,6 +120,10 @@ static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_unknown1;
+
+typedef enum
+{ RSA_MODE, EVP_MODE
+} crypt_mode_t;
 
 static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
 {
@@ -1545,14 +1550,16 @@ get_text_representation(term_t t, int *rep)
 }
 
 static int
-get_padding(term_t t, int *padding)
+get_padding(term_t t, crypt_mode_t mode, int *padding)
 { atom_t a;
 
   if ( PL_get_atom_ex(t, &a) )
-  { if      ( a == ATOM_pkcs )       *padding = RSA_PKCS1_PADDING;
-    else if ( a == ATOM_pkcs_oaep  ) *padding = RSA_PKCS1_OAEP_PADDING;
-    else if ( a == ATOM_none  )      *padding = RSA_NO_PADDING;
-    else if ( a == ATOM_sslv23  )    *padding = RSA_SSLV23_PADDING;
+  { if      ( a == ATOM_pkcs && mode == RSA_MODE )       *padding = RSA_PKCS1_PADDING;
+    else if ( a == ATOM_pkcs_oaep && mode == RSA_MODE  ) *padding = RSA_PKCS1_OAEP_PADDING;
+    else if ( a == ATOM_none && mode == RSA_MODE  )      *padding = RSA_NO_PADDING;
+    else if ( a == ATOM_sslv23  && mode == RSA_MODE )    *padding = RSA_SSLV23_PADDING;
+    else if ( a == ATOM_none  && mode == EVP_MODE )      *padding = 0;
+    else if ( a == ATOM_block  && mode == EVP_MODE )     *padding = 1;
     else return PL_domain_error("padding", t);
 
     return TRUE;
@@ -1576,11 +1583,11 @@ get_enc_text(term_t text, term_t enc, size_t *len, unsigned char **data)
 
 
 static int
-parse_options(term_t options_t, int* rep, int* padding)
-{ assert(rep != NULL);
-
-  if ( PL_is_atom(options_t) ) /* Is really an encoding */
-  { if ( !get_text_representation(options_t, rep) )
+parse_options(term_t options_t, crypt_mode_t mode, int* rep, int* padding)
+{ if (PL_is_atom(options_t)) /* Is really an encoding */
+  { if (rep == NULL)
+      return TRUE;
+    else if ( !get_text_representation(options_t, rep) )
       return FALSE;
   } else
   { term_t tail = PL_copy_term_ref(options_t);
@@ -1600,7 +1607,7 @@ parse_options(term_t options_t, int* rep, int* padding)
       { if ( !get_text_representation(arg, rep) )
           return FALSE;
       } else if ( name == ATOM_padding && padding != NULL)
-      { if ( !get_padding(arg, padding) )
+      { if ( !get_padding(arg, mode, padding) )
         return FALSE;
       }
     }
@@ -1623,7 +1630,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   int padding = RSA_PKCS1_PADDING;
   int retval;
 
-  if ( !parse_options(options_t, &rep, &padding))
+  if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
     return FALSE;
 
   if( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
@@ -1667,7 +1674,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   int padding = RSA_PKCS1_PADDING;
   int retval;
 
-  if ( !parse_options(options_t, &rep, &padding))
+  if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
     return FALSE;
   if ( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
 		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
@@ -1710,7 +1717,7 @@ pl_rsa_public_encrypt(term_t public_t,
   int padding = RSA_PKCS1_PADDING;
   int retval;
 
-  if ( !parse_options(options_t, &rep, &padding))
+  if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
     return FALSE;
 
   ssl_deb(1, "Generating terms");
@@ -1758,7 +1765,7 @@ pl_rsa_private_encrypt(term_t private_t,
   int padding = RSA_PKCS1_PADDING;
   int retval;
 
-  if ( !parse_options(options_t, &rep, &padding))
+  if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
     return FALSE;
 
   if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
@@ -1845,6 +1852,33 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
   PL_free(signature);
 
   return rc;
+}
+
+static foreign_t
+pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
+	    term_t Data, term_t Signature)
+{ unsigned char *data;
+  size_t data_len;
+  RSA *key;
+  unsigned char *signature;
+  size_t signature_len;
+  int rc;
+  int type;
+
+  if ( !get_enc_text(Data, Enc, &data_len, &data) ||
+       !recover_public_key(Public, &key) ||
+       !get_digest_type(Type, &type) ||
+       !PL_get_nchars(Signature, &signature_len, (char**)&signature, CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+    return FALSE;
+
+  rc = RSA_verify(type,
+                  data, (unsigned int)data_len,
+                  signature, (unsigned int)signature_len, key);
+  RSA_free(key);
+  if ( rc != 1 )
+  { return raise_ssl_error(ERR_get_error());
+  }
+  return 1;
 }
 
 
@@ -1992,8 +2026,9 @@ pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
   char* plaintext;
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
+  int padding = 1;
 
-  if ( !parse_options(options_t, &rep, NULL))
+  if ( !parse_options(options_t, EVP_MODE, &rep, &padding))
     return FALSE;
 
   if ( !PL_get_chars(key_t, &key, cvt_flags) ||
@@ -2010,19 +2045,18 @@ pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
   EVP_CIPHER_CTX_init(ctx);
   EVP_DecryptInit_ex(ctx, cipher, NULL,
 		     (const unsigned char*)key, (const unsigned char*)iv);
-
+  EVP_CIPHER_CTX_set_padding(ctx, padding);
   plaintext = PL_malloc(cipher_length + EVP_CIPHER_block_size(cipher));
   if ( EVP_DecryptUpdate(ctx, (unsigned char*)plaintext, &plain_length,
 			 (unsigned char*)ciphertext, cipher_length) == 1 )
-  { int last_chunk;
+  { int last_chunk = plain_length;
     int rc;
-
-    EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
-			&last_chunk);
+    rc = EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
+                              &last_chunk);
     EVP_CIPHER_CTX_free(ctx);
-
-    rc = PL_unify_chars(plaintext_t, rep | PL_STRING, plain_length + last_chunk,
-			      plaintext);
+    ERR_print_errors_fp(stderr);
+    rc &= PL_unify_chars(plaintext_t, rep | PL_STRING, plain_length + last_chunk,
+                         plaintext);
     PL_free(plaintext);
     return rc;
   }
@@ -2049,7 +2083,7 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
 
-  if ( !parse_options(options_t, &rep, NULL))
+  if ( !parse_options(options_t, EVP_MODE, &rep, NULL))
     return FALSE;
 
   if ( !PL_get_chars(key_t, &key, cvt_flags) ||
@@ -2132,6 +2166,7 @@ install_ssl4pl(void)
   ATOM_pkcs	          = PL_new_atom("pkcs");
   ATOM_pkcs_oaep	  = PL_new_atom("pkcs_oaep");
   ATOM_none	          = PL_new_atom("none");
+  ATOM_block	          = PL_new_atom("block");
   ATOM_encoding	          = PL_new_atom("encoding");
   ATOM_padding	          = PL_new_atom("padding");
 
@@ -2186,6 +2221,7 @@ install_ssl4pl(void)
   PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
   PL_register_foreign("rsa_sign", 5, pl_rsa_sign, 0);
+  PL_register_foreign("rsa_verify", 5, pl_rsa_verify, 0);
   PL_register_foreign("evp_decrypt",        6, pl_evp_decrypt, 0);
   PL_register_foreign("evp_encrypt",        6, pl_evp_encrypt, 0);
 

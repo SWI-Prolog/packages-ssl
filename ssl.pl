@@ -52,7 +52,8 @@
             rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
-	    rsa_sign/4,			% +Key, +Data, -Signature, +Options
+            rsa_sign/4,			% +Key, +Data, -Signature, +Options
+            rsa_verify/4,		% +Key, +Data, -Signature, +Options
             ssl_context/3,		% +Role, -Config, :Options
             ssl_init/3,                 % -Config, +Role, :Options
             ssl_accept/3,               % +Config, -Socket, -Peer
@@ -62,7 +63,7 @@
 					%          -SSLRead,   -SSLWrite
 	    ssl_peer_certificate/2,	% +Stream, -Certificate
             ssl_session/2,              % +Stream, -Session
-	    ssl_exit/1			% +Config
+            ssl_exit/1			% +Config
 	  ]).
 :- use_module(library(socket)).
 :- use_module(library(error)).
@@ -447,6 +448,26 @@ rsa_sign(Key, Data, Signature, Options) :-
 	option(encoding(Enc), Options, octet),
 	rsa_sign(Key, Type, Enc, Data, Signature).
 
+
+%%	rsa_verify(+Key, +Data, -Signature, +Options) is det.
+%
+%	Verifies an RSA signature for Data.  Options:
+%
+%	  - type(+Type)
+%	  SHA algorithm used to compute the digest.  Values are the
+%	  same as for sha_hash/3: `sha1` (default), `sha224`, `sha256`,
+%	  `sha384` or `sha512`
+%
+%	  - encoding(+Encoding)
+%	  Encoding to use for Data.  Default is `octet`.  Alternatives
+%	  are `utf8` and `text`.
+
+rsa_verify(Key, Data, Signature, Options) :-
+	option(type(Type), Options, sha1),
+	option(encoding(Enc), Options, octet),
+        rsa_verify(Key, Type, Enc, Data, Signature).
+
+
 /*
   These predicates are here to support backward compatibility with the previous
   incarnation of the SSL library. No changes should be required for legacy code.
@@ -595,6 +616,17 @@ cert_accept_any(_SSL,
 %           * des3
 %       If the IV is not needed for your decryption algorithm (such as aes-128-ecb) then
 %       any string can be provided as it will be ignored by the underlying implementation
+%
+%       Options:
+%
+%	  - encoding(+Encoding)
+%	  Encoding to use for Data.  Default is `utf8`.  Alternatives
+%	  are `utf8` and `octet`.
+%
+%	  - padding(+PaddingScheme)
+%	  Padding scheme to use.  Default is `block`.  You can disable padding by supplying
+%         `none` here.
+%
 %       Example of aes-128-cbc encryption:
 %       ?- evp_encrypt("this is some input", 'aes-128-cbc', "sixteenbyteofkey",
 %                      "sixteenbytesofiv", CipherText, []),
