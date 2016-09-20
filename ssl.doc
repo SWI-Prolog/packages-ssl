@@ -12,11 +12,9 @@
 
 \begin{document}
 
-%\urldef{\diff}\url[Diff Automatisering v.o.f]{http://www.diff.nl}
-
 \title{SWI-Prolog SSL Interface}
 \author{Jan van der Steen, Matt Lilley and Jan Wielemaker \\
-	\url[Diff Automatisering v.o.f]{http://www.diff.nl} \\[5pt]
+	\href{http://www.diff.nl}{Diff Automatisering v.o.f} \\[5pt]
 	Jan Wielemaker \\
         SWI, University of Amsterdam \\
         The Netherlands \\
@@ -33,7 +31,7 @@ socket. SSL provides public key based encryption and digitally signed
 identity information of the \jargon{peer}. The SSL library is well
 integrated with SWI-Prolog's HTTP library for both implementing HTTPS
 servers and communicating with HTTPS servers. It is also used by the
-\url[smtp pack]{http://www.swi-prolog.org/pack/list?p=smtp} for
+\href{http://www.swi-prolog.org/pack/list?p=smtp}{smtp pack} for
 accessing secure mail agents. Plain SSL can be used to realise secure
 connections between e.g., Prolog agents.
 \end{abstract}
@@ -47,13 +45,13 @@ connections between e.g., Prolog agents.
 \label{sec:ssl-intro}
 
 Raw TCP/IP networking is dangerous for two reasons.  It is hard to tell
-whether the body you think you are talking to is indeed the right one and
-anyone with access to a subnet through which your data flows can `tap'
-the wire and listen for sensitive information such as passwords,
-credit card numbers, etc.   Secure Socket Layer (SSL) deals with both
-problems.  It uses certificates to establish the identity of the peer
-and encryption to make it useless to tap into the wire.  SSL allows
-agents to talk in private and create secure web services.
+whether the party you think you are talking to is indeed the right one
+and anyone with access to a subnet through which your data flows can
+`tap' the wire and listen for sensitive information such as passwords,
+credit card numbers, etc. Secure Socket Layer (SSL) deals with both
+problems. It uses certificates to establish the identity of the peer and
+encryption to make it useless to tap into the wire. SSL allows agents to
+talk in private and create secure web services.
 
 The SWI-Prolog \pllib{ssl} library provides an API to turn a pair of
 arbitrary Prolog \jargon{wire} streams into SSL powered encrypted
@@ -62,14 +60,13 @@ plain protocol over (SSL) encrypted streams.
 
 Cryptography is a difficult topic. If you just want to download
 documents from an HTTPS server without worrying much about security,
-http_open/3 will do the job for you. As soon as you have higher
-security demands we strongly recommend you to read enough background
-material to understand what you are doing. See \secref{ssl-security}
-for some remarks regarding this implementation. This \url[The Linux
-Documentation Project
-page]{http://www.tldp.org/HOWTO/SSL-Certificates-HOWTO/index.html}
-provides some additional background and tips for managing certificates
-and keys.
+http_open/3 will do the job for you. As soon as you have higher security
+demands we strongly recommend you to read enough background material to
+understand what you are doing. See \secref{ssl-security} for some
+remarks regarding this implementation. This
+\href{http://www.tldp.org/HOWTO/SSL-Certificates-HOWTO/index.html}{The
+Linux Documentation Project page} provides some additional background
+and tips for managing certificates and keys.
 
 
 \input{ssllib.tex}
@@ -366,7 +363,11 @@ but it is also not possible to realise \jargon{virtual hosts} or
 \label{sec:ssl-acknowledgments}
 
 The development of the SWI-Prolog SSL interface has been sponsored by
-\url[Scientific Software and Systems Limited]{http://www.sss.co.nz}.
+\href{http://www.sss.co.nz}{Scientific Software and Systems Limited}.
+The current version contains contributions from many people.  Besides
+the mentioned authors, Markus Triska has submitted several patches,
+improved and documented the integration of this package with the HTTP
+infrastructure.
 
 \bibliographystyle{plain}
 \bibliography{odbc}
