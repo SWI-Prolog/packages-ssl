@@ -1,3 +1,37 @@
+/*  Part of SWI-Prolog
+
+    Author:        Jan Wielemaker and Matt Lilley
+    E-mail:        J.Wielemaker@vu.nl
+    WWW:           http://www.swi-prolog.org
+    Copyright (c)  2016, CWI, Amsterdam
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions
+    are met:
+
+    1. Redistributions of source code must retain the above copyright
+       notice, this list of conditions and the following disclaimer.
+
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in
+       the documentation and/or other materials provided with the
+       distribution.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+    FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+    COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+    INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+    BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+    CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+    LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+    ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+*/
+
 :- module(xmldsig,
           [ xmld_signed_DOM/3,			% +DOM, -SignedDOM, +Options
             xmld_verify_signature/4             % +DOM, +Signature, -Certificate, +Options
@@ -113,10 +147,6 @@ signed_info_dom(Hash, SDOM, _Options) :-
 	C14NAlgo='http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
 	SignatureMethod='http://www.w3.org/2000/09/xmldsig#rsa-sha1'.
 
-
-
-        
-
 %%	rsa_signature(+SignedInfo:string, -Signature, -KeyDOM, +Options)
 
 rsa_signature(SignedInfo, Signature, KeyDOM, Options) :-
@@ -218,23 +248,28 @@ signed_xml_dom(ObjectDOM, SDOM, KeyDOM, Signature, SignedDOM, _Options) :-
 
 %%	xmld_verify_signature(+DOM, +SignatureDOM, -Certificate, +Options) is det.
 %
-%	Confirm that an ds:Signature element contains a valid signature
-%       Certificate is bound to the certificate that appears in the element
-%       if the signature is valid. It is up to the caller to determine if the certificate
-%       is trusted or not.
-%       NB: The DOM and SignatureDOM must have been obtained using the load_structure/3 option
-%           keep_prefix(true) otherwise it is impossible to generate an identical document
-%           for checking the signature!
+%	Confirm  that  an  `ds:Signature`  element    contains  a  valid
+%	signature. Certificate is bound to  the certificate that appears
+%	in the element if the signature is valid. It is up to the caller
+%	to determine if the certificate is trusted   or not.
+%
+%	*Note*: The DOM and SignatureDOM must   have been obtained using
+%	the load_structure/3 option keep_prefix(true)   otherwise  it is
+%	impossible to generate an identical   document  for checking the
+%	signature. See also xml_write_canonical/3.
 
 xmld_verify_signature(DOM, SignatureDOM, Certificate, Options) :-
-        signature_info(DOM, SignatureDOM, SignedInfo, Algorithm, Signature, PublicKey, Certificate, CanonicalizationMethod),
+        signature_info(DOM, SignatureDOM, SignedInfo, Algorithm, Signature,
+		       PublicKey, Certificate, CanonicalizationMethod),
         base64(RawSignature, Signature),
-        ( Algorithm = rsa(HashType)->
-            with_output_to(string(C14N), xml_write_canonical(current_output, SignedInfo, [method(CanonicalizationMethod)|Options])),
-            sha_hash(C14N, HashCodes, [algorithm(HashType)]),
+        (   Algorithm = rsa(HashType)
+	->  with_output_to(string(C14N),
+			   xml_write_canonical(current_output, SignedInfo,
+					       [method(CanonicalizationMethod)|Options])),
+	    sha_hash(C14N, HashCodes, [algorithm(HashType)]),
 	    string_codes(Digest, HashCodes),
-            rsa_verify(PublicKey, Digest, RawSignature, [type(HashType), encoding(octet)])
-	; domain_error(supported_signature_algorithm, Algorithm)
+	    rsa_verify(PublicKey, Digest, RawSignature, [type(HashType), encoding(octet)])
+	;   domain_error(supported_signature_algorithm, Algorithm)
 	).
 
 ssl_algorithm('http://www.w3.org/2000/09/xmldsig#rsa-sha1', rsa(sha1)).
@@ -263,7 +298,8 @@ ssl_algorithm('http://www.w3.org/2001/04/xmldsig-more#esign-sha512', esign(sha51
 digest_method('http://www.w3.org/2000/09/xmldsig#sha1', sha1).
 digest_method('http://www.w3.org/2001/04/xmlenc#sha256', sha256).
 
-signature_info(DOM, Signature, SignedData, Algorithm, SignatureValue, PublicKey, Certificate, CanonicalizationMethod):-
+signature_info(DOM, Signature, SignedData, Algorithm, SignatureValue,
+	       PublicKey, Certificate, CanonicalizationMethod) :-
         xmldsig_ns(NSRef),
         memberchk(element(ns(_, NSRef):'SignatureValue', _, [RawSignatureValue]), Signature),
         atom_codes(RawSignatureValue, RawSignatureCodes),

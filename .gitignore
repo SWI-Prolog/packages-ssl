@@ -31,6 +31,9 @@ config.status
 configure
 ssllib.tex
 ssl.tex
+saml.tex
+xmlenc.tex
+xmldsig.tex
 ssl.html
 ssl.pdf
 .gdbinit

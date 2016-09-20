@@ -71,7 +71,21 @@ and tips for managing certificates and keys.
 
 \input{ssllib.tex}
 
-\subsection{SSL Security}
+\section{XML cryptographic libraries}
+\label{sec:ssl-xml-libs}
+
+The SSL package provides several libraries dealing with cryptographic
+operations of XML documents. These libraries depend on the \const{sgml}
+package. These libraries are part of this package because the
+\const{sgml} package has no external dependencies and will thus be
+available in any SWI-Prolog installation while configuring and building
+this \const{ssl} package is much more involved.
+
+\input{saml.tex}
+\input{xmlenc.tex}
+\input{xmldsig.tex}
+
+\section{SSL Security}
 \label{sec:ssl-security}
 
 Using SSL (in this particular case based on the OpenSSL implementation)
@@ -148,7 +162,7 @@ important, use OpenSSL 1.0.2 or higher.
 After validation, the predicate ssl_peer_certificate/2 can be used to
 obtain the peer certificate and inspect its properties.
 
-\subsection{CRLs and Revocation}
+\section{CRLs and Revocation}
 \label{sec:crl}
 Certificates must sometimes be revoked. Unfortunately this means that
 the elegant chain-of-trust model breaks down, since the information

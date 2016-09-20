@@ -83,11 +83,17 @@ clientcert:
 # Documentation
 ################################################################
 
-TEXEXTRA=	ssllib.tex
+TEXEXTRA=	ssllib.tex saml.tex xmldsig.tex xmlenc.tex
 $(TEX):		$(TEXEXTRA)
 
 ssllib.tex:	ssl.pl
-		$(PLTOTEX) --out=$@ --subsection 'library(ssl)'
+		$(PLTOTEX) --out=$@ --section 'library(ssl)'
+saml.tex:	saml.pl
+		$(PLTOTEX) --out=$@ --subsection 'library(saml)'
+xmldsig.tex:	xmldsig.pl
+		$(PLTOTEX) --out=$@ --subsection 'library(xmldsig)'
+xmlenc.tex:	xmlenc.pl
+		$(PLTOTEX) --out=$@ --subsection 'library(xmlenc)'
 
 ################################################################
 # Check

@@ -35,44 +35,63 @@
 
 
 :-module(xmlenc,
-	 [decrypt_xml/4   % +EncryptedXML, -DecryptedXML, +KeyCallback, +Options
+	 [ decrypt_xml/4   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
          ]).
-
 :- use_module(library(ssl)).
 :- use_module(library(sgml)).
 :- use_module(library(base64)).
+:- use_module(library(error)).
 
-% These are the 4 mandatory block cipher algorithms (actually aes-192-cbc is not mandatory, but it is easy to support)
+:- meta_predicate
+	decrypt_xml(+, -, 3, +).
+
+/** <module> XML encryption library
+
+This library is a partial implementation of the XML encryption standard.
+It implements the _decryption_ part, which is needed by SAML clients.
+
+@see https://www.w3.org/TR/xmlenc-core1/
+@see https://en.wikipedia.org/wiki/Security_Assertion_Markup_Language
+*/
+
+% These are the 4 mandatory block cipher algorithms
+% (actually aes-192-cbc is not mandatory, but it is easy to support)
 ssl_algorithm('http://www.w3.org/2001/04/xmlenc#tripledes-cbc', 'des3',         8).
 ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes128-cbc',    'aes-128-cbc', 16).
 ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes256-cbc',    'aes-256-cbc', 32).
 ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes192-cbc',    'aes-192-cbc', 24).
 
+%%	decrypt_xml(+DOMIn, -DOMOut, :KeyCallback, +Options) is det.
+%
+%	@arg KeyCallback may be called as follows:
+%		- call(KeyCallback, name,        KeyName,         Key)
+%		- call(KeyCallback, public_key,  public_key(RSA), Key)
+%		- call(KeyCallback, certificate, Certificate,     Key)
 
-:-meta_predicate(decrypt_xml(+, -, 3, +)).
 decrypt_xml([], [], _, _):- !.
-decrypt_xml([element(ns(_, 'http://www.w3.org/2001/04/xmlenc#'):'EncryptedData', Attributes, EncryptedData)|Siblings], [Decrypted|NewSiblings], KeyCallback, Options):-
-        !,
+decrypt_xml([element(ns(_, 'http://www.w3.org/2001/04/xmlenc#'):'EncryptedData',
+		     Attributes, EncryptedData)|Siblings],
+	    [Decrypted|NewSiblings], KeyCallback, Options) :- !,
         decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options),
 	decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
 
-decrypt_xml([element(Tag, Attributes, Children)|Siblings], [element(Tag, Attributes, NewChildren)|NewSiblings], KeyCallback, Options):-
-        !,
+decrypt_xml([element(Tag, Attributes, Children)|Siblings],
+	    [element(Tag, Attributes, NewChildren)|NewSiblings], KeyCallback, Options) :- !,
 	decrypt_xml(Children, NewChildren, KeyCallback, Options),
 	decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
 decrypt_xml([Other|Siblings], [Other|NewSiblings], KeyCallback, Options):-
 	decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
 
-
-
 %%       decrypt_element(+Attributes,
 %%			 +EncryptedData,
 %%			 -DecryptedElement,
 %%			 +Options).
-%        Decrypt an EncryptedData element with Attributes and child EncryptedData
-%        DecryptedElement will either be an element/3 term or a string as dictacted by
-%        the Type attribute in Attributes.
-%        If Attributes does not contain a Type attribute then we assume it is a string
+%
+%	 Decrypt an EncryptedData element  with   Attributes  and  child
+%	 EncryptedData DecryptedElement will either be an element/3 term
+%	 or a string as dictacted by   the Type attribute in Attributes.
+%	 If Attributes does not contain a  Type attribute then we assume
+%	 it is a string
 
 :-meta_predicate(decrypt_element(+, +, -, 3, +)).
 
@@ -172,6 +191,7 @@ determine_key(EncryptedData, Key, KeyCallback, Options):-
         resolve_key(KeyInfo, Key, KeyCallback, Options).
 
 :- meta_predicate resolve_key(+,-,3,+).
+
 resolve_key(Info, Key, KeyCallback, Options):-
 	% EncryptedKey
         XENC = 'http://www.w3.org/2001/04/xmlenc#',
@@ -199,14 +219,12 @@ resolve_key(Info, Key, KeyCallback, Options):-
         -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs)])
         ;  domain_error(key_transport, Algorithm)
         ).
-
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
 	% AgreementMethod. FIXME: Not implemented
 	XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
 	memberchk(element(XENC:'AgreementMethod', _KeyAttributes, _AgreementMethod), KeyInfo),
 	!,
 	throw(not_implemented).
-
 % Additionally, we are allowed to use any elements from XML-DSIG
 resolve_key(KeyInfo, Key, KeyCallback, _Options):-
 	% KeyName. Use the callback with type=name and hint=KeyName
@@ -214,14 +232,12 @@ resolve_key(KeyInfo, Key, KeyCallback, _Options):-
 	memberchk(element(DS:'KeyName', _KeyAttributes, [KeyName]), KeyInfo),
 	!,
 	call(KeyCallback, name, KeyName, Key).
-
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
 	% RetrievalMethod. FIXME: Not implemented
 	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
 	memberchk(element(DS:'RetrievalMethod', _KeyAttributes, _RetrievalMethod), KeyInfo),
 	!,
 	throw(not_implemented).
-
 resolve_key(KeyInfo, Key, KeyCallback, _Options):-
 	% KeyValue.
 	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
@@ -237,7 +253,6 @@ resolve_key(KeyInfo, Key, KeyCallback, _Options):-
 	-> throw(error(not_implemented(dsa_key), _)) % FIXME: Not implemented
 	;  existence_error(usable_key_value, KeyValue)
 	).
-
 resolve_key(KeyInfo, Key, KeyCallback, _Options):-
 	% X509Data.
 	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
@@ -250,30 +265,25 @@ resolve_key(KeyInfo, Key, KeyCallback, _Options):-
                            load_certificate(X509Stream, Certificate),
 			   close(X509Stream)),
 	call(KeyCallback, certificate, Certificate, Key).
-
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
 	% PGPData. FIXME: Not implemented
 	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
 	memberchk(element(DS:'PGPData', _KeyAttributes, _PGPData), KeyInfo),
 	!,
 	throw(not_implemented).
-
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
 	% SPKIData. FIXME: Not implemented
 	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
 	memberchk(element(DS:'SPKIData', _KeyAttributes, _SPKIData), KeyInfo),
 	!,
 	throw(not_implemented).
-
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
 	% MgmtData. FIXME: Not implemented
 	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
 	memberchk(element(DS:'MgmtData', _KeyAttributes, _SPKIData), KeyInfo),
 	!,
 	throw(not_implemented).
-
-
-resolve_key(Info, _, _):-
+resolve_key(Info, _, _, _):-
 	% The XML-ENC standard allows for arbitrary other means of transmitting keys in application-specific
 	% protocols. This is not supported here, though. In the future a callback could be provided in Options
 	% to obtain the key information from a KeyInfo structure.
