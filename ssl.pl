@@ -242,6 +242,14 @@ ssl_context(Role, SSL, Module:Options) :-
 %	called to negotiate an SSL  session   over  the  streams. If the
 %	negotiation is successful, SSLRead and SSLWrite are returned.
 %
+%	After a successful handshake and finishing the communication the
+%	user  must  close  SSLRead  and   SSLWrite,  for  example  using
+%	call_cleanup(close(SSLWrite),  close(SSLRead)).  If    the   SSL
+%	_context_   (created   with   ssl_context/3   has   the   option
+%	close_parent(true)  (default  `false`),  closing    SSLRead  and
+%	SSLWrite also closes  the  original   PlainRead  and  PlainWrite
+%	streams. Otherwise these must be closed explicitly by the user.
+%
 %	@error ssl_error(Code, LibName, FuncName, Reason) is raised
 %	if the negotiation fails. The streams PlainRead and PlainWrite
 %	are *not* closed, but an unknown amount of data may have been
