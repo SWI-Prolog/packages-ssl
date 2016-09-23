@@ -456,7 +456,7 @@ process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, A
                    (  member(element(SAML:'Audience', _, [Audience]), AudienceRestriction),
                       Audience == ServiceProvider
                    -> true
-                   ;  permission_error(accept, assertion, Audience)
+                   ;  permission_error(accept, assertion, AudienceRestriction)
                    )),
             ( memberchk(element(SAML:'OneTimeUse', _, _), Conditions)->
                 throw(one_time_use_not_supported)
