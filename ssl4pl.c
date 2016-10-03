@@ -1162,11 +1162,15 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
   if (!PL_get_atom(method, &method_name))
      return PL_domain_error("ssl_method", method);
-  if (method_name == ATOM_sslv3)
-    ssl_method = SSLv3_method();
+  if (method_name == ATOM_sslv23)
+    ssl_method = SSLv23_method();
 #ifndef OPENSSL_NO_SSL2
   else if (method_name == ATOM_sslv2)
     ssl_method = SSLv2_method();
+#endif
+#ifndef OPENSSL_NO_SSL3_METHOD
+  else if (method_name == ATOM_sslv3)
+    ssl_method = SSLv3_method();
 #endif
 #ifdef SSL_OP_NO_TLSv1
   else if (method_name == ATOM_tlsv1)
@@ -1180,8 +1184,6 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   else if (method_name == ATOM_tlsv1_2)
     ssl_method = TLSv1_2_method();
 #endif
-  else if (method_name == ATOM_sslv23)
-    ssl_method = SSLv23_method();
   else
     return PL_domain_error("ssl_method", method);
 
