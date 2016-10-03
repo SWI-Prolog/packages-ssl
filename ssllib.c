@@ -807,7 +807,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
           case X509_V_ERR_INVALID_PURPOSE:
             error = "bad_certificate_use";
             break;
-#ifdef HAVE_X509_CHECK_HOST
+#ifdef X509_V_ERR_HOSTNAME_MISMATCH
           case X509_V_ERR_HOSTNAME_MISMATCH:
             error = "hostname_mismatch";
             break;
