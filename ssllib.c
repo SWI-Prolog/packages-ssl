@@ -1363,8 +1363,11 @@ ssl_config(PL_SSL *config, term_t options)
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
  */
-{ EC_KEY *ecdh;
+{
+#ifndef OPENSSL_NO_EC
+  EC_KEY *ecdh;
   int nid;
+#endif
 
   ssl_init_verify_locations(config);
 
@@ -1396,12 +1399,14 @@ ssl_config(PL_SSL *config, term_t options)
 
   SSL_CTX_set_tmp_dh(config->pl_ssl_ctx, get_dh2048());
 
+#ifndef OPENSSL_NO_EC
   nid = OBJ_sn2nid(config->pl_ssl_ecdh_curve ? config->pl_ssl_ecdh_curve
 					     : "prime256v1");
   if ( !(ecdh = EC_KEY_new_by_curve_name(nid)) )
     return raise_ssl_error(ERR_get_error());
   if ( !SSL_CTX_set_tmp_ecdh(config->pl_ssl_ctx, ecdh) )
     return raise_ssl_error(ERR_get_error());
+#endif
 
   if ( config->pl_ssl_cipher_list &&
        !SSL_CTX_set_cipher_list(config->pl_ssl_ctx, config->pl_ssl_cipher_list))
