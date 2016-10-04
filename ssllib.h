@@ -92,12 +92,9 @@ typedef struct pl_ssl {
     X509 *              pl_ssl_peer_cert;
 
     /*
-     * In case of the server the hosts we're accepting (NULL for any),
-     * in case of the client the host we're connecting to.
-     * We also store the socket file descriptor.
+     * In case of the client the host we're connecting to.
      */
     char *              pl_ssl_host;
-    int                 pl_ssl_port;
 
     /*
      * Various parameters affecting the SSL layer

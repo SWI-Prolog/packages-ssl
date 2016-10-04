@@ -230,11 +230,11 @@ typically need to ensure they have a secure connection to their
 peer. To do this, first obtain a non-secure connection to the peer (eg
 via a TCP socket connection). Then create an SSL context via
 ssl_context/3. For the client initiating the connection, the role is
-'client', and you should pass options host/1, port/1 and cacert_file/1
+'client', and you should pass options host/1 and cacert_file/1
 at the very least. If you expect the peer to have a certificate which
 would be accepted by your host system, you can pass
-cacert_file(system(root_certificates)), otherwise you will need a copy
-of the CA certificate which was used to sign the peer's
+\term{cacert_file}{system(root_certificates)}, otherwise you will need
+a copy of the CA certificate which was used to sign the peer's
 certificate. Alternatively, you can pass cert_verify_hook/1 to write
 your own custom validation for the peer's certificate. Depending on
 the requirements, you may also have to provide your /own/ certificate

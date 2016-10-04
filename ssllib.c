@@ -329,7 +329,6 @@ ssl_new(void)
 
         new->use_system_cacert          = FALSE;
         new->pl_ssl_host                = NULL;
-        new->pl_ssl_port                = -1;
 
         new->pl_ssl_cacert              = NULL;
         new->pl_ssl_cert_required       = FALSE;
@@ -549,15 +548,6 @@ ssl_set_host(PL_SSL *config, const char *host)
         config->pl_ssl_host = ssl_strdup(host);
     }
     return config->pl_ssl_host;
-}
-
-int
-ssl_set_port(PL_SSL *config, int port)
-/*
- * Store supplied port in config storage
- */
-{
-    return config->pl_ssl_port = port;
 }
 
 BOOL
