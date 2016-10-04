@@ -129,6 +129,11 @@ easily be used.
 %	Prolog streams into encrypted streams.  This predicate processes
 %	the options below.
 %
+%	  * host(+HostName)
+%	  For the client, the host to which it connects. This option
+%	  _should_ be specified when Role is `client`. Otherwise,
+%	  certificate verification may fail when negotiating a
+%	  secure connection.
 %	  * certificate_file(+FileName)
 %	  Specify where the certificate file can be found. This can
 %	  be the same as the key_file(+FileName) option.  A certificate
