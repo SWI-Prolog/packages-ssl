@@ -147,18 +147,6 @@ get_char_arg(int a, term_t t, char **s)
 
 
 static int
-get_int_arg(int a, term_t t, int *i)
-{ term_t t2 = PL_new_term_ref();
-
-  _PL_get_arg(a, t, t2);
-  if ( !PL_get_integer_ex(t2, i) )
-    return FALSE;
-
-  return TRUE;
-}
-
-
-static int
 get_bool_arg(int a, term_t t, int *i)
 { term_t t2 = PL_new_term_ref();
 
