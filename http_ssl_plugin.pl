@@ -78,8 +78,7 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
 	make_socket(Port, Socket, Options0),
 	ssl_context(server,
                     SSL,
-                    M:[ port(Port),
-                        close_parent(true)
+                    M:[ close_parent(true)
                       | SSLOptions
                       ]),
 	atom_concat('httpsd', Port, Queue),
@@ -143,9 +142,7 @@ http:http_protocol_hook(wss, Parts, PlainStreamPair, StreamPair, Options) :-
 
 ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
         memberchk(host(Host), Parts),
-        option(port(Port), Parts, 443),
 	ssl_context(client, SSL, [ host(Host),
-                                   port(Port),
                                    close_parent(true)
 				 | Options
 				 ]),
