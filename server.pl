@@ -41,27 +41,31 @@
 :- debug(connection).
 
 server :-
-	ssl_init(SSL, server,
-		 [ host('localhost'),
-                   port(1111),
-                   peer_cert(true),
-		   cacert_file('etc/demoCA/cacert.pem'),
-		   certificate_file('etc/server/server-cert.pem'),
-		   key_file('etc/server/server-key.pem'),
-               	   cert_verify_hook(get_cert_verify),
-%		   password('apenoot1'),
-		   pem_password_hook(get_server_pwd)
-		 ]),
-	thread_create(server_loop(SSL), _, []).
+	ssl_context(server, SSL,
+		    [ peer_cert(true),
+		      cacert_file('etc/demoCA/cacert.pem'),
+		      certificate_file('etc/server/server-cert.pem'),
+		      key_file('etc/server/server-key.pem'),
+		      cert_verify_hook(get_cert_verify),
+		      % password('apenoot1'),
+		      pem_password_hook(get_server_pwd)
+		    ]),
+	Port = 1111,
+	tcp_socket(Socket),
+	tcp_setopt(Socket, reuseaddr),
+	tcp_bind(Socket, localhost:Port),
+	tcp_listen(Socket, 5),
+	thread_create(server_loop(SSL, Socket), _, []).
 
-server_loop(SSL) :-
-	ssl_accept(SSL, Socket, Peer),
+server_loop(SSL, Server) :-
+	tcp_accept(Server, Socket, Peer),
+	tcp_open_socket(Socket, Read, Write),
 	debug(connection, 'Connection from ~p', [Peer]),
-	ssl_open(SSL, Socket, In, Out),
-	copy_client(In, Out),
-	close(In),
-	close(Out),
-	server_loop(SSL).
+	ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
+	copy_client(SSLRead, SSLWrite),
+	close(SSLRead),
+	close(SSLWrite),
+	server_loop(SSL, Server).
 
 copy_client(In, Out) :-
 	read_line_to_codes(In, Line),
