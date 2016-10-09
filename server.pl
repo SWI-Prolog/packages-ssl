@@ -59,8 +59,13 @@ server :-
 
 server_loop(SSL, Server) :-
 	tcp_accept(Server, Socket, Peer),
-	tcp_open_socket(Socket, Read, Write),
 	debug(connection, 'Connection from ~p', [Peer]),
+	setup_call_cleanup(tcp_open_socket(Socket, Read, Write),
+			   handle_client(SSL, Read, Write),
+			   tcp_close_socket(Socket)),
+	server_loop(SSL, Server).
+
+handle_client(SSL, Read, Write) :-
 	catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
 	      Exception,
 	      true),
@@ -68,8 +73,7 @@ server_loop(SSL, Server) :-
 	->  format("Exception during negotation: ~w~n", [Exception])
 	;   copy_client(SSLRead, SSLWrite),
 	    call_cleanup(close(SSLRead), close(SSLWrite))
-	),
-	server_loop(SSL, Server).
+	).
 
 copy_client(In, Out) :-
 	read_line_to_codes(In, Line),
