@@ -41,7 +41,6 @@
 client :-
 	ssl_context(client, SSL,
 		 [ host('localhost'),
-		   peer_cert(true),
 		   cacert_file('etc/demoCA/cacert.pem'),
 		   certificate_file('etc/client/client-cert.pem'),
 		   key_file('etc/client/client-key.pem'),
