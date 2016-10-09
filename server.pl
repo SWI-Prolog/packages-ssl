@@ -76,7 +76,7 @@ copy_client(In, Out) :-
 get_server_pwd(_SSL, apenoot1) :-
 	format('Returning password from server passwd hook~n').
 
-get_cert_verify(_SSL, Certificate, Error) :-
+get_cert_verify(_SSL, Certificate, _AllCerts, _FirstCert, Error) :-
 	format('Handling detailed certificate verification~n'),
 	format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
 	format('Server accepts the client certificate~n').
