@@ -41,6 +41,7 @@
 client :-
 	ssl_context(client, SSL,
 		 [ host('localhost'),
+		   cert_verify_hook(cert_verify),
 		   cacert_file('etc/demoCA/cacert.pem'),
 		   certificate_file('etc/client/client-cert.pem'),
 		   key_file('etc/client/client-key.pem'),
@@ -71,3 +72,7 @@ write_server(In, Out) :-
 user:get_client_pwd(_SSL, apenoot2) :-
 	format('Returning password from client passwd hook~n').
 
+cert_verify(_SSL, Certificate, _AllCerts, _FirstCert, Error) :-
+	format('Handling detailed certificate verification~n'),
+	format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
+	format('Client accepts the server certificate~n').
