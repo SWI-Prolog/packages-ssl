@@ -106,9 +106,9 @@ by the TCP predicates and the context.
 
 	| *The SSL Server*	| *The SSL Client*	|
 	| ssl_context/3		| ssl_context/3		|
-	| tcp_socket/1		| tcp_socket/1		|
-	| tcp_accept/3		| tcp_connect/2		|
-	| tcp_open_socket/3	| tcp_open_socket/3	|
+	| tcp_socket/1		| 			|
+	| tcp_accept/3		| tcp_connect/3		|
+	| tcp_open_socket/3	| stream_pair/3		|
 	| ssl_negotiate/5	| ssl_negotiate/5	|
 
 The library is abstracted to communication over streams, and is not
