@@ -57,8 +57,7 @@ client_loop(In, Out) :-
 	write_server(In, Out),
 	write_server(In, Out),
 	write_server(In, Out),
-	close(In),
-	close(Out).
+	call_cleanup(close(In), close(Out)).
 
 write_server(In, Out) :-
 	format(Out, 'Hello~n', ''),

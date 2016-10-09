@@ -64,11 +64,10 @@ server_loop(SSL, Server) :-
 	catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
 	      Exception,
 	      true),
-	(   nonvar(Exception) ->
-	    format("Exception during negotation: ~w~n", [Exception])
+	(   nonvar(Exception)
+	->  format("Exception during negotation: ~w~n", [Exception])
 	;   copy_client(SSLRead, SSLWrite),
-	    close(SSLRead),
-	    close(SSLWrite)
+	    call_cleanup(close(SSLRead), close(SSLWrite))
 	),
 	server_loop(SSL, Server).
 
