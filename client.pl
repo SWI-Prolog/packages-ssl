@@ -39,21 +39,22 @@
 :- use_module(library(ssl)).
 
 client :-
-	ssl_init(SSL, client,
+	ssl_context(client, SSL,
 		 [ host('localhost'),
-                   port(1111),
-                   peer_cert(true),
+		   peer_cert(true),
 		   cacert_file('etc/demoCA/cacert.pem'),
 		   certificate_file('etc/client/client-cert.pem'),
 		   key_file('etc/client/client-key.pem'),
 %		   password('apenoot2'),
 		   pem_password_hook(get_client_pwd)
 		 ]),
-	client_loop(SSL),
-        ssl_exit(SSL).
+	Port = 1111,
+	tcp_connect(localhost:Port, StreamPair, []),
+	stream_pair(StreamPair, Read, Write),
+	ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
+	client_loop(SSLRead, SSLWrite).
 
-client_loop(SSL) :-
-	ssl_open(SSL, In, Out),
+client_loop(In, Out) :-
 	write_server(In, Out),
 	write_server(In, Out),
 	write_server(In, Out),
@@ -61,8 +62,8 @@ client_loop(SSL) :-
 	close(Out).
 
 write_server(In, Out) :-
-        format(Out, 'Hello~n', ''),
-        flush_output(Out),
+	format(Out, 'Hello~n', ''),
+	flush_output(Out),
 	read_line_to_codes(In, Line),
 	(   Line == end_of_file
 	->  true
