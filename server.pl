@@ -44,7 +44,6 @@ server :-
 	ssl_init(SSL, server,
 		 [ host('localhost'),
                    port(1111),
-                   cert(true),
                    peer_cert(true),
 		   cacert_file('etc/demoCA/cacert.pem'),
 		   certificate_file('etc/server/server-cert.pem'),

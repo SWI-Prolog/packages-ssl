@@ -42,7 +42,6 @@ client :-
 	ssl_init(SSL, client,
 		 [ host('localhost'),
                    port(1111),
-                   cert(true),
                    peer_cert(true),
 		   cacert_file('etc/demoCA/cacert.pem'),
 		   certificate_file('etc/client/client-cert.pem'),
