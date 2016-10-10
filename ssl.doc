@@ -373,15 +373,19 @@ visible. It is not needed to decrypt the traffic using port forwarding,
 but it is also not possible to realise \jargon{virtual hosts} or
 \jargon{path-based} proxy rules.
 
+There is a TLS~extension called \jargon{Server Name Indication}~(SNI)
+which allows virtual hosts for~HTTPS. However, server-side~SNI is
+currently not implemented by this~library.
+
 \section{Acknowledgments}
 \label{sec:ssl-acknowledgments}
 
 The development of the SWI-Prolog SSL interface has been sponsored by
 \href{http://www.sss.co.nz}{Scientific Software and Systems Limited}.
 The current version contains contributions from many people.  Besides
-the mentioned authors, Markus Triska has submitted several patches,
-improved and documented the integration of this package with the HTTP
-infrastructure.
+the mentioned authors, \href{https://www.metalevel.at}{Markus Triska}
+has submitted several patches, and improved and documented the
+integration of this package with the HTTP infrastructure.
 
 \bibliographystyle{plain}
 \bibliography{odbc}
