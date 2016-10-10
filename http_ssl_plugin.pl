@@ -149,7 +149,7 @@ ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
         stream_pair(PlainStreamPair, PlainIn, PlainOut),
         catch(ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
               Exception,
-              ( ssl_exit(SSL), throw(Exception)) ),
+              ( close(PlainStreamPair), throw(Exception)) ),
         stream_pair(StreamPair, In, Out).
 
 %%	http:open_options(Parts, Options) is nondet.
