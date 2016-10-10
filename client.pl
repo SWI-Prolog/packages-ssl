@@ -52,7 +52,9 @@ client :-
 	Port = 1111,
 	tcp_connect(localhost:Port, StreamPair, []),
 	stream_pair(StreamPair, Read, Write),
-	ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
+	catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
+	      E,
+	      ( close(StreamPair), throw(E))),
 	client_loop(SSLRead, SSLWrite).
 
 client_loop(In, Out) :-
