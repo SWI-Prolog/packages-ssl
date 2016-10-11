@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2007-2015, University of Amsterdam
+    Copyright (c)  2007-2016, University of Amsterdam
                               VU University Amsterdam
     All rights reserved.
 
@@ -147,9 +147,8 @@ ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
 				 | Options
 				 ]),
         stream_pair(PlainStreamPair, PlainIn, PlainOut),
-        catch(ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
-              Exception,
-              ( close(PlainStreamPair), throw(Exception)) ),
+        % if an exception arises, http_open/3 closes the stream for us
+        ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
         stream_pair(StreamPair, In, Out).
 
 %%	http:open_options(Parts, Options) is nondet.
