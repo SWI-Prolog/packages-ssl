@@ -509,7 +509,7 @@ condition_holds(_ConditionAttributes, _Condition):-
 get_xml_timestamp(Date):-
         get_time(Time),
         stamp_date_time(Time, date(Y, M, D, HH, MM, SSF, _, 'UTC', _), 'UTC'),
-        SS is integer(SSF),
+        SS is floor(SSF),
         format(atom(Date), '~w-~|~`0t~w~2+-~|~`0t~w~2+T~|~`0t~w~2+:~|~`0t~w~2+:~|~`0t~w~2+Z', [Y,M,D,HH,MM,SS]).
 
 
