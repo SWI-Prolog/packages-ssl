@@ -278,22 +278,21 @@ get_cert_verify(SSL,
 		 *******************************/
 
 client :-
-	ssl_init(SSL, client,
+	ssl_context(client, SSL,
 		 [ host('localhost'),
-                   port(1111),
-		   cert(true),
-		   peer_cert(true),
 		   cacert_file('tests/test_certs/rootCA/cacert.pem'),
 		   certificate_file('tests/test_certs/client-cert.pem'),
 		   key_file('tests/test_certs/client-key.pem'),
 %		   password('apenoot2'),
 		   pem_password_hook(get_client_pwd)
 		 ]),
-	client_loop(SSL),
-        ssl_exit(SSL).
+	client_loop(SSL).
 
 client_loop(SSL) :-
-	ssl_open(SSL, In, Out),
+	Port = 1111,
+	tcp_connect(localhost:Port, StreamPair, []),
+	stream_pair(StreamPair, Read, Write),
+	ssl_negotiate(SSL, Read, Write, In, Out),
         set_stream(In, timeout(1)),
 	Message = 'Hello world',
 	write_server(Message, In, Out),
@@ -303,8 +302,7 @@ client_loop(SSL) :-
 	;   true
 	),
 	write_server(bye, In, Out),
-	close(In),
-	close(Out).
+	call_cleanup(close(In), close(Out)).
 
 write_server(Message, In, Out) :-
 	debug(data, 'CLIENT: writing: ~q~n', [Message]),
