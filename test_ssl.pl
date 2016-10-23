@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2013-2015, University of Amsterdam
+    Copyright (c)  2013-2016, University of Amsterdam
                               VU University Amsterdam
     All rights reserved.
 
@@ -165,8 +165,8 @@ test(trip_public_private, In == Out) :-
 :- begin_tests(ssl_server).
 
 test(server) :-
-	make_server(SSL),
-	thread_create(server_loop(SSL), Id, []),
+	make_server(SSL, Socket),
+	thread_create(server_loop(SSL, Socket), Id, []),
 	(   catch(client, E, true)
 	->  (   var(E)
 	    ->	thread_join(Id, Status),
@@ -194,8 +194,8 @@ test_ssl(N) :-
 	).
 
 ssl_server :-
-	make_server(SSL),
-        server_loop(SSL).
+	make_server(SSL, Socket),
+	server_loop(SSL, Socket).
 
 		 /*******************************
 		 *	       SERVER		*
@@ -204,34 +204,36 @@ ssl_server :-
 :- dynamic
 	stop_server/0.
 
-make_server(SSL) :-
-	ssl_init(SSL, server,
-		 [ host('localhost'),
-                   port(1111),
-                   cert(true),
-                   peer_cert(true),
-		   cacert_file('tests/test_certs/rootCA/cacert.pem'),
-		   certificate_file('tests/test_certs/server-cert.pem'),
-		   key_file('tests/test_certs/server-key.pem'),
-		   cert_verify_hook(get_cert_verify),
-%		   password('apenoot1'),
-		   pem_password_hook(get_server_pwd)
-		 ]).
+make_server(SSL, Socket) :-
+	ssl_context(server, SSL,
+		    [ peer_cert(true),
+		      cacert_file('tests/test_certs/rootCA/cacert.pem'),
+		      certificate_file('tests/test_certs/server-cert.pem'),
+		      key_file('tests/test_certs/server-key.pem'),
+		      cert_verify_hook(get_cert_verify),
+%		      password('apenoot1'),
+		      pem_password_hook(get_server_pwd)
+		    ]),
+	Port = 1111,
+	tcp_socket(Socket),
+	tcp_setopt(Socket, reuseaddr),
+	tcp_bind(Socket, localhost:Port),
+	tcp_listen(Socket, 5).
 
-server_loop(SSL) :-
-	ssl_accept(SSL, Socket, Peer),
+server_loop(SSL, Server) :-
+	tcp_accept(Server, Socket, Peer),
 	debug(connection, 'Connection from ~p', [Peer]),
-	ssl_open(SSL, Socket, In, Out),
+	tcp_open_socket(Socket, Read, Write),
+	ssl_negotiate(SSL, Read, Write, In, Out),
 	(   option(timeout(T))
 	->  set_stream(In, timeout(T))
 	;   true
 	),
 	catch(copy_client(In, Out), E,
 	      assert(copy_error(E))),
-	close(In),
-	close(Out),
+	call_cleanup(close(In),	close(Out)),
 	(   retract(stop_server)
-	->  ssl_exit(SSL)
+	->  tcp_close_socket(Server)
 	;   server_loop(SSL)
 	).
 
