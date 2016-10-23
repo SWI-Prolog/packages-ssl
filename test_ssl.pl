@@ -384,14 +384,12 @@ verification_server_1(TestKey, Id, ServerFd):-
         tcp_listen(ServerFd, 5),
         format(atom(Key), 'tests/test_certs/~w-key.pem', [TestKey]),
         format(atom(Cert), 'tests/test_certs/~w-cert.pem', [TestKey]),
-        setup_call_cleanup(ssl_context(server,
-                                       SSL,
-                                       [ certificate_file(Cert),
-                                         key_file(Key),
-                                         password("apenoot")
-                                       ]),
-                           verification_server_loop(Id, ServerFd, SSL),
-                           ssl_exit(SSL)).
+        ssl_context(server, SSL,
+                    [ certificate_file(Cert),
+                      key_file(Key),
+                      password("apenoot")
+                    ]),
+        verification_server_loop(Id, ServerFd, SSL).
 
 verification_server_loop(Id, _ServerFd, _SSL) :-
         retract(stop_server(Id)), !.
@@ -417,22 +415,19 @@ dispatch_client(SSL, PlainIn, PlainOut):-
         read_line_to_codes(SSLIn, Codes),
         format(SSLOut, '~s~n', [Codes]),
         flush_output(SSLOut),
-        close(SSLOut),
-        close(SSLIn).
+        call_cleanup(close(SSLOut), close(SSLIn)).
 
 try_ssl_client(Hostname, Port, Hook):-
         try_ssl_client(Hostname, Port, Hook, []).
 
 try_ssl_client(Hostname, Port, Hook, Options):-
-        setup_call_cleanup(ssl_context(client,
-                                       SSL,
-                                       [ host(Hostname),
-                                         port(Port),
-                                         cert_verify_hook(Hook),
-                                         cacert_file('tests/test_certs/rootCA/cacert.pem')|Options]),
-                           % Always connect to localhost
-                           verify_client(localhost:Port, SSL),
-                           ssl_exit(SSL)).
+        ssl_context(client, SSL,
+                    [ host(Hostname),
+                      port(Port),
+                      cert_verify_hook(Hook),
+                      cacert_file('tests/test_certs/rootCA/cacert.pem')|Options]),
+        % Always connect to localhost
+        verify_client(localhost:Port, SSL).
 
 verify_client(Address, SSL) :-
         tcp_socket(S),
