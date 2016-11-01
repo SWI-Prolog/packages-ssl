@@ -850,18 +850,6 @@ pl_load_public_key(term_t source, term_t key_t)
 }
 
 
-static int
-private_password_callback(char *buf, int bufsiz, int verify, void* pw)
-{ char *password = (char*)pw;
-  size_t res = strlen(password);
-
-  if ( res > (size_t)bufsiz )
-    res = bufsiz;
-  memcpy(buf, password, res);
-
-  return res;
-}
-
 static foreign_t
 pl_load_private_key(term_t source, term_t password, term_t key_t)
 { EVP_PKEY* key;
@@ -883,9 +871,7 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
   if (c == 0x30)  /* ASN.1 sequence, so assume DER */
     key = d2i_PrivateKey_bio(bio, NULL); /* TBD: Password! */
   else
-    key = PEM_read_bio_PrivateKey(bio, NULL,
-				  &private_password_callback,
-				  (void*)password_chars);
+    key = PEM_read_bio_PrivateKey(bio, NULL, NULL, (void*)password_chars);
   BIO_free(bio);
   PL_release_stream(stream);
 
