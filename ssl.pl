@@ -367,7 +367,7 @@ ssl_context(Role, SSL, Module:Options) :-
 %	key must be an RSA key. EC, DH   and DSA keys are not supported,
 %	and PrivateKey will be  bound  to   an  atom  (ec_key, dh_key or
 %	dsa_key) if you try and load   such  a key. Otherwise PrivateKey
-%	will be unified with privtate_key(KeyTerm)   where  KeyTerm is a
+%	will be unified with private_key(KeyTerm)   where  KeyTerm is a
 %	rsa/8 term representing an RSA key.
 
 %%      load_public_key(+Stream, -PublicKey) is det.
