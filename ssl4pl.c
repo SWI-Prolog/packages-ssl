@@ -1067,7 +1067,7 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
     { if ( len >= (unsigned int)size )
       { PL_warning("pem_passwd too long");
       } else
-      { memcpy(buf, passwd, len);
+      { memcpy(buf, passwd, len+1);
 	passwd = buf;
       }
     } else
