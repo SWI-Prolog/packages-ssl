@@ -122,12 +122,12 @@ easily be used.
 
 %%	ssl_context(+Role, -SSL, :Options) is det.
 %
-%	Create an SSL context. The defines several properties of the SSL
-%	connection such as  involved  keys,   preferred  encryption  and
-%	passwords. After establishing a context,   an SSL connection can
-%	be negotiated using ssl_negotiate/5, turning two arbitrary plain
-%	Prolog streams into encrypted streams.  This predicate processes
-%	the options below.
+%	Create an  SSL context.  The context  defines several properties
+%	of  the   SSL  connection  such  as   involved  keys,  preferred
+%	encryption, and passwords. After  establishing a context, an SSL
+%	connection can be negotiated  using ssl_negotiate/5, turning two
+%	arbitrary  plain Prolog  streams into  encrypted streams.   This
+%	predicate processes the options below.
 %
 %	  * host(+HostName)
 %	  For the client, the host to which it connects. This option
@@ -141,13 +141,12 @@ easily be used.
 %	  client if the server demands the client to identify itself
 %	  with a client certificate using the peer_cert(true) option. If
 %	  a certificate is provided, it is always necessary to provide a
-%	  matching \jargon{private key} using the key_file(+FileName)
-%	  option.
+%	  matching _private key_ using the key_file(+FileName) option.
 %	  * key_file(+FileName)
 %	  Specify where the private key that matches the certificate can
 %	  be found.  If the key is encrypted with a password, this must
 %	  be supplied using the password(+Text) or
-%	  pem_password_hook(:PredicateName) option.
+%	  =|pem_password_hook(:PredicateName)|= option.
 %	  * password(+Text)
 %	  Specify the password the private key is protected with (if
 %	  any). If you do not want to store the password you can also
