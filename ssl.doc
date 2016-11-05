@@ -295,27 +295,36 @@ security aspects.
 \subsection{Creating an HTTPS server}
 \label{sec:ssl-https-server}
 
-The HTTP server is started in HTTPS mode by adding an option \const{ssl}
-to http_server/2. The argument of the \const{ssl} option is an option
-list passed to ssl_context/3.  Note that a server requires two items:
+The SWI-Prolog infrastructure provides two main ways to launch an
+HTTPS~server:
 
-    \begin{enumerate}
-    \item The \jargon{server certificate} identifies the server and
-	  acts as a \jargon{public key} for the encryption.
-    \item The \jargon{server key} provides the matching \jargon{private key}
-	  and must be kept secret. It key \textit{may} be protected by a
-	  password. If this is the case, the server must provide the
-	  password by means of the \const{password} option or the
-	  \const{pem_password_hook} callback.
-    \end{enumerate}
+\begin{itemize}
+\item Using \const{library(http/thread_httpd)}, the server is started
+  in HTTPS~mode by adding an option~\const{ssl/1} to
+  http_server/2. The argument of \const{ssl/1} is an option list that
+  is passed as the third argument to ssl_context/3.
+\item Using \const{library(http/http_unix_daemon)}, an HTTPS~server is
+  started by using the command line argument~\const{--https}.
+\end{itemize}
+
+At least two items must be specified as, respectively, options or
+additional command~line arguments:
+
+\begin{itemize}
+\item \textbf{server certificate}. This identifies the server and
+  acts as a \jargon{public key} for the encryption.
+\item \textbf{private key} of the server, which must be kept secret.
+  The key \textit{may} be protected by a password. If this is the
+  case, the server must provide the password by means of the
+  \const{password} option, the \const{pem_password_hook} callback
+  or, in case of the Unix daemon, via the \const{--pwfile} or
+  \const{--password} command line options.
+\end{itemize}
 
 Below is an example that uses the self-signed demo certificates
-distributed with the SSL package. This version does not require a
-certificate from the client, which is the normal case for publically
-accessible HTTPS servers. The example file \file{https.pl} also provides
-a server that does require the client to show its certificate. This
-version provides an additional level of security, often used to allow a
-selected set of clients to perform sensitive tasks.
+distributed with the SSL package. As is typical for publicly
+accessible HTTPS~servers, this version does \textit{not} require a
+certificate from the~client:
 
 \begin{code}
 :- use_module(library(http/thread_httpd)).
@@ -332,7 +341,12 @@ https_server(Port, Options) :-
                     ]).
 \end{code}
 
-Note that a single Prolog server can call http_server/2 with different
+The example file \file{https.pl} also provides a server that
+\textit{does} require the client to show its certificate. This
+provides an additional level of security, often used to allow a
+selected set of clients to perform sensitive tasks.
+
+Note that a single Prolog program can call http_server/2 with different
 parameters to provide services at several security levels as described
 below. These servers can either use their own dispatching or commonly
 use http_dispatch/1 and check the \const{port} property of the request
