@@ -355,6 +355,7 @@ ssl_new(void)
         new->pl_ssl_cacert              = NULL;
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
+        new->pl_ssl_certificate         = NULL;
         new->pl_ssl_keyf                = NULL;
         new->pl_ssl_key                 = NULL;
         new->pl_ssl_cipher_list         = NULL;
@@ -495,6 +496,19 @@ ssl_set_certf(PL_SSL *config, const char *certf)
         config->pl_ssl_certf = ssl_strdup(certf);
     }
     return config->pl_ssl_certf;
+}
+
+char *
+ssl_set_certificate(PL_SSL *config, const char *cert)
+/*
+ * Store certificate in config storage
+ */
+{
+    if (cert) {
+        if (config->pl_ssl_certificate) free(config->pl_ssl_certificate);
+        config->pl_ssl_certificate = ssl_strdup(cert);
+    }
+    return config->pl_ssl_certificate;
 }
 
 char *
@@ -1402,17 +1416,45 @@ ssl_config(PL_SSL *config, term_t options)
   ssl_deb(1, "password handler installed\n");
 
   if ( config->pl_ssl_cert_required ||
-       ( config->pl_ssl_certf &&
+       ( ( config->pl_ssl_certf || config->pl_ssl_certificate ) &&
          ( config->pl_ssl_keyf || config->pl_ssl_key ) ) )
-  { if (config->pl_ssl_certf == NULL)
+  { if ( config->pl_ssl_certf == NULL &&
+         config->pl_ssl_certificate == NULL )
       return PL_existence_error("certificate", options);
     if ( config->pl_ssl_keyf  == NULL &&
          config->pl_ssl_key   == NULL )
       return PL_existence_error("key_file", options);
 
-    if ( SSL_CTX_use_certificate_chain_file(config->pl_ssl_ctx,
+    if ( config->pl_ssl_certf &&
+         SSL_CTX_use_certificate_chain_file(config->pl_ssl_ctx,
                                             config->pl_ssl_certf) <= 0 )
       return raise_ssl_error(ERR_get_error());
+
+    if ( config->pl_ssl_certificate )
+    { char* cert = config->pl_ssl_certificate;
+      X509* certX509;
+
+      BIO* bio = BIO_new(BIO_s_mem());
+
+      if ( !bio )
+        return PL_resource_error("memory");
+
+      BIO_write(bio, cert, strlen(cert));
+      certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+      if ( !certX509 )
+        return raise_ssl_error(ERR_get_error());
+
+      if ( SSL_CTX_use_certificate(config->pl_ssl_ctx, certX509) <= 0 )
+        return raise_ssl_error(ERR_get_error());
+
+      while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
+      { if ( SSL_CTX_add_extra_chain_cert(config->pl_ssl_ctx, certX509) <= 0 )
+          return raise_ssl_error(ERR_get_error());
+      }
+
+      BIO_free(bio);
+    }
+
     if ( config->pl_ssl_keyf &&
          SSL_CTX_use_PrivateKey_file(config->pl_ssl_ctx,
 				     config->pl_ssl_keyf,

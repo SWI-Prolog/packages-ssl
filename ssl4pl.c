@@ -54,6 +54,7 @@ static atom_t ATOM_cacert_file;
 static atom_t ATOM_require_crl;
 static atom_t ATOM_crl;
 static atom_t ATOM_certificate_file;
+static atom_t ATOM_certificate;
 static atom_t ATOM_key_file;
 static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
@@ -1264,6 +1265,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_certf(conf, file);
+    } else if ( name == ATOM_certificate && arity == 1 )
+    { char *s;
+
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
+
+      ssl_set_certificate(conf, s);
     } else if ( name == ATOM_key_file && arity == 1 )
     { char *file;
 
@@ -2117,6 +2125,7 @@ install_ssl4pl(void)
   ATOM_peer_cert          = PL_new_atom("peer_cert");
   ATOM_cacert_file        = PL_new_atom("cacert_file");
   ATOM_certificate_file   = PL_new_atom("certificate_file");
+  ATOM_certificate        = PL_new_atom("certificate");
   ATOM_key_file           = PL_new_atom("key_file");
   ATOM_key                = PL_new_atom("key");
   ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
