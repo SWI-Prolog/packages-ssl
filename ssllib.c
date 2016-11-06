@@ -312,14 +312,20 @@ ssl_rsadup(const RSA *rsa)
 {
     RSA *c = RSA_new();
 
-    c->n = rsa->n;
-    c->e = rsa->e;
-    c->d = rsa->d;
-    c->p = rsa->p;
-    c->q = rsa->q;
-    c->dmp1 = rsa->dmp1;
-    c->dmq1 = rsa->dmq1;
-    c->iqmp = rsa->iqmp;
+    if (c != NULL) {
+      c->n = BN_dup(rsa->n);
+      c->e = BN_dup(rsa->e);
+      c->d = BN_dup(rsa->d);
+      c->p = BN_dup(rsa->p);
+      c->q = BN_dup(rsa->q);
+      c->dmp1 = BN_dup(rsa->dmp1);
+      c->dmq1 = BN_dup(rsa->dmq1);
+      c->iqmp = BN_dup(rsa->iqmp);
+    }
+
+    if (c->n == NULL || c->e == NULL || c->d == NULL || c->p == NULL ||
+        c->q == NULL || c->dmp1 == NULL || c->dmq1 == NULL || c->iqmp == NULL)
+      return NULL;
 
     return c;
 }
