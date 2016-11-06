@@ -140,8 +140,12 @@ easily be used.
 %	  file is obligatory for a server and may be provided for a
 %	  client if the server demands the client to identify itself
 %	  with a client certificate using the peer_cert(true) option. If
-%	  a certificate is provided, it is always necessary to provide a
-%	  matching _private key_ using the key_file(+FileName) option.
+%	  a certificate is provided, it is necessary to also provide a
+%	  matching _private key_ via the key_file/1 or key/1 options.
+%	  * certificate(+Atom)
+%	  Alternative method for specifying the certificate. The argument
+%	  is an atom or string that holds the PEM-encoded certificate,
+%	  and possibly further certificates of the chain.
 %	  * key_file(+FileName)
 %	  Specify where the private key that matches the certificate can
 %	  be found.  If the key is encrypted with a password, this must
