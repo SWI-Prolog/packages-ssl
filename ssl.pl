@@ -147,6 +147,10 @@ easily be used.
 %	  be found.  If the key is encrypted with a password, this must
 %	  be supplied using the password(+Text) or
 %	  =|pem_password_hook(:PredicateName)|= option.
+%	  * key(+PrivateKey)
+%	  PrivateKey is the private key as obtained by load_private_key/3.
+%	  This option provides an alternative method to specify
+%	  a private key, in addition to the key_file/1 option.
 %	  * password(+Text)
 %	  Specify the password the private key is protected with (if
 %	  any). If you do not want to store the password you can also

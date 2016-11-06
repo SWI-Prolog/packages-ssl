@@ -3,7 +3,7 @@
     Author:        Jan van der Steen and Jan Wielemaker
     E-mail:        J.van.der.Steen@diff.nl and jan@swi-prolog.org
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2015, SWI-Prolog Foundation
+    Copyright (c)  2004-2016, SWI-Prolog Foundation
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -307,6 +307,23 @@ ssl_strdup(const char *s)
     return new;
 }
 
+static RSA *
+ssl_rsadup(const RSA *rsa)
+{
+    RSA *c = RSA_new();
+
+    c->n = rsa->n;
+    c->e = rsa->e;
+    c->d = rsa->d;
+    c->p = rsa->p;
+    c->q = rsa->q;
+    c->dmp1 = rsa->dmp1;
+    c->dmq1 = rsa->dmq1;
+    c->iqmp = rsa->iqmp;
+
+    return c;
+}
+
 static PL_SSL *
 ssl_new(void)
 /*
@@ -334,6 +351,7 @@ ssl_new(void)
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
         new->pl_ssl_keyf                = NULL;
+        new->pl_ssl_key                 = NULL;
         new->pl_ssl_cipher_list         = NULL;
         new->pl_ssl_ecdh_curve          = NULL;
         new->pl_ssl_crl_list            = NULL;
@@ -485,6 +503,19 @@ ssl_set_keyf(PL_SSL *config, const char *keyf)
         config->pl_ssl_keyf = ssl_strdup(keyf);
     }
     return config->pl_ssl_keyf;
+}
+
+RSA  *
+ssl_set_key(PL_SSL *config, const RSA *key)
+/*
+ * Store private key in config storage
+ */
+{
+    if (key) {
+        if (config->pl_ssl_key) RSA_free(config->pl_ssl_key);
+        config->pl_ssl_key = ssl_rsadup(key);
+    }
+    return config->pl_ssl_key;
 }
 
 X509_crl_list *
@@ -1366,18 +1397,25 @@ ssl_config(PL_SSL *config, term_t options)
   ssl_deb(1, "password handler installed\n");
 
   if ( config->pl_ssl_cert_required ||
-       ( config->pl_ssl_certf && config->pl_ssl_keyf ) )
+       ( config->pl_ssl_certf &&
+         ( config->pl_ssl_keyf || config->pl_ssl_key ) ) )
   { if (config->pl_ssl_certf == NULL)
       return PL_existence_error("certificate", options);
-    if (config->pl_ssl_keyf  == NULL)
+    if ( config->pl_ssl_keyf  == NULL &&
+         config->pl_ssl_key   == NULL )
       return PL_existence_error("key_file", options);
 
     if ( SSL_CTX_use_certificate_chain_file(config->pl_ssl_ctx,
                                             config->pl_ssl_certf) <= 0 )
       return raise_ssl_error(ERR_get_error());
-    if ( SSL_CTX_use_PrivateKey_file(config->pl_ssl_ctx,
+    if ( config->pl_ssl_keyf &&
+         SSL_CTX_use_PrivateKey_file(config->pl_ssl_ctx,
 				     config->pl_ssl_keyf,
-				     SSL_FILETYPE_PEM) <= 0)
+				     SSL_FILETYPE_PEM) <= 0 )
+      return raise_ssl_error(ERR_get_error());
+
+    if ( config->pl_ssl_key &&
+         SSL_CTX_use_RSAPrivateKey(config->pl_ssl_ctx, config->pl_ssl_key) <= 0 )
       return raise_ssl_error(ERR_get_error());
 
     if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )

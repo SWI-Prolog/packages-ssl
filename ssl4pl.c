@@ -61,6 +61,7 @@ static atom_t ATOM_close_parent;
 static atom_t ATOM_disable_ssl_methods;
 static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
+static atom_t ATOM_key;
 static atom_t ATOM_root_certificates;
 
 static atom_t ATOM_sslv2;
@@ -1270,6 +1271,16 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_keyf(conf, file);
+    } else if ( name == ATOM_key && arity == 1 )
+    { term_t key_arg;
+      RSA* key;
+
+      if ( ( key_arg = PL_new_term_ref() ) &&
+	   PL_get_arg(1, head, key_arg ) &&
+	   recover_private_key(key_arg, &key) )
+	ssl_set_key(conf, key);
+      else
+	return FALSE;
     } else if ( name == ATOM_pem_password_hook && arity == 1 )
     { predicate_t hook;
 
@@ -2106,6 +2117,7 @@ install_ssl4pl(void)
   ATOM_cacert_file        = PL_new_atom("cacert_file");
   ATOM_certificate_file   = PL_new_atom("certificate_file");
   ATOM_key_file           = PL_new_atom("key_file");
+  ATOM_key                = PL_new_atom("key");
   ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
