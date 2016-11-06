@@ -106,7 +106,7 @@ by the TCP predicates and the context.
 
 	| *The SSL Server*	| *The SSL Client*	|
 	| ssl_context/3		| ssl_context/3		|
-	| tcp_socket/1		| 			|
+	| tcp_socket/1		|			|
 	| tcp_accept/3		| tcp_connect/3		|
 	| tcp_open_socket/3	| stream_pair/3		|
 	| ssl_negotiate/5	| ssl_negotiate/5	|
@@ -140,8 +140,12 @@ easily be used.
 %	  file is obligatory for a server and may be provided for a
 %	  client if the server demands the client to identify itself
 %	  with a client certificate using the peer_cert(true) option. If
-%	  a certificate is provided, it is always necessary to provide a
-%	  matching _private key_ using the key_file(+FileName) option.
+%	  a certificate is provided, it is necessary to also provide a
+%	  matching _private key_ via the key_file/1 or key/1 options.
+%	  * certificate(+String)
+%	  Alternative method for specifying the certificate. The argument
+%	  is a string (or atom) that holds the PEM-encoded certificate,
+%	  and possibly further certificates of the chain.
 %	  * key_file(+FileName)
 %	  Specify where the private key that matches the certificate can
 %	  be found.  If the key is encrypted with a password, this must
