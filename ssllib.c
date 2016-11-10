@@ -1485,6 +1485,7 @@ ssl_config(PL_SSL *config, term_t options)
     return raise_ssl_error(ERR_get_error());
   if ( !SSL_CTX_set_tmp_ecdh(config->pl_ssl_ctx, ecdh) )
     return raise_ssl_error(ERR_get_error());
+  EC_KEY_free(ecdh);		/* Safe because of reference counts */
 #endif
 
   if ( config->pl_ssl_cipher_list &&
