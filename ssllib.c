@@ -1403,7 +1403,8 @@ ssl_config(PL_SSL *config, term_t options)
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
  */
-{
+{ static DH *dh_2048 = NULL;
+
 #ifndef OPENSSL_NO_EC
   EC_KEY *ecdh;
   int nid;
@@ -1472,7 +1473,8 @@ ssl_config(PL_SSL *config, term_t options)
     ssl_deb(1, "certificate installed successfully\n");
   }
 
-  SSL_CTX_set_tmp_dh(config->pl_ssl_ctx, get_dh2048());
+  if ( !dh_2048 ) dh_2048 = get_dh2048();
+  SSL_CTX_set_tmp_dh(config->pl_ssl_ctx, dh_2048);
 
 #ifndef OPENSSL_NO_EC
   nid = OBJ_sn2nid(config->pl_ssl_ecdh_curve ? config->pl_ssl_ecdh_curve
