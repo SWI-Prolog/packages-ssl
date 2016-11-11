@@ -390,6 +390,8 @@ ssl_free(PL_SSL *config)
     free(config->pl_ssl_certf);
     free(config->pl_ssl_certificate);
     free(config->pl_ssl_keyf);
+    if ( config->pl_ssl_key)
+      RSA_free(config->pl_ssl_key);
     free(config->pl_ssl_cipher_list);
     free(config->pl_ssl_ecdh_curve);
     free_X509_crl_list(config->pl_ssl_crl_list);

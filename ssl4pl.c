@@ -1288,6 +1288,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	   recover_private_key(key_arg, &key) )
       { if ( !ssl_set_key(conf, key) )
 	  return PL_resource_error("memory");
+	RSA_free(key);
       } else
 	return FALSE;
     } else if ( name == ATOM_pem_password_hook && arity == 1 )
