@@ -1097,10 +1097,6 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
         config->pl_ssl_role = role;
         ssl_set_cert     (config, (role == PL_SSL_SERVER));
         ssl_set_peer_cert(config, (role != PL_SSL_SERVER));
-        if (role == PL_SSL_SERVER) {
-          SSL_CTX_set_tlsext_servername_callback(config->pl_ssl_ctx, ssl_cb_sni);
-          SSL_CTX_set_tlsext_servername_arg(config->pl_ssl_ctx, config);
-        }
 
         /*
          * Set SSL_{read,write} behaviour when a renegotiation takes place
@@ -1585,6 +1581,13 @@ ssl_config(PL_SSL *config, term_t options)
 				SSL_VERIFY_NONE,
 			    ssl_cb_cert_verify);
   ssl_deb(1, "installed certificate verification handler\n");
+
+  if ( config->pl_ssl_role == PL_SSL_SERVER &&
+       config->pl_ssl_sni_list ) {
+    SSL_CTX_set_tlsext_servername_callback(config->pl_ssl_ctx, ssl_cb_sni);
+    SSL_CTX_set_tlsext_servername_arg(config->pl_ssl_ctx, config);
+    ssl_deb(1, "installed SNI callback\n");
+  }
 
   return TRUE;
 }
