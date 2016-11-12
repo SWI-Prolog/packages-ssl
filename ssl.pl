@@ -241,9 +241,8 @@ easily be used.
 %	@arg SSL is a SWI-Prolog _blob_ of type `ssl_context`, i.e., the
 %	type-test for an SSL context is `blob(SSL, ssl_context)`.
 
-ssl_context(Role, SSL, Module:Options) :-
-	select_option(ssl_method(Method), Options, O1, sslv23),
-	'_ssl_context'(Role, SSL, Module:O1, Method).
+ssl_context(Role, SSL, Options) :-
+	'_ssl_context'(Role, SSL, Options).
 
 %%	ssl_negotiate(+SSL,
 %%		      +PlainRead, +PlainWrite,
