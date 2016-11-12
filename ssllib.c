@@ -1536,12 +1536,10 @@ ssl_config(PL_SSL *config, term_t options)
 
       if ( SSL_CTX_use_certificate(config->pl_ssl_ctx, certX509) <= 0 )
         return raise_ssl_error(ERR_get_error());
-      X509_free(certX509);
 
       while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
       { if ( SSL_CTX_add_extra_chain_cert(config->pl_ssl_ctx, certX509) <= 0 )
           return raise_ssl_error(ERR_get_error());
-        X509_free(certX509);
       }
 
       BIO_free(bio);
