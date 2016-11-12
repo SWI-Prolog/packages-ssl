@@ -234,6 +234,20 @@ easily be used.
 %	  * ssl_method(+Method)
 %	  Specify the explicit Method to use when negotiating. For
 %	  allowed values, see the list for `disable_ssl_methods` above.
+%	  * sni(+Pairs)
+%	  This option provides Server Name Indication (SNI) for SSL
+%	  servers. This means that depending on the hostname to which a
+%	  client connects, different options (certificates etc.) are
+%	  used for the server. This TLS extension allows you to host
+%	  different domains using the same IP address and physical
+%	  machine. Pairs is a list of HostName-Options pairs, where
+%	  HostName is an atom, and Options is a list of options to
+%	  ssl_context/3. When negotiating a secure connection, this list
+%	  is searched for a host name that case-insensitively matches
+%	  the client request. If such a name is found, its corresponding
+%	  options are used to negotiate the connection.  If no such name
+%	  is found, the default options are used, which are those of the
+%	  encompassing ssl_context/3 call.
 %
 %	@arg Role is one of `server` or `client` and denotes whether the
 %	SSL  instance  will  have  a  server   or  client  role  in  the

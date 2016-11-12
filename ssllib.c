@@ -97,6 +97,7 @@ static X509_list *system_root_store = NULL;
 static int system_root_store_fetched = FALSE;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static void free_sni_list(SNI_list *list);
 /*
  * Index of our config data in the SSL data
  */
@@ -360,6 +361,7 @@ ssl_new(void)
         new->pl_ssl_key                 = NULL;
         new->pl_ssl_cipher_list         = NULL;
         new->pl_ssl_ecdh_curve          = NULL;
+        new->pl_ssl_sni_list            = NULL;
         new->pl_ssl_crl_list            = NULL;
         new->pl_ssl_peer_cert_required  = FALSE;
         new->pl_ssl_crl_required        = FALSE;
@@ -395,6 +397,7 @@ ssl_free(PL_SSL *config)
     free(config->pl_ssl_cipher_list);
     free(config->pl_ssl_ecdh_curve);
     free_X509_crl_list(config->pl_ssl_crl_list);
+    free_sni_list(config->pl_ssl_sni_list);
     free(config->pl_ssl_password);
     if ( config->pl_ssl_peer_cert )
       X509_free(config->pl_ssl_peer_cert);
@@ -556,6 +559,22 @@ ssl_set_crl_list(PL_SSL *config, X509_crl_list *crl)
     }
     return config->pl_ssl_crl_list;
 }
+
+SNI_list *
+ssl_set_sni_list(PL_SSL *config, SNI_list *sni)
+/*
+ * Store SNI configuration in config storage
+ */
+{
+    if (sni)
+    { if (config->pl_ssl_sni_list)
+      { free_sni_list(config->pl_ssl_sni_list);
+      }
+      config->pl_ssl_sni_list = sni;
+    }
+    return config->pl_ssl_sni_list;
+}
+
 
 char *
 ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
@@ -1046,6 +1065,7 @@ ERR_print_errors_pl()
   Sdprintf("%s\n", errmsg);
 }
 
+static int ssl_cb_sni(SSL *s, int *ad, void *arg);
 
 PL_SSL *
 ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
@@ -1077,6 +1097,10 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
         config->pl_ssl_role = role;
         ssl_set_cert     (config, (role == PL_SSL_SERVER));
         ssl_set_peer_cert(config, (role != PL_SSL_SERVER));
+        if (role == PL_SSL_SERVER) {
+          SSL_CTX_set_tlsext_servername_callback(config->pl_ssl_ctx, ssl_cb_sni);
+          SSL_CTX_set_tlsext_servername_arg(config->pl_ssl_ctx, config);
+        }
 
         /*
          * Set SSL_{read,write} behaviour when a renegotiation takes place
@@ -1401,6 +1425,66 @@ DH *get_dh2048()
 		{ DH_free(dh); return(NULL); }
 	return(dh);
 	}
+
+/*
+   Functions for server-side Server Name Indication (SNI)
+*/
+
+static void
+free_sni_list(SNI_list *list)
+{ SNI_list *next;
+
+  for(; list; list=next)
+  { next = list->next;
+    free(list->host_name);
+    ssl_free(list->config);
+  }
+}
+
+
+int
+list_add_sni(char *host, PL_SSL *config, SNI_list **head, SNI_list **tail)
+{ SNI_list *cell = malloc(sizeof(*cell));
+
+  if ( cell )
+  { cell->host_name = ssl_strdup(host);
+    cell->config = config;
+    cell->next = NULL;
+    if ( *head )
+    { (*tail)->next = cell;
+      (*tail) = cell;
+    } else
+    { *head = *tail = cell;
+    }
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+static int
+ssl_cb_sni(SSL *s, int *ad, void *arg)
+{
+  PL_SSL *conf = (PL_SSL *) arg;
+  SSL_CTX *context = NULL;
+  const char *servername;
+
+  if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) != NULL )
+  { SNI_list *list = conf->pl_ssl_sni_list;
+
+    for(; list; list=list->next)
+    { if ( !strcasecmp(list->host_name, servername) ) {
+        context = list->config->pl_ssl_ctx;
+        break;
+      }
+    }
+  }
+
+  SSL_set_SSL_CTX(s, context ? context : conf->pl_ssl_ctx );
+  return SSL_TLSEXT_ERR_OK;
+}
+
 
 int
 ssl_config(PL_SSL *config, term_t options)
