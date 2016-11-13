@@ -387,9 +387,10 @@ visible. It is not needed to decrypt the traffic using port forwarding,
 but it is also not possible to realise \jargon{virtual hosts} or
 \jargon{path-based} proxy rules.
 
-There is a TLS~extension called \jargon{Server Name Indication}~(SNI)
-which allows virtual hosts for~HTTPS. However, server-side~SNI is
-currently not implemented by this~library.
+Virtual hosts for HTTPS are available via \jargon{Server Name
+  Indication}~(SNI). This is a TLS extension that allows servers to
+host different domains from the same IP address. See the sni/1 option
+of ssl_context/3 for more information.
 
 \section{Acknowledgments}
 \label{sec:ssl-acknowledgments}

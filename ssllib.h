@@ -73,6 +73,14 @@ typedef struct X509_crl_list
 
 int list_add_X509_crl(X509_CRL *crl, X509_crl_list **head, X509_crl_list **tail);
 
+typedef struct SNI_list
+{ struct SNI_list *next;
+  char *host_name;
+  struct pl_ssl *config;
+} SNI_list;
+
+int list_add_sni(char *host, struct pl_ssl *config, SNI_list **head, SNI_list **tail);
+
 
 typedef struct pl_ssl {
     long	        magic;
@@ -108,6 +116,7 @@ typedef struct pl_ssl {
     char *              pl_ssl_cipher_list;
     char *              pl_ssl_ecdh_curve;
     X509_crl_list *     pl_ssl_crl_list;
+    SNI_list *          pl_ssl_sni_list;
     char *              pl_ssl_password;
     BOOL                pl_ssl_cert_required;
     BOOL                pl_ssl_crl_required;
@@ -177,7 +186,8 @@ RSA  *          ssl_set_key      (PL_SSL *config, const RSA *key);
 char *          ssl_set_password (PL_SSL *config, const char *password);
 BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
 BOOL            ssl_set_crl_required(PL_SSL *config, BOOL required);
-X509_crl_list*  ssl_set_crl_list (PL_SSL *config, X509_crl_list* list);
+X509_crl_list*  ssl_set_crl_list (PL_SSL *config, X509_crl_list *list);
+SNI_list *      ssl_set_sni_list (PL_SSL *config, SNI_list *list);
 char *          ssl_set_cipher_list(PL_SSL *config, const char *cipher_list);
 char *          ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);

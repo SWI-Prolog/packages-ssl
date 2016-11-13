@@ -60,10 +60,12 @@ static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
 static atom_t ATOM_disable_ssl_methods;
+static atom_t ATOM_ssl_method;
 static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
 static atom_t ATOM_key;
 static atom_t ATOM_root_certificates;
+static atom_t ATOM_sni;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -1110,66 +1112,94 @@ pl_cert_verify_hook(PL_SSL *config,
   return val;
 }
 
+static int
+ssl_method_from_options(const SSL_METHOD **ssl_method, term_t options)
+{
+  term_t tail = PL_copy_term_ref(options);
+  term_t head = PL_new_term_ref();
 
-static foreign_t
-pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
-{ atom_t a;
+  /* We default to SSLv23_method(), which is equivalent to
+     TLS_method() in more recent OpenSSL versions.
+
+     As soon as OpenSSL >= 1.1.0 is more widely available, we should
+     use TLS_method() in the following initialization.
+ */
+
+  *ssl_method = SSLv23_method();
+
+  while( PL_get_list(tail, head, tail) )
+  { atom_t name;
+    size_t arity;
+
+    if ( !PL_get_name_arity(head, &name, &arity) )
+      return PL_domain_error("ssl_option", head);
+
+    if ( name == ATOM_ssl_method && arity == 1 )
+    { term_t method_arg = PL_new_term_ref();
+      atom_t method_name;
+
+      if ( !PL_get_arg(1, head, method_arg) )
+	return PL_domain_error("ssl_option", head);
+
+      if ( !PL_get_atom_ex(method_arg, &method_name) )
+	return FALSE;
+
+      if (method_name == ATOM_sslv23)
+	*ssl_method = SSLv23_method();
+#ifndef OPENSSL_NO_SSL2
+      else if (method_name == ATOM_sslv2)
+	*ssl_method = SSLv2_method();
+#endif
+#ifndef OPENSSL_NO_SSL3_METHOD
+      else if (method_name == ATOM_sslv3)
+	*ssl_method = SSLv3_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1
+      else if (method_name == ATOM_tlsv1)
+	*ssl_method = TLSv1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_1
+      else if (method_name == ATOM_tlsv1_1)
+	*ssl_method = TLSv1_1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+      else if (method_name == ATOM_tlsv1_2)
+	*ssl_method = TLSv1_2_method();
+#endif
+      else
+	return PL_domain_error("ssl_method", method_arg);
+    }
+  }
+
+  return TRUE;
+}
+
+static int
+ssl_config_from_options(int role, PL_SSL **c, term_t options)
+{
   PL_SSL *conf;
-  int r;
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
-  atom_t method_name;
   const SSL_METHOD *ssl_method = NULL;
 
   if ( !PL_strip_module(options, &module, options) )
     return FALSE;
   tail = PL_copy_term_ref(options);
 
-  if ( !PL_get_atom_ex(role, &a) )
+  if ( !ssl_method_from_options(&ssl_method, options) )
     return FALSE;
-  if ( a == ATOM_server )
-    r = PL_SSL_SERVER;
-  else if ( a == ATOM_client )
-    r = PL_SSL_CLIENT;
-  else
-    return PL_domain_error("ssl_role", role);
 
-  if (!PL_get_atom(method, &method_name))
-     return PL_domain_error("ssl_method", method);
-  if (method_name == ATOM_sslv23)
-    ssl_method = SSLv23_method();
-#ifndef OPENSSL_NO_SSL2
-  else if (method_name == ATOM_sslv2)
-    ssl_method = SSLv2_method();
-#endif
-#ifndef OPENSSL_NO_SSL3_METHOD
-  else if (method_name == ATOM_sslv3)
-    ssl_method = SSLv3_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1
-  else if (method_name == ATOM_tlsv1)
-    ssl_method = TLSv1_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1_1
-  else if (method_name == ATOM_tlsv1_1)
-    ssl_method = TLSv1_1_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1_2
-  else if (method_name == ATOM_tlsv1_2)
-    ssl_method = TLSv1_2_method();
-#endif
-  else
-    return PL_domain_error("ssl_method", method);
-
-  if ( !(conf = ssl_init(r, ssl_method)) )
+  if ( !(conf = ssl_init(role, ssl_method)) )
     return PL_resource_error("memory");
+  *c = conf;
+
   while( PL_get_list(tail, head, tail) )
   { atom_t name;
     size_t arity;
 
     if ( !PL_get_name_arity(head, &name, &arity) )
-      return PL_type_error("ssl_option", head);
+      return PL_domain_error("ssl_option", head);
 
     if ( name == ATOM_password && arity == 1 )
     { char *s;
@@ -1284,7 +1314,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       RSA* key;
 
       if ( ( key_arg = PL_new_term_ref() ) &&
-	   PL_get_arg(1, head, key_arg ) &&
+	   PL_get_arg(1, head, key_arg) &&
 	   recover_private_key(key_arg, &key) )
       { if ( !ssl_set_key(conf, key) )
 	  return PL_resource_error("memory");
@@ -1342,6 +1372,36 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       }
 
       ssl_set_method_options(conf, options);
+    } else if ( name == ATOM_sni && arity == 1 && role == PL_SSL_SERVER)
+    { SNI_list *sni_head = NULL, *sni_tail=NULL;
+      term_t opt_head = PL_new_term_ref();
+      term_t opt_tail = PL_new_term_ref();
+      _PL_get_arg(1, head, opt_tail);
+
+      while ( PL_get_list(opt_tail, opt_head, opt_tail) )
+      { atom_t sni_pair;
+        char *sni_host;
+        term_t sni_options = PL_new_term_ref();
+        PL_SSL *sni_config;
+
+        if ( !PL_get_name_arity(opt_head, &sni_pair, &arity) ||
+             sni_pair != ATOM_minus ||
+             arity != 2 )
+          return PL_domain_error("pair", opt_head);
+
+        if ( !get_char_arg(1, opt_head, &sni_host) )
+          return FALSE;
+
+        _PL_get_arg(2, opt_head, sni_options);
+
+        if ( !ssl_config_from_options(PL_SSL_SERVER, &sni_config, sni_options) )
+          return FALSE;
+        list_add_sni(sni_host, sni_config, &sni_head, &sni_tail);
+      }
+      if ( !PL_get_nil_ex(opt_tail) )
+        return FALSE;
+
+      ssl_set_sni_list(conf, sni_head);
     } else
       continue;
   }
@@ -1349,7 +1409,28 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
-  return ssl_config(conf, options) && register_conf(config, conf);
+  return ssl_config(conf, options);
+}
+
+static foreign_t
+pl_ssl_context(term_t role, term_t config, term_t options)
+{ atom_t a;
+  PL_SSL *conf = NULL;
+  int r;
+
+  if ( !PL_get_atom_ex(role, &a) )
+    return FALSE;
+  if ( a == ATOM_server )
+    r = PL_SSL_SERVER;
+  else if ( a == ATOM_client )
+    r = PL_SSL_CLIENT;
+  else
+    return PL_domain_error("ssl_role", role);
+
+  if ( !ssl_config_from_options(r, &conf, options) )
+    return FALSE;
+
+  return register_conf(config, conf);
 }
 
 
@@ -2132,10 +2213,12 @@ install_ssl4pl(void)
   ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
+  ATOM_ssl_method         = PL_new_atom("ssl_method");
   ATOM_disable_ssl_methods= PL_new_atom("disable_ssl_methods");
   ATOM_cipher_list        = PL_new_atom("cipher_list");
   ATOM_ecdh_curve         = PL_new_atom("ecdh_curve");
   ATOM_root_certificates  = PL_new_atom("root_certificates");
+  ATOM_sni                = PL_new_atom("sni");
   ATOM_sslv2              = PL_new_atom("sslv2");
   ATOM_sslv23             = PL_new_atom("sslv23");
   ATOM_sslv3              = PL_new_atom("sslv3");
@@ -2192,7 +2275,7 @@ install_ssl4pl(void)
   FUNCTOR_unknown1         = PL_new_functor(PL_new_atom("unknown"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
 
-  PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
+  PL_register_foreign("_ssl_context",	3, pl_ssl_context,    0);
   PL_register_foreign("_ssl_exit",	1, pl_ssl_exit,	      0);
   PL_register_foreign("ssl_put_socket",	2, pl_ssl_put_socket, 0);
   PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
