@@ -1817,8 +1817,9 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   }
 
   if ( config->pl_ssl_role == PL_SSL_CLIENT )
-  { if ( config->pl_ssl_host )
+  {
 #ifndef OPENSSL_NO_TLSEXT
+    if ( config->pl_ssl_host )
       SSL_set_tlsext_host_name(instance->ssl, config->pl_ssl_host);
 #endif
 #ifdef HAVE_X509_CHECK_HOST
