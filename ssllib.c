@@ -956,6 +956,11 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
   if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) != NULL )
     new_config = (config->pl_ssl_cb_sni)(config, servername);
 
+  if ( new_config == NULL &&
+       config->pl_ssl_certf == NULL &&
+       config->pl_ssl_certificate == NULL )
+    return SSL_TLSEXT_ERR_NOACK;
+
   SSL_set_SSL_CTX(s, new_config ? new_config->pl_ssl_ctx : config->pl_ssl_ctx );
 
   return SSL_TLSEXT_ERR_OK;
@@ -1462,11 +1467,13 @@ ssl_config(PL_SSL *config, term_t options)
   if ( config->pl_ssl_cert_required ||
        ( ( config->pl_ssl_certf || config->pl_ssl_certificate ) &&
          ( config->pl_ssl_keyf || config->pl_ssl_key ) ) )
-  { if ( config->pl_ssl_certf == NULL &&
-         config->pl_ssl_certificate == NULL )
+  { if ( config->pl_ssl_certf       == NULL &&
+         config->pl_ssl_certificate == NULL &&
+         config->pl_ssl_cb_sni      == NULL )
       return PL_existence_error("certificate", options);
-    if ( config->pl_ssl_keyf  == NULL &&
-         config->pl_ssl_key   == NULL )
+    if ( config->pl_ssl_keyf   == NULL &&
+         config->pl_ssl_key    == NULL &&
+         config->pl_ssl_cb_sni == NULL )
       return PL_existence_error("key_file", options);
 
     if ( config->pl_ssl_certf &&
@@ -1511,7 +1518,8 @@ ssl_config(PL_SSL *config, term_t options)
          SSL_CTX_use_RSAPrivateKey(config->pl_ssl_ctx, config->pl_ssl_key) <= 0 )
       return raise_ssl_error(ERR_get_error());
 
-    if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
+    if ( config->pl_ssl_key &&
+         SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
     { ssl_deb(1, "Private key does not match certificate public key\n");
       return raise_ssl_error(ERR_get_error());
     }

@@ -247,11 +247,13 @@ easily be used.
 %	  call(PredicateName, +SSL0, +HostName, -SSL)
 %	  ==
 %
-%	  Given the current context SSL0, and the host name of the client
-%	  request, the predicate computes SSL which is used as the
-%	  context for negotiating the connection. The first solution is
-%	  used.  If the predicate fails, the default options are used,
-%	  which are those of the encompassing ssl_context/3 call.
+%	  Given the current context SSL0, and the host name of the
+%	  client request, the predicate computes SSL which is used as
+%	  the context for negotiating the connection. The first solution
+%	  is used.  If the predicate fails, the default options are
+%	  used, which are those of the encompassing ssl_context/3
+%	  call. In that case, if no default certificate and key are
+%	  specified, the client connection is rejected.
 %
 %	@arg Role is one of `server` or `client` and denotes whether the
 %	SSL  instance  will  have  a  server   or  client  role  in  the
