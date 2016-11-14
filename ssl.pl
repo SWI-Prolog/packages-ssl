@@ -234,6 +234,24 @@ easily be used.
 %	  * ssl_method(+Method)
 %	  Specify the explicit Method to use when negotiating. For
 %	  allowed values, see the list for `disable_ssl_methods` above.
+%	  * sni_hook(+PredicateName)
+%	  This option provides Server Name Indication (SNI) for SSL
+%	  servers. This means that depending on the host to which a
+%	  client connects, different options (certificates etc.) can
+%	  be used for the server. This TLS extension allows you to host
+%	  different domains using the same IP address and physical
+%	  machine. When a TLS connection is negotiated, the hook is
+%	  called as follows:
+%
+%	  ==
+%	  call(PredicateName, +SSL0, +HostName, -SSL)
+%	  ==
+%
+%	  Given the current context SSL0, and the host name of the client
+%	  request, the predicate computes SSL which is used as the
+%	  context for negotiating the connection. The first solution is
+%	  used.  If the predicate fails, the default options are used,
+%	  which are those of the encompassing ssl_context/3 call.
 %
 %	@arg Role is one of `server` or `client` and denotes whether the
 %	SSL  instance  will  have  a  server   or  client  role  in  the

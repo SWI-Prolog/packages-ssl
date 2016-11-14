@@ -360,6 +360,8 @@ ssl_new(void)
         new->pl_ssl_key                 = NULL;
         new->pl_ssl_cipher_list         = NULL;
         new->pl_ssl_ecdh_curve          = NULL;
+        new->pl_ssl_cb_sni_data         = NULL;
+        new->pl_ssl_cb_sni              = NULL;
         new->pl_ssl_crl_list            = NULL;
         new->pl_ssl_peer_cert_required  = FALSE;
         new->pl_ssl_crl_required        = FALSE;
@@ -923,6 +925,36 @@ ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
     }
 
     return len;
+}
+
+
+BOOL
+ssl_set_cb_sni(PL_SSL *config,
+               PL_SSL * (*callback)(PL_SSL*, const char*),
+               void *data)
+/*
+ * Install handler for Server Name Indication (SNI).
+ */
+{
+  config->pl_ssl_cb_sni = callback;
+  config->pl_ssl_cb_sni_data = data;
+
+  return TRUE;
+}
+
+static int
+ssl_cb_sni(SSL *s, int *ad, void *arg)
+{
+  PL_SSL *config = (PL_SSL *) arg,
+         *new_config = NULL;
+  const char *servername;
+
+  if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) != NULL )
+    new_config = (config->pl_ssl_cb_sni)(config, servername);
+
+  SSL_set_SSL_CTX(s, new_config ? new_config->pl_ssl_ctx : config->pl_ssl_ctx );
+
+  return SSL_TLSEXT_ERR_OK;
 }
 
 BOOL
@@ -1501,6 +1533,13 @@ ssl_config(PL_SSL *config, term_t options)
 				SSL_VERIFY_NONE,
 			    ssl_cb_cert_verify);
   ssl_deb(1, "installed certificate verification handler\n");
+
+  if ( config->pl_ssl_role == PL_SSL_SERVER &&
+       config->pl_ssl_cb_sni_data ) {
+    SSL_CTX_set_tlsext_servername_callback(config->pl_ssl_ctx, ssl_cb_sni);
+    SSL_CTX_set_tlsext_servername_arg(config->pl_ssl_ctx, config);
+    ssl_deb(1, "installed SNI callback\n");
+  }
 
   return TRUE;
 }

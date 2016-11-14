@@ -64,6 +64,7 @@ static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
 static atom_t ATOM_key;
 static atom_t ATOM_root_certificates;
+static atom_t ATOM_sni_hook;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -1067,6 +1068,25 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
   return passwd;
 }
 
+static PL_SSL *
+pl_sni_hook(PL_SSL *config, const char *host)
+{ fid_t fid = PL_open_foreign_frame();
+  term_t av = PL_new_term_refs(3);
+  predicate_t pred = (predicate_t) config->pl_ssl_cb_sni_data;
+  PL_SSL *new_config = NULL;
+
+  /*
+   * hook(+SSL0, +Hostname, -SSL)
+   */
+  put_conf(av+0, config);
+  if ( PL_unify_chars(av+1, PL_ATOM|REP_UTF8, strlen(host), host)
+       && PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) )
+    if ( !get_conf(av+2, &new_config) )
+      PL_warning("sni_hook returned wrong type");
+
+  PL_close_foreign_frame(fid);
+  return new_config;
+}
 
 static BOOL
 pl_cert_verify_hook(PL_SSL *config,
@@ -1342,6 +1362,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       }
 
       ssl_set_method_options(conf, options);
+    } else if ( name == ATOM_sni_hook && arity == 1 && r == PL_SSL_SERVER)
+    { predicate_t hook;
+
+      if ( !get_predicate_arg(1, module, head, 3, &hook) )
+        return FALSE;
+
+      ssl_set_cb_sni(conf, pl_sni_hook, (void *) hook);
     } else
       continue;
   }
@@ -2136,6 +2163,7 @@ install_ssl4pl(void)
   ATOM_cipher_list        = PL_new_atom("cipher_list");
   ATOM_ecdh_curve         = PL_new_atom("ecdh_curve");
   ATOM_root_certificates  = PL_new_atom("root_certificates");
+  ATOM_sni_hook           = PL_new_atom("sni_hook");
   ATOM_sslv2              = PL_new_atom("sslv2");
   ATOM_sslv23             = PL_new_atom("sslv23");
   ATOM_sslv3              = PL_new_atom("sslv3");

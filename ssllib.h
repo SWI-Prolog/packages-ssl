@@ -128,6 +128,8 @@ typedef struct pl_ssl {
                                                 , int
                                                 ) ;
     void *              pl_ssl_cb_pem_passwd_data;
+    struct pl_ssl *     (*pl_ssl_cb_sni)(struct pl_ssl *, const char*);
+    void *              pl_ssl_cb_sni_data;
 #ifndef HAVE_X509_CHECK_HOST
     int                 hostname_check_status;
 #endif
@@ -177,7 +179,7 @@ RSA  *          ssl_set_key      (PL_SSL *config, const RSA *key);
 char *          ssl_set_password (PL_SSL *config, const char *password);
 BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
 BOOL            ssl_set_crl_required(PL_SSL *config, BOOL required);
-X509_crl_list*  ssl_set_crl_list (PL_SSL *config, X509_crl_list* list);
+X509_crl_list*  ssl_set_crl_list (PL_SSL *config, X509_crl_list *list);
 char *          ssl_set_cipher_list(PL_SSL *config, const char *cipher_list);
 char *          ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
@@ -205,6 +207,12 @@ BOOL            ssl_set_cb_pem_passwd
                                                      )
                                  , void *
                                  ) ;
+BOOL            ssl_set_cb_sni
+                                 (PL_SSL *config,
+                                  PL_SSL * (*callback)( PL_SSL *,
+                                                        const char *),
+                                  void *
+                                  );
 
 void            ssl_msg          (char *fmt, ...);
 void            ssl_err          (char *fmt, ...);
