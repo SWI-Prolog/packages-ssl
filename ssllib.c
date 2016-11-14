@@ -356,6 +356,7 @@ ssl_new(void)
         new->pl_ssl_cert_required       = FALSE;
         new->pl_ssl_certf               = NULL;
         new->pl_ssl_certificate         = NULL;
+        new->pl_ssl_certificate_X509    = NULL;
         new->pl_ssl_keyf                = NULL;
         new->pl_ssl_key                 = NULL;
         new->pl_ssl_cipher_list         = NULL;
@@ -397,6 +398,8 @@ ssl_free(PL_SSL *config)
     free(config->pl_ssl_cipher_list);
     free(config->pl_ssl_ecdh_curve);
     free_X509_crl_list(config->pl_ssl_crl_list);
+    if ( config->pl_ssl_certificate_X509 )
+      X509_free(config->pl_ssl_certificate_X509);
     free(config->pl_ssl_password);
     if ( config->pl_ssl_peer_cert )
       X509_free(config->pl_ssl_peer_cert);
@@ -1484,6 +1487,8 @@ ssl_config(PL_SSL *config, term_t options)
       certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
       if ( !certX509 )
         return raise_ssl_error(ERR_get_error());
+
+      config->pl_ssl_certificate_X509 = certX509;
 
       if ( SSL_CTX_use_certificate(config->pl_ssl_ctx, certX509) <= 0 )
         return raise_ssl_error(ERR_get_error());

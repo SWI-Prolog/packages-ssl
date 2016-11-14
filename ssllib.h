@@ -103,6 +103,7 @@ typedef struct pl_ssl {
     char *              pl_ssl_cacert;
     char *              pl_ssl_certf;
     char *              pl_ssl_certificate;
+    X509 *              pl_ssl_certificate_X509;
     char *              pl_ssl_keyf;
     RSA  *              pl_ssl_key;
     char *              pl_ssl_cipher_list;
