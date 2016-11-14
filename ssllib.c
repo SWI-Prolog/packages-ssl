@@ -942,6 +942,7 @@ ssl_set_cb_sni(PL_SSL *config,
   return TRUE;
 }
 
+#ifndef OPENSSL_NO_TLSEXT
 static int
 ssl_cb_sni(SSL *s, int *ad, void *arg)
 {
@@ -956,6 +957,8 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
 
   return SSL_TLSEXT_ERR_OK;
 }
+#endif
+
 
 BOOL
 ssl_set_close_parent(PL_SSL *config, int closeparent)
@@ -1534,12 +1537,14 @@ ssl_config(PL_SSL *config, term_t options)
 			    ssl_cb_cert_verify);
   ssl_deb(1, "installed certificate verification handler\n");
 
+#ifndef OPENSSL_NO_TLSEXT
   if ( config->pl_ssl_role == PL_SSL_SERVER &&
        config->pl_ssl_cb_sni_data ) {
     SSL_CTX_set_tlsext_servername_callback(config->pl_ssl_ctx, ssl_cb_sni);
     SSL_CTX_set_tlsext_servername_arg(config->pl_ssl_ctx, config);
     ssl_deb(1, "installed SNI callback\n");
   }
+#endif
 
   return TRUE;
 }
@@ -1800,7 +1805,9 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
 
   if ( config->pl_ssl_role == PL_SSL_CLIENT )
   { if ( config->pl_ssl_host )
+#ifndef OPENSSL_NO_TLSEXT
       SSL_set_tlsext_host_name(instance->ssl, config->pl_ssl_host);
+#endif
 #ifdef HAVE_X509_CHECK_HOST
     X509_VERIFY_PARAM *param = SSL_get0_param(instance->ssl);
     /* This could in theory be user-configurable. The documentation at
