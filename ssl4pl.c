@@ -1300,17 +1300,12 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       ssl_set_keyf(conf, file);
     } else if ( name == ATOM_key && arity == 1 )
-    { term_t key_arg;
-      RSA* key;
+    { char *s;
 
-      if ( ( key_arg = PL_new_term_ref() ) &&
-	   PL_get_arg(1, head, key_arg ) &&
-	   recover_private_key(key_arg, &key) )
-      { if ( !ssl_set_key(conf, key) )
-	  return PL_resource_error("memory");
-	RSA_free(key);
-      } else
+      if ( !get_char_arg(1, head, &s) )
 	return FALSE;
+
+      ssl_set_key(conf, s);
     } else if ( name == ATOM_pem_password_hook && arity == 1 )
     { predicate_t hook;
 
