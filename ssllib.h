@@ -105,7 +105,7 @@ typedef struct pl_ssl {
     char *              pl_ssl_certificate;
     X509 *              pl_ssl_certificate_X509;
     char *              pl_ssl_keyf;
-    RSA  *              pl_ssl_key;
+    char *              pl_ssl_key;
     char *              pl_ssl_cipher_list;
     char *              pl_ssl_ecdh_curve;
     X509_crl_list *     pl_ssl_crl_list;
@@ -176,7 +176,7 @@ int             ssl_set_use_system_cacert(PL_SSL *config, int use_system_cacert)
 char *          ssl_set_certf    (PL_SSL *config, const char *certf);
 char *          ssl_set_certificate(PL_SSL *config, const char *cert);
 char *          ssl_set_keyf     (PL_SSL *config, const char *keyf);
-RSA  *          ssl_set_key      (PL_SSL *config, const RSA *key);
+char *          ssl_set_key      (PL_SSL *config, const char *key);
 char *          ssl_set_password (PL_SSL *config, const char *password);
 BOOL            ssl_set_cert     (PL_SSL *config, BOOL required);
 BOOL            ssl_set_crl_required(PL_SSL *config, BOOL required);

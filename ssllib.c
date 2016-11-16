@@ -307,28 +307,6 @@ ssl_strdup(const char *s)
     return new;
 }
 
-static RSA *
-ssl_rsadup(const RSA *rsa)
-{
-    RSA *c = RSA_new();
-
-    if ( c != NULL ) {
-      if ( !(c->n    = BN_dup(rsa->n)) ||
-	   !(c->e    = BN_dup(rsa->e)) ||
-	   !(c->d    = BN_dup(rsa->d)) ||
-	   !(c->p    = BN_dup(rsa->p)) ||
-	   !(c->q    = BN_dup(rsa->q)) ||
-	   !(c->dmp1 = BN_dup(rsa->dmp1)) ||
-	   !(c->dmq1 = BN_dup(rsa->dmq1)) ||
-	   !(c->iqmp = BN_dup(rsa->iqmp)) ) {
-	RSA_free(c);	/* assumes RSA_free() will not call BN_free() */
-	c = NULL;	/* for NULL components or BN_free(NULL) is valid */
-      }
-    }
-
-    return c;
-}
-
 static PL_SSL *
 ssl_new(void)
 /*
@@ -393,8 +371,7 @@ ssl_free(PL_SSL *config)
     free(config->pl_ssl_certf);
     free(config->pl_ssl_certificate);
     free(config->pl_ssl_keyf);
-    if ( config->pl_ssl_key)
-      RSA_free(config->pl_ssl_key);
+    free(config->pl_ssl_key);
     free(config->pl_ssl_cipher_list);
     free(config->pl_ssl_ecdh_curve);
     free_X509_crl_list(config->pl_ssl_crl_list);
@@ -534,15 +511,15 @@ ssl_set_keyf(PL_SSL *config, const char *keyf)
     return config->pl_ssl_keyf;
 }
 
-RSA  *
-ssl_set_key(PL_SSL *config, const RSA *key)
+char *
+ssl_set_key(PL_SSL *config, const char *key)
 /*
  * Store private key in config storage
  */
 {
     if (key) {
-        if (config->pl_ssl_key) RSA_free(config->pl_ssl_key);
-        config->pl_ssl_key = ssl_rsadup(key);
+        if (config->pl_ssl_key) free(config->pl_ssl_key);
+        config->pl_ssl_key = ssl_strdup(key);
     }
     return config->pl_ssl_key;
 }
@@ -1514,9 +1491,26 @@ ssl_config(PL_SSL *config, term_t options)
 				     SSL_FILETYPE_PEM) <= 0 )
       return raise_ssl_error(ERR_get_error());
 
-    if ( config->pl_ssl_key &&
-         SSL_CTX_use_RSAPrivateKey(config->pl_ssl_ctx, config->pl_ssl_key) <= 0 )
-      return raise_ssl_error(ERR_get_error());
+    if ( config->pl_ssl_key )
+    { char *key = config->pl_ssl_key;
+      EVP_PKEY *pkey;
+
+      BIO* bio = BIO_new(BIO_s_mem());
+
+      if ( !bio )
+        return PL_resource_error("memory");
+
+      BIO_write(bio, key, strlen(key));
+      pkey = PEM_read_bio_PrivateKey(bio, NULL, ssl_cb_pem_passwd, config);
+      if ( !pkey )
+        return raise_ssl_error(ERR_get_error());
+
+      if ( SSL_CTX_use_PrivateKey(config->pl_ssl_ctx, pkey) <= 0 )
+        return raise_ssl_error(ERR_get_error());
+
+      EVP_PKEY_free(pkey);
+      BIO_free(bio);
+    }
 
     if ( config->pl_ssl_key &&
          SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )

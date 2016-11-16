@@ -144,17 +144,16 @@ easily be used.
 %	  matching _private key_ via the key_file/1 or key/1 options.
 %	  * certificate(+String)
 %	  Alternative method for specifying the certificate. The argument
-%	  is a string (or atom) that holds the PEM-encoded certificate,
+%	  is a string (or an atom) that holds the PEM-encoded certificate,
 %	  and possibly further certificates of the chain.
 %	  * key_file(+FileName)
 %	  Specify where the private key that matches the certificate can
 %	  be found.  If the key is encrypted with a password, this must
 %	  be supplied using the password(+Text) or
 %	  =|pem_password_hook(:PredicateName)|= option.
-%	  * key(+PrivateKey)
-%	  PrivateKey is the private key as obtained by load_private_key/3.
-%	  This option provides an alternative method to specify
-%	  a private key, in addition to the key_file/1 option.
+%	  * key(+String)
+%	  Alternative method for specifying the private key. The argument
+%	  is a string (or an atom) that holds the PEM-encoded key.
 %	  * password(+Text)
 %	  Specify the password the private key is protected with (if
 %	  any). If you do not want to store the password you can also
