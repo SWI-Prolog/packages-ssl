@@ -203,20 +203,18 @@ test(missing_cert, Msg == 'no certificate assigned') :-
 
 % missing key (certificate specified as file or string, with and without sni)
 
-% With the cert/1 option, the precise error term varies in this case.
-
 test(missing_key, Msg == existence_error) :-
 	options_errmsg([certificate_file('etc/server/server-cert.pem')], Msg).
-test(missing_key, true) :-
+test(missing_key, Msg == existence_error) :-
 	read_file_to_string('etc/server/server-cert.pem', Cert, []),
-	options_errmsg([certificate(Cert)], _).
+	options_errmsg([certificate(Cert)], Msg).
 test(missing_key, Msg == 'no private key assigned') :-
 	options_errmsg([certificate_file('etc/server/server-cert.pem'),
 			sni_hook(sni)], Msg).
-test(missing_key, true) :-
+test(missing_key, Msg == 'no private key assigned') :-
 	read_file_to_string('etc/server/server-cert.pem', Cert, []),
 	options_errmsg([certificate(Cert),
-			sni_hook(sni)], _).
+			sni_hook(sni)], Msg).
 
 :- end_tests(ssl_options).
 

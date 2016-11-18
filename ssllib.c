@@ -1510,6 +1510,8 @@ ssl_config(PL_SSL *config, term_t options)
       EVP_PKEY_free(pkey);
     }
 
+    ERR_clear_error();
+
     if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
     { ssl_deb(1, "Private key does not match certificate public key\n");
       return raise_ssl_error(ERR_get_error());
