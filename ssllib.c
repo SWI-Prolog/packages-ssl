@@ -1459,15 +1459,13 @@ ssl_config(PL_SSL *config, term_t options)
       return raise_ssl_error(ERR_get_error());
 
     if ( config->pl_ssl_certificate )
-    { char* cert = config->pl_ssl_certificate;
-      X509* certX509;
+    { X509* certX509;
 
-      BIO* bio = BIO_new(BIO_s_mem());
+      BIO* bio = BIO_new_mem_buf(config->pl_ssl_certificate, -1);
 
       if ( !bio )
         return PL_resource_error("memory");
 
-      BIO_write(bio, cert, strlen(cert));
       certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
       if ( !certX509 )
         return raise_ssl_error(ERR_get_error());
@@ -1495,13 +1493,14 @@ ssl_config(PL_SSL *config, term_t options)
     { char *key = config->pl_ssl_key;
       EVP_PKEY *pkey;
 
-      BIO* bio = BIO_new(BIO_s_mem());
+      BIO* bio = BIO_new_mem_buf(key, -1);
 
       if ( !bio )
         return PL_resource_error("memory");
 
-      BIO_write(bio, key, strlen(key));
       pkey = PEM_read_bio_PrivateKey(bio, NULL, ssl_cb_pem_passwd, config);
+      BIO_free(bio);
+
       if ( !pkey )
         return raise_ssl_error(ERR_get_error());
 
@@ -1509,7 +1508,6 @@ ssl_config(PL_SSL *config, term_t options)
         return raise_ssl_error(ERR_get_error());
 
       EVP_PKEY_free(pkey);
-      BIO_free(bio);
     }
 
     if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
