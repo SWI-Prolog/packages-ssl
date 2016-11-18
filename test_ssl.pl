@@ -61,7 +61,8 @@
 %:- debug(_).
 
 test_ssl :-
-	run_tests([ ssl_server,
+	run_tests([ ssl_options,
+		    ssl_server,
 		    ssl_keys,
 		    https_open,
                     ssl_certificates,
@@ -161,6 +162,63 @@ test(trip_public_private, In == Out) :-
 	rsa_private_decrypt(PrivateKey, Encrypted, Out).
 
 :- end_tests(ssl_keys).
+
+:- begin_tests(ssl_options).
+
+options_errmsg(Options, Msg) :-
+	catch(ssl_context(server, _SSL, Options), Exception, true),
+	nonvar(Exception),
+	(   Exception = error(ssl_error(_, _, _, Msg), _)
+	->  true
+	;   Exception = error(existence_error(_,_), _)
+	->  Msg = existence_error
+	;   false
+	).
+
+sni(SSL, _, SSL).
+
+test(cert_mismatch, Msg == 'key values mismatch') :-
+	options_errmsg([certificate_file('etc/server/server-cert.pem'),
+			key_file('etc/client/client-key.pem'),
+			password(apenoot2)], Msg).
+
+% missing certificate (key specified as file or string, with and without sni)
+
+test(missing_cert, Msg == existence_error) :-
+	options_errmsg([key_file('etc/server/server-key.pem'),
+			password(apenoot1)], Msg).
+test(missing_cert, Msg == existence_error) :-
+	read_file_to_string('etc/server/server-key.pem', Key, []),
+	options_errmsg([key(Key),
+			password(apenoot1)], Msg).
+test(missing_cert, Msg == 'no certificate assigned') :-
+	read_file_to_string('etc/server/server-key.pem', Key, []),
+	options_errmsg([key(Key),
+			password(apenoot1),
+			sni_hook(sni)], Msg).
+test(missing_cert, Msg == 'no certificate assigned') :-
+	options_errmsg([key_file('etc/server/server-key.pem'),
+			password(apenoot1),
+			sni_hook(sni)], Msg).
+
+% missing key (certificate specified as file or string, with and without sni)
+
+% With the cert/1 option, the precise error term varies in this case.
+
+test(missing_key, Msg == existence_error) :-
+	options_errmsg([certificate_file('etc/server/server-cert.pem')], Msg).
+test(missing_key, true) :-
+	read_file_to_string('etc/server/server-cert.pem', Cert, []),
+	options_errmsg([certificate(Cert)], _).
+test(missing_key, Msg == 'no private key assigned') :-
+	options_errmsg([certificate_file('etc/server/server-cert.pem'),
+			sni_hook(sni)], Msg).
+test(missing_key, true) :-
+	read_file_to_string('etc/server/server-cert.pem', Cert, []),
+	options_errmsg([certificate(Cert),
+			sni_hook(sni)], _).
+
+:- end_tests(ssl_options).
 
 :- begin_tests(ssl_server).
 
