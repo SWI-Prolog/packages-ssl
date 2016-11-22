@@ -220,8 +220,13 @@ void            ssl_err          (char *fmt, ...);
 int		ssl_set_debug	 (int level);
 void            ssl_deb          (int level, char *fmt, ...);
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 extern BIO_METHOD bio_read_functions;
 extern BIO_METHOD bio_write_functions;
+#else
+extern BIO_METHOD *bio_read_method();
+extern BIO_METHOD *bio_write_functions();
+#endif
 
 #endif
 

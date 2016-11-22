@@ -238,6 +238,7 @@ static int
 recover_rsa(term_t t, RSA** rsap)
 { RSA *rsa = RSA_new();
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if ( get_bn_arg(1, t, &rsa->n) &&
        get_bn_arg(2, t, &rsa->e) &&
        get_bn_arg(3, t, &rsa->d) &&
@@ -247,7 +248,29 @@ recover_rsa(term_t t, RSA** rsap)
        get_bn_arg(7, t, &rsa->dmq1) &&
        get_bn_arg(8, t, &rsa->iqmp)
      )
-  { *rsap = rsa;
+  {
+#else
+  BIGNUM *n = NULL, *e = NULL, *d = NULL, *p = NULL,
+    *q = NULL, *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
+
+  if ( get_bn_arg(1, t, &n) &&
+       get_bn_arg(2, t, &e) &&
+       get_bn_arg(3, t, &d) &&
+       get_bn_arg(4, t, &p) &&
+       get_bn_arg(5, t, &q) &&
+       get_bn_arg(6, t, &dmp1) &&
+       get_bn_arg(7, t, &dmq1) &&
+       get_bn_arg(8, t, &iqmp) )
+  {
+    if ( !RSA_set0_key(rsa, n, e, d) ||
+         ( (p || q) && !RSA_set0_factors(rsa, p, q) ) ||
+         ( (dmp1 || dmq1 || iqmp) &&
+           !RSA_set0_crt_params(rsa, dmp1, dmq1, iqmp)) )
+    { RSA_free(rsa);
+      return FALSE;
+    }
+#endif
+    *rsap = rsa;
     return TRUE;
   }
 
@@ -290,7 +313,9 @@ recover_public_key(term_t t, RSA** rsap)
 
 static int
 unify_rsa(term_t item, RSA* rsa)
-{ return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
 	   unify_bignum_arg(1, item, rsa->n) &&
 	   unify_bignum_arg(2, item, rsa->e) &&
 	   unify_bignum_arg(3, item, rsa->d) &&
@@ -300,6 +325,24 @@ unify_rsa(term_t item, RSA* rsa)
 	   unify_bignum_arg(7, item, rsa->dmq1) &&
 	   unify_bignum_arg(8, item, rsa->iqmp)
 	 );
+#else
+  const BIGNUM *n = NULL, *e = NULL, *d = NULL,
+    *p = NULL, *q = NULL,
+    *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
+  RSA_get0_key(rsa, &n, &e, &d);
+  RSA_get0_factors(rsa, &p, &q);
+  RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
+  return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
+	   unify_bignum_arg(1, item, n) &&
+	   unify_bignum_arg(2, item, e) &&
+	   unify_bignum_arg(3, item, d) &&
+	   unify_bignum_arg(4, item, p) &&
+	   unify_bignum_arg(5, item, q) &&
+	   unify_bignum_arg(6, item, dmp1) &&
+	   unify_bignum_arg(7, item, dmq1) &&
+	   unify_bignum_arg(8, item, iqmp)
+	 );
+#endif
 }
 
 
@@ -336,7 +379,11 @@ unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
    may be a lot of edge cases that dont work!
 */
 static int
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 unify_asn1_time(term_t term, ASN1_TIME *time)
+#else
+unify_asn1_time(term_t term, const ASN1_TIME *time)
+#endif
 { time_t result = 0;
   char buffer[24];
   char* pbuffer = buffer;
@@ -432,9 +479,17 @@ unify_asn1_time(term_t term, ASN1_TIME *time)
 }
 
 static int
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char**), void * data)
+#else
+unify_hash(term_t hash, const ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char**), void * data)
+#endif
 { const EVP_MD *type;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   EVP_MD_CTX ctx;
+#else
+  EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+#endif
   int digestible_length;
   unsigned char* digest_buffer;
   unsigned char digest[EVP_MAX_MD_SIZE];
@@ -463,7 +518,11 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
                            PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
                            PL_INTEGER, nid);
   }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   EVP_MD_CTX_init(&ctx);
+#else
+  /* TODO: What to do in OpenSSL 1.1.0? */
+#endif
 
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
@@ -473,22 +532,53 @@ unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char*
   /* i2d_X509_CINF will change the value of p. We need to pass in a copy */
   p = digest_buffer;
   i2d(data,&p);
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if (!EVP_DigestInit(&ctx, type))
-  { EVP_MD_CTX_cleanup(&ctx);
+#else
+  if (!EVP_DigestInit(ctx, type))
+#endif
+  {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX_cleanup(&ctx);
+#else
+    EVP_MD_CTX_free(ctx);
+#endif
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if (!EVP_DigestUpdate(&ctx, digest_buffer, digestible_length))
-  { EVP_MD_CTX_cleanup(&ctx);
+#else
+  if (!EVP_DigestUpdate(ctx, digest_buffer, digestible_length))
+#endif
+  {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX_cleanup(&ctx);
+#else
+    EVP_MD_CTX_free(ctx);
+#endif
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if (!EVP_DigestFinal(&ctx, digest, &digest_length))
-  { EVP_MD_CTX_cleanup(&ctx);
+#else
+  if (!EVP_DigestFinal(ctx, digest, &digest_length))
+#endif
+  {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX_cleanup(&ctx);
+#else
+    EVP_MD_CTX_free(ctx);
+#endif
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   EVP_MD_CTX_cleanup(&ctx);
+#else
+  EVP_MD_CTX_free(ctx);
+#endif
   PL_free(digest_buffer);
   return unify_bytes_hex(hash, digest_length, digest);
 }
@@ -514,7 +604,7 @@ unify_name(term_t term, X509_NAME* name)
     rc = ( PL_unify_list(list, item, list) &&
 	   PL_unify_term(item,
 			 PL_FUNCTOR, FUNCTOR_equals2,
-			 PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(e->object)),
+			 PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(X509_NAME_ENTRY_get_object(e))),
 			 PL_UTF8_CHARS, utf8_data)
 	 );
     OPENSSL_free(utf8_data);
@@ -526,7 +616,14 @@ unify_name(term_t term, X509_NAME* name)
 
 static int
 unify_crl(term_t term, X509_CRL* crl)
-{ X509_CRL_INFO* info = crl->crl;
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  X509_CRL_INFO *info = crl->crl;
+#else
+  const ASN1_BIT_STRING *psig;
+  const X509_ALGOR *palg;
+  STACK_OF(X509_REVOKED) *revoked = X509_CRL_get_REVOKED(crl);
+#endif
   int i;
   term_t item = PL_new_term_ref();
   term_t hash = PL_new_term_ref();
@@ -546,11 +643,20 @@ unify_crl(term_t term, X509_CRL* crl)
   if (mem == NULL)
     return PL_resource_error("memory");
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   i2a_ASN1_INTEGER(mem, crl->signature);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
         unify_hash(hash, crl->sig_alg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
         unify_asn1_time(next_update, X509_CRL_get_nextUpdate(crl)) &&
-	unify_bytes_hex(signature, crl->signature->length, crl->signature->data) &&
+        unify_bytes_hex(signature, crl->signature->length, crl->signature->data) &&
+#else
+  X509_CRL_get0_signature(crl, &psig, &palg);
+  i2a_ASN1_INTEGER(mem, psig);
+  if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
+        unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl) &&
+        unify_asn1_time(next_update, X509_CRL_get0_nextUpdate(crl)) &&
+        unify_bytes_hex(signature, psig->length, psig->data) &&
+#endif
         PL_unify_term(term,
                       PL_LIST, 5,
                       PL_FUNCTOR, FUNCTOR_issuername1,
@@ -566,15 +672,25 @@ unify_crl(term_t term, X509_CRL* crl)
   {
      return FALSE;
   }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   for (i = 0; i < sk_X509_REVOKED_num(info->revoked); i++)
-  {
-     X509_REVOKED* revoked = sk_X509_REVOKED_value(info->revoked, i);
+  {  X509_REVOKED *r = sk_X509_REVOKED_value(info->revoked, i);
      (void)BIO_reset(mem);
-     i2a_ASN1_INTEGER(mem, revoked->serialNumber);
+     i2a_ASN1_INTEGER(mem, r->serialNumber);
      result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
                 PL_unify_list(list, item, list) &&
                 (revocation_date = PL_new_term_ref()) &&
-                unify_asn1_time(revocation_date, revoked->revocationDate) &&
+                unify_asn1_time(revocation_date, r->revocationDate) &&
+#else
+  for (i = 0; i < sk_X509_REVOKED_num(revoked); i++)
+  {  X509_REVOKED *r = sk_X509_REVOKED_value(revoked, i);
+     (void)BIO_reset(mem);
+     i2a_ASN1_INTEGER(mem, X509_REVOKED_get0_serialNumber(r));
+     result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
+                PL_unify_list(list, item, list) &&
+                (revocation_date = PL_new_term_ref()) &&
+                unify_asn1_time(revocation_date, X509_REVOKED_get0_revocationDate(r)) &&
+#endif
                 PL_unify_term(item,
                               PL_FUNCTOR, FUNCTOR_revoked2,
                               PL_NCHARS, (size_t)n, p,
@@ -598,7 +714,11 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
     return FALSE;
 
  /* EVP_PKEY_get1_* returns a copy of the existing key */
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   switch (EVP_PKEY_type(key->type))
+#else
+  switch (EVP_PKEY_base_id(key))
+#endif
   { int rc;
 #ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
@@ -667,6 +787,12 @@ unify_certificate(term_t cert, X509* data)
   unsigned char *p;
   X509_EXTENSION * crl_ext = NULL;
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#else
+  const ASN1_BIT_STRING *psig;
+  const X509_ALGOR *palg;
+  X509_get0_signature(&psig, &palg, data);
+#endif
 
   if (!(PL_unify_list(list, item, list) &&
         PL_unify_term(item,
@@ -717,15 +843,24 @@ unify_certificate(term_t cert, X509* data)
      )
      return FALSE;
   if (!((hash = PL_new_term_ref()) &&
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
         unify_hash(hash, data->sig_alg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
+#else
+        /* TODO: Is "data" a valid choice for the last argument? */
+        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data) &&
+#endif
         PL_unify_list(list, item, list) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_hash1,
                       PL_TERM, hash)))
      return FALSE;
   if (!((signature = PL_new_term_ref()) &&
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	unify_bytes_hex(signature,
 			data->signature->length, data->signature->data) &&
+#else
+	unify_bytes_hex(signature, psig->length, psig->data) &&
+#endif
 	PL_unify_list(list, item, list) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_signature1,
@@ -831,7 +966,11 @@ pl_load_public_key(term_t source, term_t key_t)
 
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   bio = BIO_new(&bio_read_functions);
+#else
+  bio = BIO_new(bio_read_method());
+#endif
   BIO_set_ex_data(bio, 0, stream);
 
   /* Determine format */
@@ -866,7 +1005,11 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
     return FALSE;
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   bio = BIO_new(&bio_read_functions);
+#else
+  bio = BIO_new(bio_read_method());
+#endif
   BIO_set_ex_data(bio, 0, stream);
 
   /* Determine format */
@@ -898,7 +1041,11 @@ pl_load_crl(term_t source, term_t list)
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   bio = BIO_new(&bio_read_functions);
+#else
+  bio = BIO_new(bio_read_method());
+#endif
   BIO_set_ex_data(bio, 0, stream);
   /* Determine the format of the CRL */
   c = Speekcode(stream);
@@ -926,7 +1073,11 @@ pl_load_certificate(term_t source, term_t cert)
 
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   bio = BIO_new(&bio_read_functions);
+#else
+  bio = BIO_new(bio_read_method());
+#endif
   BIO_set_ex_data(bio, 0, stream);
   /* Determine format */
   c = Speekcode(stream);
@@ -1139,7 +1290,9 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   atom_t method_name;
+#endif
   const SSL_METHOD *ssl_method = NULL;
 
   if ( !PL_strip_module(options, &module, options) )
@@ -1155,6 +1308,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   else
     return PL_domain_error("ssl_role", role);
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if (!PL_get_atom(method, &method_name))
      return PL_domain_error("ssl_method", method);
   if (method_name == ATOM_sslv23)
@@ -1181,6 +1335,9 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 #endif
   else
     return PL_domain_error("ssl_method", method);
+#else
+    ssl_method = TLS_method();  /* In OpenSSL >= 1.1.0, always use TLS_method() */
+#endif
 
   if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
@@ -1930,6 +2087,9 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   SSL_SESSION* session;
   term_t list_t = PL_copy_term_ref(session_t);
   term_t node_t = PL_new_term_ref();
+  int version;
+  unsigned char *master_key;
+  int master_key_length;
 
   if ( !PL_get_stream_handle(stream_t, &stream) )
      return FALSE;
@@ -1945,23 +2105,36 @@ pl_ssl_session(term_t stream_t, term_t session_t)
        !(session = SSL_get_session(ssl)) )
     return PL_existence_error("ssl_session", stream_t);
 
-  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
-    return FALSE;
-  if ( !PL_unify_term(node_t,
-		      PL_FUNCTOR, FUNCTOR_version1,
-		      PL_INTEGER, (int)session->ssl_version))
-    return FALSE;
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  version = session->ssl_version;
+  master_key = session->master_key;
+  master_key_length = session->master_key_length;
+  /* session_key is SSL2 specific, i.e., obsolete */
 #ifndef OPENSSL_NO_SSL2
   if ( !add_key_string(list_t, FUNCTOR_session_key1,
 		       session->key_arg_length, session->key_arg) )
     return FALSE;
 #endif
+#else
+  version = SSL_SESSION_get_protocol_version(session);
+  if ( (master_key = PL_malloc(SSL_MAX_MASTER_KEY_LENGTH)) == NULL )
+    return PL_resource_error("memory");
+  master_key_length = SSL_SESSION_get_master_key(session, master_key, SSL_MAX_MASTER_KEY_LENGTH);
+#endif
 
-  if ( !add_key_string(list_t, FUNCTOR_master_key1,
-		       session->master_key_length, session->master_key) )
+  if ( !PL_unify_list_ex(list_t, node_t, list_t) )
+    return FALSE;
+  if ( !PL_unify_term(node_t,
+		      PL_FUNCTOR, FUNCTOR_version1,
+		      PL_INTEGER, version))
     return FALSE;
 
+
+  if ( !add_key_string(list_t, FUNCTOR_master_key1,
+		       master_key_length, master_key) )
+    return FALSE;
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if ( !add_key_string(list_t, FUNCTOR_session_id1,
 		       session->session_id_length, session->session_id) )
     return FALSE;
@@ -1975,6 +2148,24 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 			 SSL3_RANDOM_SIZE, ssl->s3->server_random) )
       return FALSE;
   }
+#else
+  /* Note: session_id has no correspondence in OpenSSL >= 1.1.0 */
+
+  { unsigned char random[SSL3_RANDOM_SIZE];
+
+    SSL_get_client_random(ssl, random, SSL3_RANDOM_SIZE);
+    if ( !add_key_string(list_t, FUNCTOR_client_random1,
+                         SSL3_RANDOM_SIZE, random) )
+      return FALSE;
+
+    SSL_get_server_random(ssl, random, SSL3_RANDOM_SIZE);
+    if ( !add_key_string(list_t, FUNCTOR_server_random1,
+			 SSL3_RANDOM_SIZE, random) )
+      return FALSE;
+  }
+
+  PL_free(master_key);
+#endif
 
   return PL_unify_nil_ex(list_t);
 }

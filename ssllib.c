@@ -387,7 +387,11 @@ ssl_free(PL_SSL *config)
   }
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static int
+#else
+static void
+#endif
 ssl_config_new  ( void *            ctx
                 , void *            pl_ssl
                 , CRYPTO_EX_DATA *  parent_ctx
@@ -411,16 +415,23 @@ ssl_config_new  ( void *            ctx
         }
     }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     /*
      * 1 = success
      * 0 = failure
      */
     return (config != NULL);
+#endif
 }
 
 static int
 ssl_config_dup  ( CRYPTO_EX_DATA *  to
-                , CRYPTO_EX_DATA *  from
+                ,
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+                  CRYPTO_EX_DATA *  from
+#else
+                  const CRYPTO_EX_DATA *  from
+#endif
                 , void *            pl_ssl
                 , int               parent_ctx_idx
                 , long  argl
@@ -694,7 +705,12 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
          4) Otherwise, FAIL.
       */
       int i;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
       X509 *cert = ctx->cert;
+#else
+      X509 *cert = X509_STORE_CTX_get0_cert(ctx);
+#endif
       STACK_OF(GENERAL_NAME) *alt_names = X509_get_ext_d2i((X509 *)cert, NID_subject_alt_name, NULL, NULL);
       int alt_names_count = 0;
 
@@ -709,12 +725,12 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
                the type of config->pl_ssl_host
             */
             if (name->type == GEN_DNS)
-            { const char* hostname = (const char*)ASN1_STRING_data(name->d.dNSName);
+            { const char* hostname = (const char*)ASN1_STRING_get0_data(name->d.dNSName);
               size_t hostlen = ASN1_STRING_length(name->d.dNSName);
               if (hostlen == strlen(config->pl_ssl_host) &&
                   strcmp(config->pl_ssl_host, hostname) == 0)
               { config->hostname_check_status = 2;
-                ssl_deb(3, "Host that matches found in SAN %d: %s\n", i, ASN1_STRING_data(name->d.dNSName));
+                ssl_deb(3, "Host that matches found in SAN %d: %s\n", i, ASN1_STRING_get0_data(name->d.dNSName));
               } else if (hostlen > 2 && hostname[0] == '*' && hostname[1] == '.' && strlen(hostname) == hostlen)
               { char* subdomain = strchr(config->pl_ssl_host, '.');
                 if (subdomain != NULL && strcmp(&hostname[1], subdomain) == 0)
@@ -723,7 +739,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
                 }
               }
               else
-                ssl_deb(3, "Host does not match SAN %d: %s\n", i, ASN1_STRING_data(name->d.dNSName));
+                ssl_deb(3, "Host does not match SAN %d: %s\n", i, ASN1_STRING_get0_data(name->d.dNSName));
             }
           }
         }
@@ -742,12 +758,12 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
             { ASN1_STRING *common_name_asn1 = X509_NAME_ENTRY_get_data(common_name_entry);
               if (common_name_asn1 != NULL)
               { if (ASN1_STRING_length(common_name_asn1) == strlen(config->pl_ssl_host) &&
-                    strcmp(config->pl_ssl_host, (const char*)ASN1_STRING_data(common_name_asn1)) == 0)
+                    strcmp(config->pl_ssl_host, (const char*)ASN1_STRING_get0_data(common_name_asn1)) == 0)
                 { config->hostname_check_status = 2;
-                  ssl_deb(3, "Hostname in SN matches: %s\n", ASN1_STRING_data(common_name_asn1));
+                  ssl_deb(3, "Hostname in SN matches: %s\n", ASN1_STRING_get0_data(common_name_asn1));
                 }
                 else
-                  ssl_deb(3, "Hostname in SN does not match: %s vs %s\n", ASN1_STRING_data(common_name_asn1), config->pl_ssl_host);
+                  ssl_deb(3, "Hostname in SN does not match: %s vs %s\n", ASN1_STRING_get0_data(common_name_asn1), config->pl_ssl_host);
               }
             }
           }
@@ -1080,7 +1096,6 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
     PL_SSL           * config    = NULL;
     SSL_CTX          *ssl_ctx    = NULL;
 
-
     ssl_ctx = SSL_CTX_new(ssl_method);
     if (!ssl_ctx) {
         ERR_print_errors_pl();
@@ -1385,7 +1400,7 @@ ssl_init_verify_locations(PL_SSL *config)
 #endif
 DH *get_dh2048()
 	{
-	static unsigned char dh2048_p[]={
+	static unsigned char dhp_2048[]={
 		0xF9,0xE7,0xCF,0x81,0x2D,0xA6,0xA8,0x54,0x72,0xB3,0x6E,0x79,
 		0x71,0x10,0x3C,0x46,0x8F,0xFF,0x79,0xDE,0xEA,0x2D,0xFD,0xD8,
 		0x89,0xEB,0x17,0x0A,0x36,0x60,0x36,0x5C,0xB8,0xD7,0x57,0xB6,
@@ -1409,17 +1424,32 @@ DH *get_dh2048()
 		0xF3,0xAE,0xAB,0x88,0x2F,0x7A,0xD7,0x5E,0x98,0xFC,0xF5,0xCA,
 		0xD4,0x43,0xB4,0xAB,
 		};
-	static unsigned char dh2048_g[]={
+	static unsigned char dhg_2048[]={
 		0x02,
 		};
-	DH *dh;
 
-	if ((dh=DH_new()) == NULL) return(NULL);
-	dh->p=BN_bin2bn(dh2048_p,sizeof(dh2048_p),NULL);
-	dh->g=BN_bin2bn(dh2048_g,sizeof(dh2048_g),NULL);
+	DH *dh = DH_new();
+	if (dh == NULL) return NULL;
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+	dh->p=BN_bin2bn(dhp_2048,sizeof(dhp_2048),NULL);
+	dh->g=BN_bin2bn(dhg_2048,sizeof(dhg_2048),NULL);
 	if ((dh->p == NULL) || (dh->g == NULL))
-		{ DH_free(dh); return(NULL); }
-	return(dh);
+	  { DH_free(dh); return(NULL); }
+#else
+	BIGNUM *dhp_bn, *dhg_bn;
+
+	dhp_bn = BN_bin2bn(dhp_2048, sizeof (dhp_2048), NULL);
+	dhg_bn = BN_bin2bn(dhg_2048, sizeof (dhg_2048), NULL);
+	if (dhp_bn == NULL || dhg_bn == NULL
+	    || !DH_set0_pqg(dh, dhp_bn, NULL, dhg_bn)) {
+	  DH_free(dh);
+	  BN_free(dhp_bn);
+	  BN_free(dhg_bn);
+	  return NULL;
+	}
+#endif
+	return dh;
 	}
 
 int
@@ -1580,7 +1610,11 @@ ssl_lib_init(void)
     /* This call will ensure we only end up calling RAND_poll() once
        - preventing an ugly synchronization issue in OpenSSL */
     RAND_status();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     (void) SSL_library_init();
+#else
+    (void) OPENSSL_init_ssl(0, NULL);
+#endif
 
     if ((ctx_idx = SSL_CTX_get_ex_new_index( 0
                                        , NULL
@@ -1732,10 +1766,17 @@ long bio_control(BIO* bio, int cmd, long num, void* ptr)
 
 int bio_create(BIO* bio)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
    bio->shutdown = 1;
    bio->init = 1;
    bio->num = -1;
    bio->ptr = NULL;
+#else
+   BIO_set_shutdown(bio, 1);
+   BIO_set_init(bio, 1);
+   /* bio->num = -1;  (what to do in OpenSSL >= 1.1.0?)
+      bio->ptr = NULL; */
+#endif
    return 1;
 }
 
@@ -1752,6 +1793,7 @@ int bio_destroy(BIO* bio)
    return 1;
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 /*
  * Specify the BIO read and write function structures
  */
@@ -1775,8 +1817,44 @@ BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
                                   &bio_control,
                                   &bio_create,
                                   &bio_destroy};
+#else
+BIO_METHOD *bio_read_method()
+{
+  static BIO_METHOD *rm = NULL;
 
+  if (rm != NULL) return rm;
 
+  rm = BIO_meth_new(BIO_TYPE_MEM, "read");
+
+  if ( rm == NULL ||
+       (BIO_meth_set_read(rm, &bio_read) <= 0) ||
+       (BIO_meth_set_gets(rm, &bio_gets) <= 0) ||
+       (BIO_meth_set_ctrl(rm, &bio_control) <= 0) ||
+       (BIO_meth_set_create(rm, &bio_create) <= 0) ||
+       (BIO_meth_set_destroy(rm, &bio_destroy) <= 0) )
+    return NULL;
+
+  return rm;
+}
+
+BIO_METHOD *bio_write_method()
+{
+  static BIO_METHOD *wm = NULL;
+
+  if (wm != NULL) return wm;
+
+  wm = BIO_meth_new(BIO_TYPE_MEM, "write");
+
+  if ( wm == NULL ||
+       (BIO_meth_set_write(wm, &bio_write) <= 0) ||
+       (BIO_meth_set_ctrl(wm, &bio_control) <= 0) ||
+       (BIO_meth_set_create(wm, &bio_create) <= 0) ||
+       (BIO_meth_set_destroy(wm, &bio_destroy) <= 0) )
+    return NULL;
+
+  return wm;
+}
+#endif
 
 /*
  * Establish an SSL session using the given read and write streams
@@ -1785,16 +1863,23 @@ BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
 int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
 	    PL_SSL_INSTANCE** instancep)
-{ BIO* rbio = NULL;
-  BIO* wbio = NULL;
-  PL_SSL_INSTANCE *instance;
+{ PL_SSL_INSTANCE *instance;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  BIO *rbio = BIO_new(&bio_read_functions);
+  BIO *wbio = BIO_new(&bio_write_functions);
+#else
+  BIO *rbio = BIO_new(bio_read_method());
+  BIO *wbio = BIO_new(bio_write_method());
+#endif
+
+  if ( rbio == NULL ||
+       wbio == NULL )
+    return raise_ssl_error(ERR_get_error());
 
   if ( !(instance=ssl_instance_new(config, sread, swrite)) )
     return PL_resource_error("memory");
 
-  rbio = BIO_new(&bio_read_functions);
   BIO_set_ex_data(rbio, 0, sread);
-  wbio = BIO_new(&bio_write_functions);
   BIO_set_ex_data(wbio, 0, swrite);
 
   if ( config->pl_ssl_crl_required )
@@ -1915,18 +2000,20 @@ ssl_write(void *handle, char *buf, size_t size)
   }
 }
 
-
-		 /*******************************
-		 *	      THREADING		*
-		 *******************************/
+                /*******************************
+                *            THREADING         *
+                *******************************/
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-OpenSSL is not thread-safe, unless  you   install  the hooks below. This
-code is based on mttest.c distributed with the OpenSSL library.
+OpenSSL is only thread-safe as of version 1.1.0.
+
+For earlier versions, we need to install the hooks below. This code is
+based on mttest.c distributed with the OpenSSL library.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #ifdef _REENTRANT
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static pthread_mutex_t *lock_cs;
 static long *lock_count;
 static void (*old_locking_callback)(int, int, const char*, int) = NULL;
@@ -1977,10 +2064,12 @@ pthreads_thread_id(void)
 }
 #endif /* OpenSSL 1.0.0 */
 #endif /* WINDOWS */
+#endif /* OpenSSL 1.1.0 */
 
 void
 ssl_thread_exit(void* ignored)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 #ifdef HAVE_ERR_REMOVE_THREAD_STATE
   ERR_remove_thread_state(0);
 #elif defined(HAVE_ERR_REMOVE_STATE)
@@ -1988,12 +2077,14 @@ ssl_thread_exit(void* ignored)
 #else
 #error "Do not know how to remove SSL error state"
 #endif
+#endif /* ERR_remove_(thread)_state is deprecated in OpenSSL >= 1.1.0 */
 }
 
 int
 ssl_thread_setup(void)
-{ int i;
-
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  int i;
   lock_cs = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
   lock_count = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(long));
   for (i=0; i<CRYPTO_num_locks(); i++)
@@ -2014,6 +2105,7 @@ ssl_thread_setup(void)
 #endif
 #endif
   CRYPTO_set_locking_callback(pthreads_locking_callback);
+#endif
   PL_thread_at_exit(ssl_thread_exit, NULL, TRUE);
   return TRUE;
 }
@@ -2042,6 +2134,7 @@ ssl_lib_exit(void)
  * If the module is being unloaded, we should remove callbacks pointing to
  * our address space
  */
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 #ifdef _REENTRANT
 #ifndef __WINDOWS__
 #ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
@@ -2051,6 +2144,7 @@ ssl_lib_exit(void)
 #endif
 #endif
     CRYPTO_set_locking_callback(old_locking_callback);
+#endif
 #endif
     return 0;
 }

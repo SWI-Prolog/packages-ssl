@@ -233,6 +233,11 @@ easily be used.
 %	  * ssl_method(+Method)
 %	  Specify the explicit Method to use when negotiating. For
 %	  allowed values, see the list for `disable_ssl_methods` above.
+%	  Using this option is discouraged. When using OpenSSL 1.1.0
+%	  or later, this option is ignored, and a version-flexible method
+%	  is used to negotiate the connection. Using version-specific
+%	  methods is deprecated in recent OpenSSL versions, and this
+%	  option will become obsolete and ignored in the future.
 %	  * sni_hook(+PredicateName)
 %	  This option provides Server Name Indication (SNI) for SSL
 %	  servers. This means that depending on the host to which a
