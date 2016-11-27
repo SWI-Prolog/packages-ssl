@@ -478,18 +478,34 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   return PL_unify_int64(term, result);
 }
 
-static int
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+void EVP_MD_CTX_free(EVP_MD_CTX *ctx)
+{
+   EVP_MD_CTX_cleanup(ctx);
+   OPENSSL_free(ctx);
+}
+
+static void *OPENSSL_zalloc(size_t num)
+{
+   void *ret = OPENSSL_malloc(num);
+   if (ret != NULL)
+       memset(ret, 0, num);
+   return ret;
+}
+
+EVP_MD_CTX *EVP_MD_CTX_new(void)
+{
+   return OPENSSL_zalloc(sizeof(EVP_MD_CTX));
+}
+
+static int
 unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char**), void * data)
 #else
+static int
 unify_hash(term_t hash, const ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char**), void * data)
 #endif
 { const EVP_MD *type;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  EVP_MD_CTX ctx;
-#else
   EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-#endif
   int digestible_length;
   unsigned char* digest_buffer;
   unsigned char digest[EVP_MAX_MD_SIZE];
@@ -518,11 +534,6 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned
                            PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
                            PL_INTEGER, nid);
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  EVP_MD_CTX_init(&ctx);
-#else
-  /* TODO: What to do in OpenSSL 1.1.0? */
-#endif
 
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
@@ -532,53 +543,25 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned
   /* i2d_X509_CINF will change the value of p. We need to pass in a copy */
   p = digest_buffer;
   i2d(data,&p);
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  if (!EVP_DigestInit(&ctx, type))
-#else
   if (!EVP_DigestInit(ctx, type))
-#endif
   {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_MD_CTX_cleanup(&ctx);
-#else
     EVP_MD_CTX_free(ctx);
-#endif
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  if (!EVP_DigestUpdate(&ctx, digest_buffer, digestible_length))
-#else
   if (!EVP_DigestUpdate(ctx, digest_buffer, digestible_length))
-#endif
   {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_MD_CTX_cleanup(&ctx);
-#else
     EVP_MD_CTX_free(ctx);
-#endif
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  if (!EVP_DigestFinal(&ctx, digest, &digest_length))
-#else
   if (!EVP_DigestFinal(ctx, digest, &digest_length))
-#endif
   {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_MD_CTX_cleanup(&ctx);
-#else
     EVP_MD_CTX_free(ctx);
-#endif
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  EVP_MD_CTX_cleanup(&ctx);
-#else
   EVP_MD_CTX_free(ctx);
-#endif
   PL_free(digest_buffer);
   return unify_bytes_hex(hash, digest_length, digest);
 }
