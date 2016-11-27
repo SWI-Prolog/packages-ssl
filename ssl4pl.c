@@ -379,11 +379,7 @@ unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
    may be a lot of edge cases that dont work!
 */
 static int
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-unify_asn1_time(term_t term, ASN1_TIME *time)
-#else
 unify_asn1_time(term_t term, const ASN1_TIME *time)
-#endif
 { time_t result = 0;
   char buffer[24];
   char* pbuffer = buffer;
@@ -501,13 +497,9 @@ EVP_MD_CTX_new(void)
 }
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static int
-unify_hash(term_t hash, ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char**), void * data)
-#else
-static int
-unify_hash(term_t hash, const ASN1_OBJECT* algorithm, int (*i2d)(void*, unsigned char**), void * data)
-#endif
+unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
+	   int (*i2d)(void*, unsigned char**), void * data)
 { const EVP_MD *type;
   EVP_MD_CTX *ctx = EVP_MD_CTX_new();
   int digestible_length;
