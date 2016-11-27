@@ -71,6 +71,13 @@ AC_CHECK_FUNCS(CRYPTO_THREADID_get_callback CRYPTO_THREADID_set_callback)
 AC_CHECK_FUNCS(EVP_MD_CTX_free OPENSSL_zalloc)
 
 AC_CHECK_TYPES(CRYPTO_THREADID)
+AC_CHECK_MEMBERS(X509_VERIFY_PARAM.id,
+[ AC_DEFINE(HAVE_X509_VERIFY_PARAM_ID, 1,
+	    [Define of X509_VERIFY_PARAM_ID is provided])
+], [],
+[
+#include <openssl/ssl.h>
+])
 
 AC_MSG_CHECKING(system certificate file)
 SYSTEM_CACERT_FILENAME=/etc/ssl/certs/ca-certificates.crt
