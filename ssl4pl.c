@@ -590,16 +590,32 @@ unify_name(term_t term, X509_NAME* name)
   return PL_unify_nil(list);
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#define X509_REVOKED_get0_serialNumber(R) ((R)->serialNumber)
+#define X509_REVOKED_get0_revocationDate(R) ((R)->revocationDate)
+#define EVP_PKEY_base_id(key) ((key)->type)
+#define X509_CRL_get0_nextUpdate(C) X509_CRL_get_nextUpdate(C)
+static void
+X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig, const X509_ALGOR **palg)
+{
+  *psig = crl->signature;
+  *palg = crl->sig_alg;
+}
+
+static void
+X509_get0_signature(const ASN1_BIT_STRING **psig, const X509_ALGOR **palg, const X509 *data)
+{
+  *psig = data->signature;
+  *palg = data->sig_alg;
+}
+#endif
+
 static int
 unify_crl(term_t term, X509_CRL* crl)
 {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  X509_CRL_INFO *info = crl->crl;
-#else
   const ASN1_BIT_STRING *psig;
   const X509_ALGOR *palg;
   STACK_OF(X509_REVOKED) *revoked = X509_CRL_get_REVOKED(crl);
-#endif
   int i;
   term_t item = PL_new_term_ref();
   term_t hash = PL_new_term_ref();
@@ -619,20 +635,17 @@ unify_crl(term_t term, X509_CRL* crl)
   if (mem == NULL)
     return PL_resource_error("memory");
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  i2a_ASN1_INTEGER(mem, crl->signature);
-  if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
-        unify_hash(hash, crl->sig_alg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
-        unify_asn1_time(next_update, X509_CRL_get_nextUpdate(crl)) &&
-        unify_bytes_hex(signature, crl->signature->length, crl->signature->data) &&
-#else
   X509_CRL_get0_signature(crl, &psig, &palg);
-  i2a_ASN1_INTEGER(mem, psig);
+  i2a_ASN1_INTEGER(mem, (ASN1_BIT_STRING *) psig);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+        unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
+#else
+	/* TODO: is crl a valid choice here? */
         unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl) &&
+#endif
         unify_asn1_time(next_update, X509_CRL_get0_nextUpdate(crl)) &&
         unify_bytes_hex(signature, psig->length, psig->data) &&
-#endif
         PL_unify_term(term,
                       PL_LIST, 5,
                       PL_FUNCTOR, FUNCTOR_issuername1,
@@ -648,16 +661,6 @@ unify_crl(term_t term, X509_CRL* crl)
   {
      return FALSE;
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  for (i = 0; i < sk_X509_REVOKED_num(info->revoked); i++)
-  {  X509_REVOKED *r = sk_X509_REVOKED_value(info->revoked, i);
-     (void)BIO_reset(mem);
-     i2a_ASN1_INTEGER(mem, r->serialNumber);
-     result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
-                PL_unify_list(list, item, list) &&
-                (revocation_date = PL_new_term_ref()) &&
-                unify_asn1_time(revocation_date, r->revocationDate) &&
-#else
   for (i = 0; i < sk_X509_REVOKED_num(revoked); i++)
   {  X509_REVOKED *r = sk_X509_REVOKED_value(revoked, i);
      (void)BIO_reset(mem);
@@ -666,7 +669,6 @@ unify_crl(term_t term, X509_CRL* crl)
                 PL_unify_list(list, item, list) &&
                 (revocation_date = PL_new_term_ref()) &&
                 unify_asn1_time(revocation_date, X509_REVOKED_get0_revocationDate(r)) &&
-#endif
                 PL_unify_term(item,
                               PL_FUNCTOR, FUNCTOR_revoked2,
                               PL_NCHARS, (size_t)n, p,
@@ -690,11 +692,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
     return FALSE;
 
  /* EVP_PKEY_get1_* returns a copy of the existing key */
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  switch (EVP_PKEY_type(key->type))
-#else
   switch (EVP_PKEY_base_id(key))
-#endif
   { int rc;
 #ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
@@ -763,12 +761,9 @@ unify_certificate(term_t cert, X509* data)
   unsigned char *p;
   X509_EXTENSION * crl_ext = NULL;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-#else
   const ASN1_BIT_STRING *psig;
   const X509_ALGOR *palg;
   X509_get0_signature(&psig, &palg, data);
-#endif
 
   if (!(PL_unify_list(list, item, list) &&
         PL_unify_term(item,
@@ -820,7 +815,7 @@ unify_certificate(term_t cert, X509* data)
      return FALSE;
   if (!((hash = PL_new_term_ref()) &&
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-        unify_hash(hash, data->sig_alg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
+        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
 #else
         /* TODO: Is "data" a valid choice for the last argument? */
         unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data) &&
@@ -831,12 +826,7 @@ unify_certificate(term_t cert, X509* data)
                       PL_TERM, hash)))
      return FALSE;
   if (!((signature = PL_new_term_ref()) &&
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-	unify_bytes_hex(signature,
-			data->signature->length, data->signature->data) &&
-#else
 	unify_bytes_hex(signature, psig->length, psig->data) &&
-#endif
 	PL_unify_list(list, item, list) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_signature1,
