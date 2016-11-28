@@ -540,20 +540,17 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
   p = digest_buffer;
   i2d(data,&p);
   if (!EVP_DigestInit(ctx, type))
-  {
-    EVP_MD_CTX_free(ctx);
+  { EVP_MD_CTX_free(ctx);
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
   if (!EVP_DigestUpdate(ctx, digest_buffer, digestible_length))
-  {
-    EVP_MD_CTX_free(ctx);
+  { EVP_MD_CTX_free(ctx);
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
   if (!EVP_DigestFinal(ctx, digest, &digest_length))
-  {
-    EVP_MD_CTX_free(ctx);
+  { EVP_MD_CTX_free(ctx);
     PL_free(digest_buffer);
     return raise_ssl_error(ERR_get_error());
   }
