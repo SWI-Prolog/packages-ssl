@@ -1523,6 +1523,7 @@ ssl_config(PL_SSL *config, term_t options)
     if ( config->pl_ssl_key )
     { char *key = config->pl_ssl_key;
       EVP_PKEY *pkey;
+      int r;
 
       BIO* bio = BIO_new_mem_buf(key, -1);
 
@@ -1535,10 +1536,11 @@ ssl_config(PL_SSL *config, term_t options)
       if ( !pkey )
         return raise_ssl_error(ERR_get_error());
 
-      if ( SSL_CTX_use_PrivateKey(config->pl_ssl_ctx, pkey) <= 0 )
-        return raise_ssl_error(ERR_get_error());
-
+      r = SSL_CTX_use_PrivateKey(config->pl_ssl_ctx, pkey);
       EVP_PKEY_free(pkey);
+
+      if ( r <= 0 )
+        return raise_ssl_error(ERR_get_error());
     }
 
     if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
