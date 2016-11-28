@@ -1507,7 +1507,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
-  return ssl_config(conf, options) && register_conf(config, conf);
+  return register_conf(config, conf) && ssl_config(conf, options);
 }
 
 
