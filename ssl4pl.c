@@ -474,7 +474,7 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   return PL_unify_int64(term, result);
 }
 
-#ifndef HAVE_OPENSSL_ZALLOC
+#if !defined(HAVE_OPENSSL_ZALLOC) && !defined(OPENSSL_zalloc)
 static void *
 OPENSSL_zalloc(size_t num)
 { void *ret = OPENSSL_malloc(num);
