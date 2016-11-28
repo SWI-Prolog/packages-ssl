@@ -595,19 +595,23 @@ unify_name(term_t term, X509_NAME* name)
 #define X509_REVOKED_get0_revocationDate(R) ((R)->revocationDate)
 #define EVP_PKEY_base_id(key) ((key)->type)
 #define X509_CRL_get0_nextUpdate(C) X509_CRL_get_nextUpdate(C)
+#ifndef HAVE_X509_CRL_GET0_SIGNATURE
 static void
 X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig, const X509_ALGOR **palg)
 {
   *psig = crl->signature;
   *palg = crl->sig_alg;
 }
+#endif
 
+#ifndef HAVE_X509_GET0_SIGNATURE
 static void
 X509_get0_signature(const ASN1_BIT_STRING **psig, const X509_ALGOR **palg, const X509 *data)
 {
   *psig = data->signature;
   *palg = data->sig_alg;
 }
+#endif
 #endif
 
 static int

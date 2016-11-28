@@ -73,6 +73,7 @@ AC_CHECK_FUNCS(timegm ERR_remove_state ERR_remove_thread_state)
 AC_CHECK_FUNCS(X509_check_host)
 AC_CHECK_FUNCS(CRYPTO_THREADID_get_callback CRYPTO_THREADID_set_callback)
 AC_CHECK_FUNCS(EVP_MD_CTX_free OPENSSL_zalloc)
+AC_CHECK_FUNCS(X509_CRL_get0_signature X509_get0_signature)
 
 AC_CHECK_TYPES(CRYPTO_THREADID, [], [],
 [
