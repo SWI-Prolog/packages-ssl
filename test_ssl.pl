@@ -290,7 +290,7 @@ server_loop(SSL, Server) :-
 	call_cleanup(close(In),	close(Out)),
 	(   retract(stop_server)
 	->  tcp_close_socket(Server)
-	;   server_loop(SSL)
+	;   server_loop(SSL, Server)
 	).
 
 copy_client(In, Out) :-
