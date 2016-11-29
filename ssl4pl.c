@@ -936,11 +936,7 @@ pl_load_public_key(term_t source, term_t key_t)
 
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  bio = BIO_new(&bio_read_functions);
-#else
   bio = BIO_new(bio_read_method());
-#endif
   BIO_set_ex_data(bio, 0, stream);
 
   /* Determine format */
@@ -975,11 +971,7 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
     return FALSE;
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  bio = BIO_new(&bio_read_functions);
-#else
   bio = BIO_new(bio_read_method());
-#endif
   BIO_set_ex_data(bio, 0, stream);
 
   /* Determine format */
@@ -1011,11 +1003,7 @@ pl_load_crl(term_t source, term_t list)
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  bio = BIO_new(&bio_read_functions);
-#else
   bio = BIO_new(bio_read_method());
-#endif
   BIO_set_ex_data(bio, 0, stream);
   /* Determine the format of the CRL */
   c = Speekcode(stream);
@@ -1043,11 +1031,7 @@ pl_load_certificate(term_t source, term_t cert)
 
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  bio = BIO_new(&bio_read_functions);
-#else
   bio = BIO_new(bio_read_method());
-#endif
   BIO_set_ex_data(bio, 0, stream);
   /* Determine format */
   c = Speekcode(stream);

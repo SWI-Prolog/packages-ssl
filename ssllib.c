@@ -1819,6 +1819,16 @@ BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
                                   &bio_control,
                                   &bio_create,
                                   &bio_destroy};
+
+BIO_METHOD *bio_read_method()
+{
+  return &bio_read_functions;
+}
+
+BIO_METHOD *bio_write_method()
+{
+  return &bio_write_functions;
+}
 #else
 BIO_METHOD *bio_read_method()
 {
@@ -1866,13 +1876,8 @@ int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
 	    PL_SSL_INSTANCE** instancep)
 { PL_SSL_INSTANCE *instance;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  BIO *rbio = BIO_new(&bio_read_functions);
-  BIO *wbio = BIO_new(&bio_write_functions);
-#else
   BIO *rbio = BIO_new(bio_read_method());
   BIO *wbio = BIO_new(bio_write_method());
-#endif
 
   if ( rbio == NULL ||
        wbio == NULL )
