@@ -1902,7 +1902,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
       SSL_set_tlsext_host_name(instance->ssl, config->pl_ssl_host);
 #endif
 #ifdef HAVE_X509_CHECK_HOST
-#ifdef HAVE_X509_VERIFY_PARAM_ID
+#if defined(HAVE_X509_VERIFY_PARAM_ID) || OPENSSL_VERSION_NUMBER >= 0x10100000L
     X509_VERIFY_PARAM *param = SSL_get0_param(instance->ssl);
     /* This could in theory be user-configurable. The documentation at
        https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
