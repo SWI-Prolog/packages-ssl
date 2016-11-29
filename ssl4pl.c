@@ -764,9 +764,9 @@ unify_certificate(term_t cert, X509* data)
   unsigned int crl_ext_id;
   unsigned char *p;
   X509_EXTENSION * crl_ext = NULL;
+  GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
 
-  const ASN1_BIT_STRING *psig;
-  const X509_ALGOR *palg;
   X509_get0_signature(&psig, &palg, data);
 
   if (!(PL_unify_list(list, item, list) &&

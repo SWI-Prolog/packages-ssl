@@ -75,10 +75,33 @@ AC_CHECK_FUNCS(CRYPTO_THREADID_get_callback CRYPTO_THREADID_set_callback)
 AC_CHECK_FUNCS(EVP_MD_CTX_free OPENSSL_zalloc)
 AC_CHECK_FUNCS(X509_CRL_get0_signature X509_get0_signature)
 
+if test "x$ac_cv_func_X509_get0_signature" = "xyes"; then
+  ac_oldcflags="$CFLAGS"
+  CFLAGS="$CFLAGS -Werror"
+  AC_MSG_CHECKING("whether X509_get0_signature takes const")
+  AC_TRY_COMPILE(
+[
+#include <openssl/x509.h>
+],
+		 [ ASN1_BIT_STRING *psig;
+		   X509_ALGOR *palg;
+		   const X509 *data;
+		   X509_get0_signature(&psig, &palg, data);
+		 ],
+		 AC_MSG_RESULT(no),
+	         GET0SIG_CONST_T=""
+		 AC_MSG_RESULT(yes),
+		 GET0SIG_CONST_T="const")
+AC_DEFINE_UNQUOTED(GET0SIG_CONST_T, $GET0SIG_CONST_T,
+		   [Define X509_get0_signature const args])
+CFLAGS=$ac_oldcflags
+fi
+
 AC_CHECK_TYPES(CRYPTO_THREADID, [], [],
 [
 #include <openssl/ssl.h>
 ])
+
 AC_CHECK_MEMBERS(X509_VERIFY_PARAM.id,
 [ AC_DEFINE(HAVE_X509_VERIFY_PARAM_ID, 1,
 	    [Define of X509_VERIFY_PARAM_ID is provided])
