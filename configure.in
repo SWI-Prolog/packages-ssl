@@ -88,10 +88,8 @@ if test "x$ac_cv_func_X509_get0_signature" = "xyes"; then
 		   const X509 *data;
 		   X509_get0_signature(&psig, &palg, data);
 		 ],
-		 AC_MSG_RESULT(no),
-	         GET0SIG_CONST_T=""
-		 AC_MSG_RESULT(yes),
-		 GET0SIG_CONST_T="const")
+		 [AC_MSG_RESULT(no);  GET0SIG_CONST_T=""],
+		 [AC_MSG_RESULT(yes); GET0SIG_CONST_T="const"])
 AC_DEFINE_UNQUOTED(GET0SIG_CONST_T, $GET0SIG_CONST_T,
 		   [Define X509_get0_signature const args])
 CFLAGS=$ac_oldcflags
