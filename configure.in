@@ -90,10 +90,12 @@ if test "x$ac_cv_func_X509_get0_signature" = "xyes"; then
 		 ],
 		 [AC_MSG_RESULT(no);  GET0SIG_CONST_T=""],
 		 [AC_MSG_RESULT(yes); GET0SIG_CONST_T="const"])
+CFLAGS=$ac_oldcflags
+else
+	GET0SIG_CONST_T=const
+fi
 AC_DEFINE_UNQUOTED(GET0SIG_CONST_T, $GET0SIG_CONST_T,
 		   [Define X509_get0_signature const args])
-CFLAGS=$ac_oldcflags
-fi
 
 AC_CHECK_TYPES(CRYPTO_THREADID, [], [],
 [
