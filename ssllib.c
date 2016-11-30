@@ -1757,6 +1757,8 @@ long bio_control(BIO* bio, int cmd, long num, void* ptr)
      case BIO_CTRL_FLUSH:
         Sflush(stream);
         return 1;
+     case BIO_CTRL_EOF:
+        return Sfeof(stream);
    }
    return 0;
 }
@@ -1968,7 +1970,9 @@ ssl_read(void *handle, char *buf, size_t size)
   for(;;)
   { int rbytes = SSL_read(ssl, buf, size);
 
-    if ( rbytes == 0 ) /* EOF - error, but we handle in prolog */
+    if ( ( rbytes == 0 ) ||
+         ( (rbytes < 0) && BIO_eof(SSL_get_rbio(ssl)) ) )
+      /* EOF - error, but we handle in prolog */
       return 0;
 
     switch(ssl_inspect_status(instance, rbytes, STAT_READ))
