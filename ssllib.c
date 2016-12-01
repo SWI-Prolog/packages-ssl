@@ -1744,8 +1744,8 @@ int bio_write(BIO* bio, const char* buf, int len)
 }
 
 /*
- * Control function
- * (Currently only supports flush. There are several mandatory, but as-yet unsupported functions...)
+ * Control function. Currently only supports flushing and detecting EOF.
+ * There are several more mandatory, but as-yet unsupported functions...
  */
 
 long bio_control(BIO* bio, int cmd, long num, void* ptr)
@@ -1968,12 +1968,12 @@ ssl_read(void *handle, char *buf, size_t size)
   assert(ssl != NULL);
 
   for(;;)
-  { int rbytes = SSL_read(ssl, buf, size);
+  { int rbytes;
 
-    if ( ( rbytes == 0 ) ||
-         ( (rbytes < 0) && BIO_eof(SSL_get_rbio(ssl)) ) )
-      /* EOF - error, but we handle in prolog */
-      return 0;
+    if ( BIO_eof(SSL_get_rbio(ssl)) )
+      return 0;         /* we handle EOF in Prolog */
+
+    rbytes = SSL_read(ssl, buf, size);
 
     switch(ssl_inspect_status(instance, rbytes, STAT_READ))
     { case SSL_PL_OK:
@@ -1997,10 +1997,12 @@ ssl_write(void *handle, char *buf, size_t size)
   assert(ssl != NULL);
 
   for(;;)
-  { int wbytes = SSL_write(ssl, buf, size);
+  { int wbytes;
 
-    if ( wbytes == 0 ) /* EOF - error, but we handle in prolog */
-      return 0;
+    if ( BIO_eof(SSL_get_wbio(ssl)) )
+      return 0;         /* we handle EOF in Prolog */
+
+    wbytes = SSL_write(ssl, buf, size);
 
     switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
     { case SSL_PL_OK:
