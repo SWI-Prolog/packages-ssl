@@ -37,6 +37,7 @@
 	  ]).
 
 :- use_module(library(ssl)).
+:- use_module(library(socket)).
 
 client :-
 	ssl_context(client, SSL,
