@@ -258,27 +258,33 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
       break;
   }
 
+  if ( ( code == SSL_ERROR_SYSCALL ) &&
+       ( BIO_eof(SSL_get_rbio(instance->ssl)) ||
+         BIO_eof(SSL_get_wbio(instance->ssl))) )
+  { switch(role)
+    { case STAT_NEGOTIATE:
+        PL_raise_exception(unexpected_eof(instance));
+        break;
+      case STAT_READ:
+        if ( instance->config->close_notify )
+        { Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
+        } else
+        { return SSL_PL_OK;
+        }
+        break;
+      case STAT_WRITE:
+        Sseterr(instance->dwrite, SIO_FERR, "SSL: unexpected end-of-file");
+        break;
+    }
+    return SSL_PL_ERROR;
+  }
+
   error = ERR_get_error();
 
-  if ( code == SSL_ERROR_SYSCALL && error == 0 )
-  { if ( ssl_ret == 0 )
-    { switch(role)
-      { case STAT_NEGOTIATE:
-	  PL_raise_exception(unexpected_eof(instance));
-	  break;
-	case STAT_READ:
-	  Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
-	  break;
-	case STAT_WRITE:
-	  Sseterr(instance->dwrite, SIO_FERR, "SSL: unexpected end-of-file");
-	  break;
-      }
-      return SSL_PL_ERROR;
-    } else if ( ssl_ret == -1 )
-    { if ( role == STAT_NEGOTIATE )
-	PL_raise_exception(syscall_error("ssl_negotiate", errno));
-      return SSL_PL_ERROR;
-    }
+  if ( code == SSL_ERROR_SYSCALL && error == 0 && ssl_ret == -1 )
+  { if ( role == STAT_NEGOTIATE )
+      PL_raise_exception(syscall_error("ssl_negotiate", errno));
+    return SSL_PL_ERROR;
   }
 
   switch(role)
@@ -1982,20 +1988,12 @@ ssl_read(void *handle, char *buf, size_t size)
   for(;;)
   { int rbytes;
 
-    if ( BIO_eof(SSL_get_rbio(ssl)) )
-    { if ( !instance->config->close_notify ||
-           SSL_get_shutdown(ssl) )
-      { return 0;         /* we handle EOF in Prolog */
-      } else {
-        Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
-        return -1;
-      }
-    }
-
     rbytes = SSL_read(ssl, buf, size);
 
     switch(ssl_inspect_status(instance, rbytes, STAT_READ))
     { case SSL_PL_OK:
+        if (rbytes <= 0)        /* SSL_read() returns -1 on EOF in OpenSSL 1.1.0c! */
+          return 0;             /* We handle EOF in Prolog. */
 	return rbytes;
       case SSL_PL_RETRY:
 	continue;
