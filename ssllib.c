@@ -258,32 +258,82 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
       break;
   }
 
-  if ( ( code == SSL_ERROR_SYSCALL ) &&
-       ( BIO_eof(SSL_get_rbio(instance->ssl)) ||
-         BIO_eof(SSL_get_wbio(instance->ssl))) )
-  { switch(role)
-    { case STAT_NEGOTIATE:
-        PL_raise_exception(unexpected_eof(instance));
-        break;
-      case STAT_READ:
-        if ( instance->config->close_notify )
-        { Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
-        } else
-        { return SSL_PL_OK;
-        }
-        break;
-      case STAT_WRITE:
-        Sseterr(instance->dwrite, SIO_FERR, "SSL: unexpected end-of-file");
-        break;
-    }
-    return SSL_PL_ERROR;
-  }
+  /*
+     It is hard to handle all possible cases correctly across
+     different OpenSSL versions and for all BIO types.
+
+     For many releases, the OpenSSL documentation contained
+     contradicting and wrong information. In OpenSSL 1.1.0c, the API
+     changed (without notice) to return -1 when hitting EOF in
+     SSL_read(). This change was later reverted.
+
+     The best description was given by Matt Caswell in:
+
+          https://github.com/openssl/openssl/issues/1903
+
+     "I should add that you can also use SSL_get_shutdown() to
+     explicitly test whether a connection has been cleanly shutdown or
+     not. This actually tells you slightly different information to
+     SSL_get_error(), i.e. it tells you whether a shutdown alert has
+     been received (i.e. a close_notify or a fatal error alert), or
+     whether we have sent a close_notify ourselves. A connection is
+     only fully and cleanly closed if we have both sent and received a
+     close_notify.
+
+     "SSL_get_error() will tell you whether a close_notify has been
+     received through SSL_ERROR_RETURN_ZERO. Receipt of a fatal alert
+     will appear as SSL_ERROR_SSL from SSL_get_error() - although it
+     could also mean some other kind of internal error has happened. A
+     SSL_ERROR_SYSCALL return will tell you that some unknown error
+     has occurred in a system call. This could be caused by an unclean
+     shutdown.
+
+     "If you get back SSL_ERROR_RETURN_ZERO then you know the
+     connection has been cleanly shutdown by the peer. To fully close
+     the connection you may choose to call SSL_shutdown() to send a
+     close_notify back.  If you get back SSL_ERROR_SSL then some kind
+     of internal or protocol error has occurred. More details will be
+     on the SSL error queue. You can also call SSL_get_shutdown(). If
+     this indicates a state of SSL_RECEIVED_SHUTDOWN then you know a
+     fatal alert has been received from the peer (if it had been a
+     close_notify then SSL_get_error() would have returned
+     SSL_ERROR_RETURN_ZERO). SSL_ERROR_SSL is considered fatal - you
+     should not call SSL_shutdown() in this case.
+
+     "If you get back SSL_ERROR_SYSCALL then some kind of fatal
+     (i.e. non-retryable) error has occurred in a system call. You may
+     be able to get more information from the SSL error queue or you
+     might not. The fatal error could be because the underlying
+     transport has been shutdown unexpectedly (no alert received) or
+     just some other unknown system call error occurred. Calling
+     BIO_eof() at this point will tell you whether the underlying
+     transport has hit EOF (i.e. for a socket BIO the connection has
+     been closed)."
+
+     Other things I found out:
+
+     -) BIO_eof() may return true even if data can still be read.
+     -) How this all interacts with timeouts does not follow
+        from the description above. It is not enough to check
+        for EOF, even if one manages to do it correctly.
+  */
 
   error = ERR_get_error();
 
-  if ( code == SSL_ERROR_SYSCALL && error == 0 && ssl_ret == -1 )
-  { if ( role == STAT_NEGOTIATE )
-      PL_raise_exception(syscall_error("ssl_negotiate", errno));
+  if ( code == SSL_ERROR_SYSCALL )
+  { if ( role == STAT_READ )
+    { if ( BIO_eof(SSL_get_rbio(instance->ssl)) )
+      { if ( !instance->config->close_notify )
+          return SSL_PL_OK;
+        Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
+      }
+    } else if ( role == STAT_WRITE && BIO_eof(SSL_get_wbio(instance->ssl)) )
+    { Sseterr(instance->dwrite, SIO_FERR, "SSL: unexpected end-of-file");
+    } else if ( role == STAT_NEGOTIATE )
+    { PL_raise_exception(error == 0 ? unexpected_eof(instance)
+                                    : syscall_error("ssl_negotiate", errno));
+    }
+
     return SSL_PL_ERROR;
   }
 
