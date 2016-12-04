@@ -9,6 +9,10 @@ AC_SUBST(PLTARGETS)
 
 m4_include([../ac_swi_c.m4])
 
+dnl MacOS hacks.  There is both libssl.dylib in /usr/lib and in the
+dnl Macport or Homebrew.  MacOS discontinued support for OpenSSL, so
+dnl we have to find the right version.
+
 case "$PLARCH" in
     *-win32|*-win64)
         AC_CHECK_LIB(ws2_32, main)
@@ -17,6 +21,13 @@ case "$PLARCH" in
         ;;
     *darwin*)
 	LIBS="$LIBS -framework CoreFoundation -framework Security"
+	if test -z "$SSLPREFIX"; then
+          if test -f /opt/local/lib/libssl.$SO; then
+            SSLPREFIX=/opt/local
+          else
+            SSLPREFIX=/usr/local
+          fi
+        fi
 	;;
 esac
 
@@ -32,28 +43,48 @@ AC_TRY_COMPILE(
    AC_MSG_RESULT(yes),
    AC_MSG_RESULT(no))
 
-AC_CHECK_LIB(crypto, main)
-AC_CHECK_LIB(ssl, SSL_library_init)
-AC_CHECK_LIB(ssl, OPENSSL_init_ssl)
+if test ! -z "$SSLPREFIX"; then
+  AC_MSG_CHECKING(Whether setting for SSLPREFIX is ok)
+  if test -f "$SSLPREFIX/include/openssl/ssl.h" -a \
+          -f "$SSLPREFIX/lib/libssl.$SO"; then
+    AC_MSG_RESULT(Using $SSLPREFIX)
+    LIBS="$LIBS $SSLPREFIX/lib/libssl.$SO $SSLPREFIX/lib/libcrypto.$SO"
+    CFLAGS="-I/$SSLPREFIX/include $CFLAGS"
+    AC_CHECK_FUNCS(SSL_library_init OPENSSL_init_ssl)
+    SSL_ok=yes
+  else
+    AC_MSG_RESULT(no)
+    SSLPREFIX=
+  fi
+fi
+
+if test -z "$SSLPREFIX"; then
+  AC_CHECK_LIB(crypto, main)
+  AC_CHECK_LIB(ssl, SSL_library_init)
+  AC_CHECK_LIB(ssl, OPENSSL_init_ssl)
+
+  AC_CHECK_HEADERS(openssl/ssl.h)
+
+  if ( test "$ac_cv_lib_ssl_SSL_library_init" = yes ||
+       test "$ac_cv_lib_ssl_OPENSSL_init_ssl" = yes ) &&
+     test "$ac_cv_lib_crypto_main" = yes; then
+    SSL_ok=yes
+  fi
+fi
+
+if test "$SSL_ok" = yes; then
+  TARGETS="ssl4pl.$SO"
+  PLTARGETS="ssl.pl saml.pl xmldsig.pl xmlenc.pl"
+else
+  TARGETS=""
+  PLTARGETS=""
+fi
+
 AC_CHECK_TYPES(socklen_t, [], [],
 [
 #include <sys/types.h>
 #include <sys/socket.h>
 ])
-
-AC_CHECK_HEADERS(openssl/ssl.h)
-
-if ( test "$ac_cv_lib_ssl_SSL_library_init" = yes ||
-     test "$ac_cv_lib_ssl_OPENSSL_init_ssl" = yes ) &&
-   test	"$ac_cv_lib_crypto_main" = yes; then
-  TARGETS="ssl4pl.$SO"
-  PLTARGETS="ssl.pl saml.pl xmldsig.pl xmlenc.pl"
-else
-  echo "ERROR:   Cannot find ssl library"
-  echo "WARNING: SSL interface will not be built"
-  TARGETS=""
-  PLTARGETS=""
-fi
 
 AC_MSG_CHECKING(h_errno)
 AC_TRY_COMPILE(
