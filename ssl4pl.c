@@ -59,6 +59,7 @@ static atom_t ATOM_key_file;
 static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
+static atom_t ATOM_close_notify;
 static atom_t ATOM_disable_ssl_methods;
 static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
@@ -1475,6 +1476,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
         return FALSE;
 
       ssl_set_cb_sni(conf, pl_sni_hook, (void *) hook);
+    } else if ( name == ATOM_close_notify && arity == 1 )
+    { int val;
+
+      if ( !get_bool_arg(1, head, &val) )
+	return FALSE;
+
+      ssl_set_close_notify(conf, val);
     } else
       continue;
   }
@@ -2299,6 +2307,7 @@ install_ssl4pl(void)
   ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
   ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
   ATOM_close_parent       = PL_new_atom("close_parent");
+  ATOM_close_notify       = PL_new_atom("close_notify");
   ATOM_disable_ssl_methods= PL_new_atom("disable_ssl_methods");
   ATOM_cipher_list        = PL_new_atom("cipher_list");
   ATOM_ecdh_curve         = PL_new_atom("ecdh_curve");

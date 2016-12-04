@@ -321,6 +321,7 @@ ssl_new(void)
 	new->sock			= -1;
         new->closeparent		= FALSE;
         new->atom		        = 0;
+        new->close_notify               = FALSE;
 
         new->pl_ssl_peer_cert           = NULL;
         new->pl_ssl_ctx                 = NULL;
@@ -970,6 +971,16 @@ ssl_set_close_parent(PL_SSL *config, int closeparent)
     return config->closeparent = closeparent;
 }
 
+BOOL
+ssl_set_close_notify(PL_SSL *config, BOOL close_notify)
+/*
+ * Send and expect close_notify?
+ */
+{
+    return config->close_notify = close_notify;
+}
+
+
 void
 ssl_set_method_options(PL_SSL *config, int options)
 /*
@@ -987,7 +998,8 @@ ssl_close(PL_SSL_INSTANCE *instance)
 {
     int ret = 0;
     if (instance) {
-        if (instance->config->pl_ssl_role != PL_SSL_SERVER) {
+        if ( (instance->config->pl_ssl_role != PL_SSL_SERVER) ||
+             instance->config->close_notify ) {
             /*
              * Send SSL/TLS close_notify
              */
@@ -1971,7 +1983,14 @@ ssl_read(void *handle, char *buf, size_t size)
   { int rbytes;
 
     if ( BIO_eof(SSL_get_rbio(ssl)) )
-      return 0;         /* we handle EOF in Prolog */
+    { if ( !instance->config->close_notify ||
+           SSL_get_shutdown(ssl) )
+      { return 0;         /* we handle EOF in Prolog */
+      } else {
+        Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
+        return -1;
+      }
+    }
 
     rbytes = SSL_read(ssl, buf, size);
 

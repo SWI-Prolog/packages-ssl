@@ -91,7 +91,8 @@
 		       cert_verify_hook(callable),
 		       cert(boolean),
 		       peer_cert(boolean),
-		       close_parent(boolean)
+		       close_parent(boolean),
+		       close_notify(boolean)
 		     ]).
 :- predicate_options(ssl_init/3, 3, [pass_to(ssl_context/3, 3)]).
 
@@ -226,6 +227,14 @@ easily be used.
 %	  * close_parent(+Boolean)
 %	  If `true`, close the raw streams if the SSL streams are closed.
 %	  Default is `false`.
+%	  * close_notify(+Boolean)
+%	  If `true` (default is `false`), the server sends TLS
+%	  `close_notify` when closing the connection. In addition,
+%	  this mitigates _truncation attacks_: If EOF is encountered
+%	  without either side having initiated a TLS shutdown, an
+%	  exception is raised. Well-designed protocols are
+%	  self-terminating, and this attack is therefore very rarely
+%	  a concern.
 %	  * disable_ssl_methods(+List)
 %	  A list of methods to disable. Unsupported methods will be
 %	  ignored. Methods include `sslv2`, `sslv3`, `sslv23`,

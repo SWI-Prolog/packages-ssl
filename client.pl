@@ -47,6 +47,7 @@ client :-
 		   certificate_file('etc/client/client-cert.pem'),
 		   key_file('etc/client/client-key.pem'),
 		   close_parent(true),
+		   close_notify(true),
 %		   password('apenoot2'),
 		   pem_password_hook(get_client_pwd)
 		 ]),

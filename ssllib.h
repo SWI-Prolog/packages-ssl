@@ -84,6 +84,8 @@ typedef struct pl_ssl {
     int			sock;		/* the listening/connected socket */
     int                 closeparent;
     atom_t              atom;
+    BOOL                close_notify;
+
     /*
      * Context, Certificate, SSL info
      */
@@ -185,6 +187,7 @@ char *          ssl_set_cipher_list(PL_SSL *config, const char *cipher_list);
 char *          ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve);
 BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
 BOOL		ssl_set_close_parent(PL_SSL *config, int closeparent);
+BOOL            ssl_set_close_notify(PL_SSL *config, BOOL close_notify);
 void            ssl_set_method_options(PL_SSL *config, int options);
 int		raise_ssl_error(long e);
 X509_list *	system_root_certificates(void);

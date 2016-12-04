@@ -48,6 +48,7 @@ server :-
 		      certificate_file('etc/server/server-cert.pem'),
 		      key_file('etc/server/server-key.pem'),
 		      cert_verify_hook(get_cert_verify),
+		      close_notify(true),
 		      % password('apenoot1'),
 		      pem_password_hook(get_server_pwd)
 		    ]),
