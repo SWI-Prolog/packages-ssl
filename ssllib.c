@@ -764,10 +764,10 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
       int i;
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
-      X509 *cert = ctx->cert;
-#else
-      X509 *cert = X509_STORE_CTX_get0_cert(ctx);
+#define X509_STORE_CTX_get0_cert(C) ((C)->cert)
 #endif
+      X509 *cert = X509_STORE_CTX_get0_cert(ctx);
+
       STACK_OF(GENERAL_NAME) *alt_names = X509_get_ext_d2i((X509 *)cert, NID_subject_alt_name, NULL, NULL);
       int alt_names_count = 0;
 
