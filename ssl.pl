@@ -92,7 +92,8 @@
 		       cert(boolean),
 		       peer_cert(boolean),
 		       close_parent(boolean),
-		       close_notify(boolean)
+		       close_notify(boolean),
+		       sni_hook(callable)
 		     ]).
 :- predicate_options(ssl_init/3, 3, [pass_to(ssl_context/3, 3)]).
 
