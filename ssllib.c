@@ -1900,13 +1900,20 @@ BIO_METHOD *bio_write_method()
   return &bio_write_functions;
 }
 #else
-BIO_METHOD *bio_read_method()
+/*
+ * In OpenSSL >= 1.1.0, the BIO methods are constructed
+ * using functions. We initialize them exactly once.
+ */
+
+static CRYPTO_ONCE once_read  = CRYPTO_ONCE_STATIC_INIT;
+static CRYPTO_ONCE once_write = CRYPTO_ONCE_STATIC_INIT;
+
+static BIO_METHOD *read_method = NULL;
+static BIO_METHOD *write_method = NULL;
+
+void read_method_init ()
 {
-  static BIO_METHOD *rm = NULL;
-
-  if (rm != NULL) return rm;
-
-  rm = BIO_meth_new(BIO_TYPE_MEM, "read");
+  BIO_METHOD *rm = BIO_meth_new(BIO_TYPE_MEM, "read");
 
   if ( rm == NULL ||
        (BIO_meth_set_read(rm, &bio_read) <= 0) ||
@@ -1914,27 +1921,43 @@ BIO_METHOD *bio_read_method()
        (BIO_meth_set_ctrl(rm, &bio_control) <= 0) ||
        (BIO_meth_set_create(rm, &bio_create) <= 0) ||
        (BIO_meth_set_destroy(rm, &bio_destroy) <= 0) )
-    return NULL;
+    return;
 
-  return rm;
+  read_method = rm;
 }
 
-BIO_METHOD *bio_write_method()
+BIO_METHOD *bio_read_method()
 {
-  static BIO_METHOD *wm = NULL;
+  if (read_method != NULL) return read_method;
 
-  if (wm != NULL) return wm;
+  if ( !CRYPTO_THREAD_run_once(&once_read, read_method_init) )
+    return NULL;
 
-  wm = BIO_meth_new(BIO_TYPE_MEM, "write");
+  return read_method;
+}
+
+void write_method_init ()
+{
+  BIO_METHOD *wm = BIO_meth_new(BIO_TYPE_MEM, "write");
 
   if ( wm == NULL ||
        (BIO_meth_set_write(wm, &bio_write) <= 0) ||
        (BIO_meth_set_ctrl(wm, &bio_control) <= 0) ||
        (BIO_meth_set_create(wm, &bio_create) <= 0) ||
        (BIO_meth_set_destroy(wm, &bio_destroy) <= 0) )
+    return;
+
+  write_method = wm;
+}
+
+BIO_METHOD *bio_write_method()
+{
+  if (write_method != NULL) return write_method;
+
+  if ( !CRYPTO_THREAD_run_once(&once_write, write_method_init) )
     return NULL;
 
-  return wm;
+  return write_method;
 }
 #endif
 
