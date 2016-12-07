@@ -231,11 +231,11 @@ easily be used.
 %	  * close_notify(+Boolean)
 %	  If `true` (default is `false`), the server sends TLS
 %	  `close_notify` when closing the connection. In addition,
-%	  this mitigates _truncation attacks_: If EOF is encountered
-%	  without either side having initiated a TLS shutdown, an
-%	  exception is raised. Well-designed protocols are
-%	  self-terminating, and this attack is therefore very rarely
-%	  a concern.
+%	  this mitigates _truncation attacks_ for both client and
+%	  server role: If EOF is encountered without having received a
+%	  TLS shutdown, an exception is raised. Well-designed
+%	  protocols are self-terminating, and this attack is therefore
+%	  very rarely a concern.
 %	  * disable_ssl_methods(+List)
 %	  A list of methods to disable. Unsupported methods will be
 %	  ignored. Methods include `sslv2`, `sslv3`, `sslv23`,
