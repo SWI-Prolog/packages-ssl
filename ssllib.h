@@ -147,6 +147,7 @@ typedef struct ssl_instance {
     IOSTREAM		*dread;		/* data streams */
     IOSTREAM		*dwrite;
     int                  close_needed;
+    BOOL                 fatal_alert;
 } PL_SSL_INSTANCE;
 
 

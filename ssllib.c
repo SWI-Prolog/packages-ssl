@@ -254,6 +254,10 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
     case SSL_ERROR_ZERO_RETURN:
       return SSL_PL_OK;
 
+    case SSL_ERROR_SSL:
+      instance->fatal_alert = TRUE;
+      break;
+
     default:
       break;
   }
@@ -288,6 +292,9 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
      has occurred in a system call. This could be caused by an unclean
      shutdown.
 
+     "So, in summary, if you get a 0 or -1 return from
+     SSL_read()/SSL_write(), you should call SSL_get_error():
+
      "If you get back SSL_ERROR_RETURN_ZERO then you know the
      connection has been cleanly shutdown by the peer. To fully close
      the connection you may choose to call SSL_shutdown() to send a
@@ -321,12 +328,11 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
   error = ERR_get_error();
 
   if ( code == SSL_ERROR_SYSCALL )
-  { if ( role == STAT_READ )
-    { if ( BIO_eof(SSL_get_rbio(instance->ssl)) )
-      { if ( !instance->config->close_notify )
-          return SSL_PL_OK;
-        Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
-      }
+  { instance->fatal_alert = TRUE;
+    if ( role == STAT_READ && BIO_eof(SSL_get_rbio(instance->ssl)) )
+    { if ( !instance->config->close_notify )
+        return SSL_PL_OK;
+      Sseterr(instance->dread, SIO_FERR, "SSL: unexpected end-of-file");
     } else if ( role == STAT_WRITE && BIO_eof(SSL_get_wbio(instance->ssl)) )
     { Sseterr(instance->dwrite, SIO_FERR, "SSL: unexpected end-of-file");
     } else if ( role == STAT_NEGOTIATE )
@@ -1057,9 +1063,10 @@ ssl_close(PL_SSL_INSTANCE *instance)
         if ( (instance->config->pl_ssl_role != PL_SSL_SERVER) ||
              instance->config->close_notify ) {
             /*
-             * Send SSL/TLS close_notify
+             * Send SSL/TLS close_notify, if no fatal alert has occurred.
              */
-            SSL_shutdown(instance->ssl);
+            if ( !instance->fatal_alert )
+              SSL_shutdown(instance->ssl);
         }
 
         if (instance->ssl) {
@@ -1682,6 +1689,7 @@ ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
     new->sock   = -1;
     new->sread  = sread;
     new->swrite	= swrite;
+    new->fatal_alert = FALSE;
   }
 
   return new;
