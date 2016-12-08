@@ -2059,14 +2059,12 @@ ssl_read(void *handle, char *buf, size_t size)
   assert(ssl != NULL);
 
   for(;;)
-  { int rbytes;
-
-    rbytes = SSL_read(ssl, buf, size);
+  { int rbytes = SSL_read(ssl, buf, size);
 
     switch(ssl_inspect_status(instance, rbytes, STAT_READ))
     { case SSL_PL_OK:
-        if (rbytes <= 0)        /* SSL_read() returns -1 on EOF in OpenSSL 1.1.0c! */
-          return 0;             /* We handle EOF in Prolog. */
+	if (rbytes <= 0)	/* SSL_read() returns -1 on EOF in OpenSSL 1.1.0c! */
+	  return 0;		/* We handle EOF in Prolog. */
 	return rbytes;
       case SSL_PL_RETRY:
 	continue;
@@ -2087,15 +2085,12 @@ ssl_write(void *handle, char *buf, size_t size)
   assert(ssl != NULL);
 
   for(;;)
-  { int wbytes;
-
-    if ( BIO_eof(SSL_get_wbio(ssl)) )
-      return 0;         /* we handle EOF in Prolog */
-
-    wbytes = SSL_write(ssl, buf, size);
+  { int wbytes = SSL_write(ssl, buf, size);
 
     switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
     { case SSL_PL_OK:
+	if (wbytes <= 0)
+	  return 0;		/* We handle EOF in Prolog. */
 	return wbytes;
       case SSL_PL_RETRY:
 	continue;
