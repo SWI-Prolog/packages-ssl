@@ -2097,8 +2097,6 @@ ssl_write(void *handle, char *buf, size_t size)
 
     switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
     { case SSL_PL_OK:
-	if (wbytes <= 0)
-	  return 0;		/* We handle EOF in Prolog. */
 	return wbytes;
       case SSL_PL_RETRY:
 	continue;
