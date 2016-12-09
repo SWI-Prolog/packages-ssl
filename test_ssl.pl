@@ -339,6 +339,7 @@ client :-
 		   cacert_file('tests/test_certs/rootCA/cacert.pem'),
 		   certificate_file('tests/test_certs/client-cert.pem'),
 		   key_file('tests/test_certs/client-key.pem'),
+		   close_parent(true),
 %		   password('apenoot2'),
 		   pem_password_hook(get_client_pwd)
 		 ]),
