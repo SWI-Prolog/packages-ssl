@@ -214,7 +214,9 @@ easily be used.
 %	  Specify a cipher preference list (one or more cipher strings
 %	  separated by colons, commas or spaces).
 %	  * ecdh_curve(+Atom)
-%	  Specify a curve for ECDHE ciphers. The default is `prime256v1`.
+%	  Specify a curve for ECDHE ciphers. If this option is not
+%	  specified, the OpenSSL default parameters are used.  With
+%	  OpenSSL prior to 1.1.0, `prime256v1` is used by default.
 %	  * cert(+Boolean)
 %	  Trigger the sending of our certificate specified by
 %	  certificate_file(FileName).  Sending is automatic for the

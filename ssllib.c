@@ -1531,6 +1531,19 @@ ssl_config(PL_SSL *config, term_t options)
 #ifndef OPENSSL_NO_EC
   EC_KEY *ecdh;
   int nid;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  char *curve = "prime256v1";
+#else
+  /* In OpenSSL >= 1.1.0, ECDH support is always enabled.  Therefore,
+   * if ecdh_curve/1 is not specified, we use the existing defaults.
+   *
+   * In fact, OpenSSL 1.1.0 provides the new function
+   * SSL_CTX_set1_groups, which generalizes SSL_CTX_set_tmp_ecdh in
+   * that it lets us specify a *set* of curves and other groups.
+   * We should provide a binding for the more general function.
+   */
+  char *curve = NULL;
+#endif
 #endif
 
   ssl_init_verify_locations(config);
@@ -1622,13 +1635,17 @@ ssl_config(PL_SSL *config, term_t options)
   SSL_CTX_set_tmp_dh(config->pl_ssl_ctx, dh_2048);
 
 #ifndef OPENSSL_NO_EC
-  nid = OBJ_sn2nid(config->pl_ssl_ecdh_curve ? config->pl_ssl_ecdh_curve
-					     : "prime256v1");
-  if ( !(ecdh = EC_KEY_new_by_curve_name(nid)) )
-    return raise_ssl_error(ERR_get_error());
-  if ( !SSL_CTX_set_tmp_ecdh(config->pl_ssl_ctx, ecdh) )
-    return raise_ssl_error(ERR_get_error());
-  EC_KEY_free(ecdh);		/* Safe because of reference counts */
+  if (config->pl_ssl_ecdh_curve)
+    curve = config->pl_ssl_ecdh_curve;
+
+  if (curve)
+  { nid = OBJ_sn2nid(curve);
+    if ( !(ecdh = EC_KEY_new_by_curve_name(nid)) )
+      return raise_ssl_error(ERR_get_error());
+    if ( !SSL_CTX_set_tmp_ecdh(config->pl_ssl_ctx, ecdh) )
+      return raise_ssl_error(ERR_get_error());
+    EC_KEY_free(ecdh);		/* Safe because of reference counts */
+  }
 #endif
 
   if ( config->pl_ssl_cipher_list &&
