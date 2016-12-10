@@ -2404,7 +2404,13 @@ install_ssl4pl(void)
   (void) ssl_lib_init();
 
   PL_set_prolog_flag("ssl_library_version", PL_ATOM,
-		     SSLeay_version(SSLEAY_VERSION));
+#ifdef HAVE_OPENSSL_VERSION
+		     OpenSSL_version(OPENSSL_VERSION)
+#else
+		     SSLeay_version(SSLEAY_VERSION)
+#endif
+		     );
+
   PL_set_prolog_flag("system_cacert_filename", PL_ATOM,
 		     SYSTEM_CACERT_FILENAME);
 }
