@@ -748,6 +748,12 @@ unify_private_key(EVP_PKEY* key, term_t item)
 { return unify_key(key, FUNCTOR_private_key1, item);
 }
 
+#ifndef HAVE_X509_GET0_NOTBEFORE
+#define X509_get0_notBefore(C) X509_get_notBefore(C)
+#endif
+#ifndef HAVE_X509_GET0_NOTAFTER
+#define X509_get0_notAfter(C) X509_get_notAfter(C)
+#endif
 
 static int
 unify_certificate(term_t cert, X509* data)
@@ -778,7 +784,7 @@ unify_certificate(term_t cert, X509* data)
      return FALSE;
   if (!(PL_unify_list(list, item, list) &&
         (not_before = PL_new_term_ref()) &&
-        unify_asn1_time(not_before, X509_get_notBefore(data)) &&
+        unify_asn1_time(not_before, X509_get0_notBefore(data)) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_notbefore1,
                       PL_TERM, not_before)))
@@ -786,7 +792,7 @@ unify_certificate(term_t cert, X509* data)
 
   if (!(PL_unify_list(list, item, list) &&
         (not_after = PL_new_term_ref()) &&
-        unify_asn1_time(not_after, X509_get_notAfter(data)) &&
+        unify_asn1_time(not_after, X509_get0_notAfter(data)) &&
         PL_unify_term(item,
                       PL_FUNCTOR, FUNCTOR_notafter1,
                       PL_TERM, not_after)))

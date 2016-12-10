@@ -105,6 +105,7 @@ AC_CHECK_FUNCS(X509_check_host)
 AC_CHECK_FUNCS(CRYPTO_THREADID_get_callback CRYPTO_THREADID_set_callback)
 AC_CHECK_FUNCS(EVP_MD_CTX_free OPENSSL_zalloc)
 AC_CHECK_FUNCS(X509_CRL_get0_signature X509_get0_signature)
+AC_CHECK_FUNCS(X509_get0_notBefore X509_get0_notAfter)
 
 if test "x$ac_cv_func_X509_get0_signature" = "xyes"; then
   ac_oldcflags="$CFLAGS"
