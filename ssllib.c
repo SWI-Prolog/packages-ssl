@@ -1100,7 +1100,9 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
         free(instance);
     }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     ERR_free_strings();
+#endif
 
     ssl_deb(1, "Controlled close\n");
     return ret;
