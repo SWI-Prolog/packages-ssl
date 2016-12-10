@@ -2180,6 +2180,9 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
   return FALSE;
 }
 
+#ifndef HAVE_EVP_CIPHER_CTX_RESET
+#define EVP_CIPHER_CTX_reset(C) EVP_CIPHER_CTX_init(C)
+#endif
 
 static foreign_t
 pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
@@ -2212,7 +2215,7 @@ pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
   if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
     return FALSE;
 
-  EVP_CIPHER_CTX_init(ctx);
+  EVP_CIPHER_CTX_reset(ctx);
   EVP_DecryptInit_ex(ctx, cipher, NULL,
 		     (const unsigned char*)key, (const unsigned char*)iv);
   EVP_CIPHER_CTX_set_padding(ctx, padding);
@@ -2267,7 +2270,7 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
     return FALSE;
 
-  EVP_CIPHER_CTX_init(ctx);
+  EVP_CIPHER_CTX_reset(ctx);
   EVP_EncryptInit_ex(ctx, cipher, NULL,
 		     (const unsigned char*)key, (const unsigned char*)iv);
 
