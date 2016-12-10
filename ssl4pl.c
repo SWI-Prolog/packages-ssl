@@ -61,6 +61,8 @@ static atom_t ATOM_cert_verify_hook;
 static atom_t ATOM_close_parent;
 static atom_t ATOM_close_notify;
 static atom_t ATOM_disable_ssl_methods;
+static atom_t ATOM_min_protocol_version;
+static atom_t ATOM_max_protocol_version;
 static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
 static atom_t ATOM_key;
@@ -1242,6 +1244,31 @@ pl_cert_verify_hook(PL_SSL *config,
   return val;
 }
 
+static int
+protocol_version_to_integer(const term_t symbol, int *version)
+{
+  atom_t arg;
+
+  if ( !PL_get_atom_ex(symbol, &arg) )
+    return FALSE;
+
+#ifdef SSL_CTX_set_min_proto_version
+  if ( arg == ATOM_sslv3 )
+    *version = SSL3_VERSION;
+  else if ( arg == ATOM_tlsv1 )
+    *version = TLS1_VERSION;
+  else if ( arg == ATOM_tlsv1_1 )
+    *version = TLS1_1_VERSION;
+  else if ( arg == ATOM_tlsv1_2 )
+    *version = TLS1_2_VERSION;
+  else
+    return PL_domain_error("ssl_protocol_version", symbol);
+#else
+  *version = 0;                 /* prevent compiler warning */
+#endif
+
+  return TRUE;
+}
 
 static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
@@ -1475,6 +1502,26 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       }
 
       ssl_set_method_options(conf, options);
+    } else if ( name == ATOM_min_protocol_version && arity == 1 )
+    { term_t val = PL_new_term_ref();
+      int version;
+
+      _PL_get_arg(1, head, val);
+
+      if ( !protocol_version_to_integer(val, &version) )
+        return FALSE;
+
+      ssl_set_min_protocol_version(conf, version);
+    } else if ( name == ATOM_max_protocol_version && arity == 1 )
+    { term_t val = PL_new_term_ref();
+      int version;
+
+      _PL_get_arg(1, head, val);
+
+      if ( !protocol_version_to_integer(val, &version) )
+        return FALSE;
+
+      ssl_set_max_protocol_version(conf, version);
     } else if ( name == ATOM_sni_hook && arity == 1 && r == PL_SSL_SERVER)
     { predicate_t hook;
 
@@ -2302,80 +2349,82 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
 
 install_t
 install_ssl4pl(void)
-{ ATOM_server             = PL_new_atom("server");
-  ATOM_client             = PL_new_atom("client");
-  ATOM_password           = PL_new_atom("password");
-  ATOM_host               = PL_new_atom("host");
-  ATOM_cert               = PL_new_atom("cert");
-  ATOM_peer_cert          = PL_new_atom("peer_cert");
-  ATOM_cacert_file        = PL_new_atom("cacert_file");
-  ATOM_certificate_file   = PL_new_atom("certificate_file");
-  ATOM_certificate        = PL_new_atom("certificate");
-  ATOM_key_file           = PL_new_atom("key_file");
-  ATOM_key                = PL_new_atom("key");
-  ATOM_pem_password_hook  = PL_new_atom("pem_password_hook");
-  ATOM_cert_verify_hook   = PL_new_atom("cert_verify_hook");
-  ATOM_close_parent       = PL_new_atom("close_parent");
-  ATOM_close_notify       = PL_new_atom("close_notify");
-  ATOM_disable_ssl_methods= PL_new_atom("disable_ssl_methods");
-  ATOM_cipher_list        = PL_new_atom("cipher_list");
-  ATOM_ecdh_curve         = PL_new_atom("ecdh_curve");
-  ATOM_root_certificates  = PL_new_atom("root_certificates");
-  ATOM_sni_hook           = PL_new_atom("sni_hook");
-  ATOM_sslv2              = PL_new_atom("sslv2");
-  ATOM_sslv23             = PL_new_atom("sslv23");
-  ATOM_sslv3              = PL_new_atom("sslv3");
-  ATOM_tlsv1              = PL_new_atom("tlsv1");
-  ATOM_tlsv1_1            = PL_new_atom("tlsv1_1");
-  ATOM_tlsv1_2            = PL_new_atom("tlsv1_2");
-  ATOM_minus		  = PL_new_atom("-");
-  ATOM_text		  = PL_new_atom("text");
-  ATOM_octet		  = PL_new_atom("octet");
-  ATOM_utf8		  = PL_new_atom("utf8");
-  ATOM_require_crl	  = PL_new_atom("require_crl");
-  ATOM_crl	          = PL_new_atom("crl");
-  ATOM_sha1		  = PL_new_atom("sha1");
-  ATOM_sha224		  = PL_new_atom("sha224");
-  ATOM_sha256		  = PL_new_atom("sha256");
-  ATOM_sha384		  = PL_new_atom("sha384");
-  ATOM_sha512		  = PL_new_atom("sha512");
-  ATOM_pkcs	          = PL_new_atom("pkcs");
-  ATOM_pkcs_oaep	  = PL_new_atom("pkcs_oaep");
-  ATOM_none	          = PL_new_atom("none");
-  ATOM_block	          = PL_new_atom("block");
-  ATOM_encoding	          = PL_new_atom("encoding");
-  ATOM_padding	          = PL_new_atom("padding");
+{ ATOM_server               = PL_new_atom("server");
+  ATOM_client               = PL_new_atom("client");
+  ATOM_password             = PL_new_atom("password");
+  ATOM_host                 = PL_new_atom("host");
+  ATOM_cert                 = PL_new_atom("cert");
+  ATOM_peer_cert            = PL_new_atom("peer_cert");
+  ATOM_cacert_file          = PL_new_atom("cacert_file");
+  ATOM_certificate_file     = PL_new_atom("certificate_file");
+  ATOM_certificate          = PL_new_atom("certificate");
+  ATOM_key_file             = PL_new_atom("key_file");
+  ATOM_key                  = PL_new_atom("key");
+  ATOM_pem_password_hook    = PL_new_atom("pem_password_hook");
+  ATOM_cert_verify_hook     = PL_new_atom("cert_verify_hook");
+  ATOM_close_parent         = PL_new_atom("close_parent");
+  ATOM_close_notify         = PL_new_atom("close_notify");
+  ATOM_disable_ssl_methods  = PL_new_atom("disable_ssl_methods");
+  ATOM_min_protocol_version = PL_new_atom("min_protocol_version");
+  ATOM_max_protocol_version = PL_new_atom("max_protocol_version");
+  ATOM_cipher_list          = PL_new_atom("cipher_list");
+  ATOM_ecdh_curve           = PL_new_atom("ecdh_curve");
+  ATOM_root_certificates    = PL_new_atom("root_certificates");
+  ATOM_sni_hook             = PL_new_atom("sni_hook");
+  ATOM_sslv2                = PL_new_atom("sslv2");
+  ATOM_sslv23               = PL_new_atom("sslv23");
+  ATOM_sslv3                = PL_new_atom("sslv3");
+  ATOM_tlsv1                = PL_new_atom("tlsv1");
+  ATOM_tlsv1_1              = PL_new_atom("tlsv1_1");
+  ATOM_tlsv1_2              = PL_new_atom("tlsv1_2");
+  ATOM_minus                = PL_new_atom("-");
+  ATOM_text                 = PL_new_atom("text");
+  ATOM_octet                = PL_new_atom("octet");
+  ATOM_utf8                 = PL_new_atom("utf8");
+  ATOM_require_crl          = PL_new_atom("require_crl");
+  ATOM_crl                  = PL_new_atom("crl");
+  ATOM_sha1                 = PL_new_atom("sha1");
+  ATOM_sha224               = PL_new_atom("sha224");
+  ATOM_sha256               = PL_new_atom("sha256");
+  ATOM_sha384               = PL_new_atom("sha384");
+  ATOM_sha512               = PL_new_atom("sha512");
+  ATOM_pkcs                 = PL_new_atom("pkcs");
+  ATOM_pkcs_oaep            = PL_new_atom("pkcs_oaep");
+  ATOM_none                 = PL_new_atom("none");
+  ATOM_block                = PL_new_atom("block");
+  ATOM_encoding             = PL_new_atom("encoding");
+  ATOM_padding              = PL_new_atom("padding");
 
-  FUNCTOR_error2          = PL_new_functor(PL_new_atom("error"), 2);
-  FUNCTOR_ssl_error4      = PL_new_functor(PL_new_atom("ssl_error"), 4);
-  FUNCTOR_permission_error3=PL_new_functor(PL_new_atom("permission_error"), 3);
-  FUNCTOR_ip4		  = PL_new_functor(PL_new_atom("ip"), 4);
-  FUNCTOR_version1	  = PL_new_functor(PL_new_atom("version"), 1);
-  FUNCTOR_notbefore1	  = PL_new_functor(PL_new_atom("notbefore"), 1);
-  FUNCTOR_notafter1	  = PL_new_functor(PL_new_atom("notafter"), 1);
-  FUNCTOR_subject1	  = PL_new_functor(PL_new_atom("subject"), 1);
-  FUNCTOR_issuername1	  = PL_new_functor(PL_new_atom("issuer_name"), 1);
-  FUNCTOR_serial1	  = PL_new_functor(PL_new_atom("serial"), 1);
-  FUNCTOR_key1	          = PL_new_functor(PL_new_atom("key"), 1);
-  FUNCTOR_public_key1     = PL_new_functor(PL_new_atom("public_key"), 1);
-  FUNCTOR_private_key1    = PL_new_functor(PL_new_atom("private_key"), 1);
-  FUNCTOR_rsa8		  = PL_new_functor(PL_new_atom("rsa"), 8);
-  FUNCTOR_hash1	          = PL_new_functor(PL_new_atom("hash"), 1);
-  FUNCTOR_next_update1    = PL_new_functor(PL_new_atom("next_update"), 1);
-  FUNCTOR_signature1      = PL_new_functor(PL_new_atom("signature"), 1);
-  FUNCTOR_equals2         = PL_new_functor(PL_new_atom("="), 2);
-  FUNCTOR_crl1            = PL_new_functor(PL_new_atom("crl"), 1);
-  FUNCTOR_revoked2        = PL_new_functor(PL_new_atom("revoked"), 2);
-  FUNCTOR_revocations1    = PL_new_functor(PL_new_atom("revocations"), 1);
+  FUNCTOR_error2            = PL_new_functor(PL_new_atom("error"), 2);
+  FUNCTOR_ssl_error4        = PL_new_functor(PL_new_atom("ssl_error"), 4);
+  FUNCTOR_permission_error3 = PL_new_functor(PL_new_atom("permission_error"), 3);
+  FUNCTOR_ip4               = PL_new_functor(PL_new_atom("ip"), 4);
+  FUNCTOR_version1          = PL_new_functor(PL_new_atom("version"), 1);
+  FUNCTOR_notbefore1        = PL_new_functor(PL_new_atom("notbefore"), 1);
+  FUNCTOR_notafter1         = PL_new_functor(PL_new_atom("notafter"), 1);
+  FUNCTOR_subject1          = PL_new_functor(PL_new_atom("subject"), 1);
+  FUNCTOR_issuername1       = PL_new_functor(PL_new_atom("issuer_name"), 1);
+  FUNCTOR_serial1           = PL_new_functor(PL_new_atom("serial"), 1);
+  FUNCTOR_key1              = PL_new_functor(PL_new_atom("key"), 1);
+  FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
+  FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
+  FUNCTOR_rsa8              = PL_new_functor(PL_new_atom("rsa"), 8);
+  FUNCTOR_hash1             = PL_new_functor(PL_new_atom("hash"), 1);
+  FUNCTOR_next_update1      = PL_new_functor(PL_new_atom("next_update"), 1);
+  FUNCTOR_signature1        = PL_new_functor(PL_new_atom("signature"), 1);
+  FUNCTOR_equals2           = PL_new_functor(PL_new_atom("="), 2);
+  FUNCTOR_crl1              = PL_new_functor(PL_new_atom("crl"), 1);
+  FUNCTOR_revoked2          = PL_new_functor(PL_new_atom("revoked"), 2);
+  FUNCTOR_revocations1      = PL_new_functor(PL_new_atom("revocations"), 1);
 #ifndef OPENSSL_NO_SSL2
-  FUNCTOR_session_key1    = PL_new_functor(PL_new_atom("session_key"), 1);
+  FUNCTOR_session_key1      = PL_new_functor(PL_new_atom("session_key"), 1);
 #endif
-  FUNCTOR_master_key1     = PL_new_functor(PL_new_atom("master_key"), 1);
-  FUNCTOR_session_id1     = PL_new_functor(PL_new_atom("session_id"), 1);
-  FUNCTOR_client_random1  = PL_new_functor(PL_new_atom("client_random"), 1);
-  FUNCTOR_server_random1  = PL_new_functor(PL_new_atom("server_random"), 1);
-  FUNCTOR_system1         = PL_new_functor(PL_new_atom("system"), 1);
-  FUNCTOR_unknown1         = PL_new_functor(PL_new_atom("unknown"), 1);
+  FUNCTOR_master_key1       = PL_new_functor(PL_new_atom("master_key"), 1);
+  FUNCTOR_session_id1       = PL_new_functor(PL_new_atom("session_id"), 1);
+  FUNCTOR_client_random1    = PL_new_functor(PL_new_atom("client_random"), 1);
+  FUNCTOR_server_random1    = PL_new_functor(PL_new_atom("server_random"), 1);
+  FUNCTOR_system1           = PL_new_functor(PL_new_atom("system"), 1);
+  FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
 
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);

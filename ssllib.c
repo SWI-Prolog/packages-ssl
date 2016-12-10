@@ -1051,6 +1051,31 @@ ssl_set_method_options(PL_SSL *config, int options)
 {   SSL_CTX_set_options(config->pl_ssl_ctx, options);
 }
 
+int
+ssl_set_min_protocol_version(PL_SSL *config, int version)
+/*
+ * Set minimal protocol version
+ */
+{
+#ifdef SSL_CTX_set_min_proto_version
+  return SSL_CTX_set_min_proto_version(config->pl_ssl_ctx, version);
+#else
+  return 0;
+#endif
+}
+
+int
+ssl_set_max_protocol_version(PL_SSL *config, int version)
+/*
+ * Set maximal protocol version
+ */
+{
+#ifdef SSL_CTX_set_max_proto_version
+  return SSL_CTX_set_max_proto_version(config->pl_ssl_ctx, version);
+#else
+  return 0;
+#endif
+}
 
 int
 ssl_close(PL_SSL_INSTANCE *instance)
