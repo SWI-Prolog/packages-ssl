@@ -60,6 +60,12 @@ typedef enum
 #include <openssl/x509v3.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/bn.h>
+#include <openssl/evp.h>
+#include <openssl/dh.h>
+#include <openssl/rsa.h>
+#include <openssl/dsa.h>
+#include <openssl/x509.h>
 
 typedef struct X509_list
 { struct X509_list *next;
