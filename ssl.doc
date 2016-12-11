@@ -71,6 +71,8 @@ and tips for managing certificates and keys.
 
 \input{ssllib.tex}
 
+\input{crypto.tex}
+
 \section{XML cryptographic libraries}
 \label{sec:ssl-xml-libs}
 

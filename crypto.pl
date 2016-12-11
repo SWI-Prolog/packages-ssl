@@ -56,8 +56,8 @@
 /** <module> Cryptography and authentication library
 
 This library provides bindings to functionality of OpenSSL that is
-related to cryptography and authentication.
-
+related to cryptography and authentication, not necessarily involving
+connections, sockets or streams.
 
 @author Matt Lilley
 @author [Markus Triska](https://www.metalevel.at)
