@@ -360,29 +360,6 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   return PL_unify_int64(term, result);
 }
 
-#if !defined(HAVE_OPENSSL_ZALLOC) && !defined(OPENSSL_zalloc)
-static void *
-OPENSSL_zalloc(size_t num)
-{ void *ret = OPENSSL_malloc(num);
-  if (ret != NULL)
-    memset(ret, 0, num);
-  return ret;
-}
-#endif
-
-#ifndef HAVE_EVP_MD_CTX_FREE
-void
-EVP_MD_CTX_free(EVP_MD_CTX *ctx)
-{ EVP_MD_CTX_cleanup(ctx);
-  OPENSSL_free(ctx);
-}
-
-EVP_MD_CTX *
-EVP_MD_CTX_new(void)
-{ return OPENSSL_zalloc(sizeof(EVP_MD_CTX));
-}
-#endif
-
 static int
 unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
 	   int (*i2d)(void*, unsigned char**), void * data)

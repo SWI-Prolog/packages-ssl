@@ -235,5 +235,10 @@ void            ssl_deb          (int level, char *fmt, ...);
 extern BIO_METHOD *bio_read_method();
 extern BIO_METHOD *bio_write_method();
 
+#ifndef HAVE_EVP_MD_CTX_FREE
+void EVP_MD_CTX_free(EVP_MD_CTX *ctx);
+EVP_MD_CTX *EVP_MD_CTX_new(void);
+#endif
+
 #endif
 

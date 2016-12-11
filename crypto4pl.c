@@ -38,6 +38,7 @@
 #include <assert.h>
 #include <string.h>
 #include "ssllib.h"
+#include <openssl/md5.h>
 
 #ifdef _REENTRANT
 #include <pthread.h>
@@ -637,30 +638,128 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   return FALSE;
 }
 
+		 /***************************
+		 *         MD5 HASH         *
+		 ****************************/
+
+typedef struct
+{ unsigned int  encoding;
+} optval;
+
+
+static int
+md5_options(term_t options, optval *result)
+{ term_t opts = PL_copy_term_ref(options);
+  term_t opt = PL_new_term_ref();
+
+					/* defaults */
+  memset(result, 0, sizeof(*result));
+  result->encoding = REP_UTF8;
+
+  while(PL_get_list(opts, opt, opts))
+  { atom_t aname;
+    size_t arity;
+
+    if ( PL_get_name_arity(opt, &aname, &arity) && arity == 1 )
+    { term_t a = PL_new_term_ref();
+
+      _PL_get_arg(1, opt, a);
+
+      if ( aname == ATOM_encoding )
+      { atom_t a_enc;
+
+	if ( !PL_get_atom_ex(a, &a_enc) )
+	  return FALSE;
+	if ( a_enc == ATOM_utf8 )
+	  result->encoding = REP_UTF8;
+	else if ( a_enc == ATOM_octet )
+	  result->encoding = REP_ISO_LATIN_1;
+	else
+	  return PL_domain_error("encoding", a);
+      }
+    } else
+    { return PL_type_error("option", opt);
+    }
+  }
+
+  if ( !PL_get_nil(opts) )
+    return PL_type_error("list", opts);
+
+  return TRUE;
+}
+
+static int
+md5_unify_digest(term_t t, const unsigned char digest[16])
+{ char hex_output[16*2];
+  int di;
+  char *pi;
+  static char hexd[] = "0123456789abcdef";
+
+  for(pi=hex_output, di = 0; di < 16; ++di)
+  { *pi++ = hexd[(digest[di] >> 4) & 0x0f];
+    *pi++ = hexd[digest[di] & 0x0f];
+  }
+
+  return PL_unify_atom_nchars(t, 16*2, hex_output);
+}
+
+static foreign_t
+pl_md5_hash(term_t from, term_t md5, term_t options)
+{
+  char *data;
+  size_t datalen;
+  optval opts;
+  unsigned char digest[16];
+  unsigned int len;
+  int r;
+  EVP_MD_CTX *ctx;
+
+  if ( !md5_options(options, &opts) )
+    return FALSE;
+
+  if ( !PL_get_nchars(from, &datalen, &data,
+		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|opts.encoding) )
+    return FALSE;
+
+  ctx = EVP_MD_CTX_new();
+  if ( !EVP_DigestInit_ex(ctx, EVP_md5(), NULL) )
+  { EVP_MD_CTX_free(ctx);
+    return FALSE;
+  }
+
+  EVP_DigestUpdate(ctx, data, datalen);
+  EVP_DigestFinal_ex(ctx, digest, &len);
+  r = md5_unify_digest(md5, digest);
+  EVP_MD_CTX_free(ctx);
+
+  return r;
+}
+
 		 /*******************************
 		 *	     INSTALL		*
 		 *******************************/
 
+#define MKATOM(n) ATOM_ ## n = PL_new_atom(#n);
 
 install_t
 install_crypto4pl(void)
 {
-  ATOM_sslv23               = PL_new_atom("sslv23");
   ATOM_minus                = PL_new_atom("-");
-  ATOM_text                 = PL_new_atom("text");
-  ATOM_octet                = PL_new_atom("octet");
-  ATOM_utf8                 = PL_new_atom("utf8");
-  ATOM_sha1                 = PL_new_atom("sha1");
-  ATOM_sha224               = PL_new_atom("sha224");
-  ATOM_sha256               = PL_new_atom("sha256");
-  ATOM_sha384               = PL_new_atom("sha384");
-  ATOM_sha512               = PL_new_atom("sha512");
-  ATOM_pkcs                 = PL_new_atom("pkcs");
-  ATOM_pkcs_oaep            = PL_new_atom("pkcs_oaep");
-  ATOM_none                 = PL_new_atom("none");
-  ATOM_block                = PL_new_atom("block");
-  ATOM_encoding             = PL_new_atom("encoding");
-  ATOM_padding              = PL_new_atom("padding");
+  MKATOM(sslv23);
+  MKATOM(text);
+  MKATOM(octet);
+  MKATOM(utf8);
+  MKATOM(sha1);
+  MKATOM(sha224);
+  MKATOM(sha256);
+  MKATOM(sha384);
+  MKATOM(sha512);
+  MKATOM(pkcs);
+  MKATOM(pkcs_oaep);
+  MKATOM(none);
+  MKATOM(block);
+  MKATOM(encoding);
+  MKATOM(padding);
 
   FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
@@ -671,8 +770,9 @@ install_crypto4pl(void)
   PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("rsa_sign", 5, pl_rsa_sign, 0);
   PL_register_foreign("rsa_verify", 5, pl_rsa_verify, 0);
-  PL_register_foreign("evp_decrypt",        6, pl_evp_decrypt, 0);
-  PL_register_foreign("evp_encrypt",        6, pl_evp_encrypt, 0);
+  PL_register_foreign("evp_decrypt", 6, pl_evp_decrypt, 0);
+  PL_register_foreign("evp_encrypt", 6, pl_evp_encrypt, 0);
+  PL_register_foreign("md5_hash", 3, pl_md5_hash, 0);
 
   /*
    * Initialize ssllib
