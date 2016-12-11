@@ -49,6 +49,7 @@
 
 :- use_module(library(plunit)).
 :- use_module(library(ssl)).
+:- use_module(library(crypto)).
 :- use_module(library(debug)).
 :- use_module(library(error)).
 :- use_module(library(readutil)).

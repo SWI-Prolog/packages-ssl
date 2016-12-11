@@ -34,9 +34,7 @@
 */
 
 :- module(ssl,
-          [ evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
-            evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
-            load_certificate/2,         % +Stream, -Certificate
+          [ load_certificate/2,         % +Stream, -Certificate
             load_private_key/3,         % +Stream, +Password, -Key
             load_public_key/2,          % +Stream, -Key
             load_crl/2,                 % +Stream, -Crl
@@ -44,16 +42,6 @@
 	    cert_accept_any/5,		% +SSL, +ProblemCertificate,
 					% +AllCertificates, +FirstCertificate,
 					% +Error
-            rsa_private_decrypt/3,      % +Key, +Ciphertext, -Plaintext
-            rsa_private_encrypt/3,      % +Key, +Plaintext, -Ciphertext
-            rsa_public_decrypt/3,       % +Key, +Ciphertext, -Plaintext
-            rsa_public_encrypt/3,       % +Key, +Plaintext, -Ciphertext
-            rsa_private_decrypt/4,      % +Key, +Ciphertext, -Plaintext, +Enc
-            rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
-            rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
-            rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
-            rsa_sign/4,			% +Key, +Data, -Signature, +Options
-            rsa_verify/4,		% +Key, +Data, -Signature, +Options
             ssl_context/3,		% +Role, -Config, :Options
             ssl_init/3,                 % -Config, +Role, :Options
             ssl_accept/3,               % +Config, -Socket, -Peer
@@ -119,7 +107,7 @@ calls here are simply the most common way to use the library. Other
 two-way communication channels such as (named), pipes can just as
 easily be used.
 
-@see library(socket), library(http/http_open)
+@see library(socket), library(http/http_open), library(crypto)
 */
 
 %%	ssl_context(+Role, -SSL, :Options) is det.
@@ -434,106 +422,6 @@ ssl_context(Role, SSL, Module:Options) :-
 %	you try and load such a key. Otherwise PublicKey will be unified
 %	with  public_key(KeyTerm)  where  KeyTerm  is    an  rsa/8  term
 %	representing an RSA key.
-
-%%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
-%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
-%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText) is det.
-%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText) is det.
-%%	rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Options) is det.
-%%      rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Options) is det.
-%%      rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Options) is det.
-%%      rsa_public_encrypt(+PublicKey, +PlainText, -CipherText, +Options) is det.
-%
-%	RSA Public key encryption and   decryption  primitives. A string
-%	can be safely communicated by first   encrypting it and have the
-%	peer decrypt it with the matching  key and predicate. The length
-%	of the string is limited by  the   key  length.
-%
-%       Options:
-%
-%	  - encoding(+Encoding)
-%	  Encoding to use for Data.  Default is `utf8`.  Alternatives
-%	  are `utf8` and `octet`.
-%
-%	  - padding(+PaddingScheme)
-%	  Padding scheme to use.  Default is `pkcs1`.  Alternatives
-%	  are `pkcs1_oaep`, `sslv23` and `none`. Note that `none` should
-%         only be used if you implement cryptographically sound padding
-%         modes in your application code as encrypting unpadded data with
-%         RSA is insecure
-%
-%	@see load_private_key/3, load_public_key/2 can be use to load
-%	keys from a file.  The predicate load_certificate/2 can be used
-%	to obtain the public key from a certificate.
-%
-%	@error ssl_error(Code, LibName, FuncName, Reason)   is raised if
-%	there is an error, e.g., if the text is too long for the key.
-
-rsa_private_decrypt(PrivateKey, CipherText, PlainText) :-
-	rsa_private_decrypt(PrivateKey, CipherText, PlainText, [encoding(utf8)]).
-
-rsa_private_encrypt(PrivateKey, PlainText, CipherText) :-
-	rsa_private_encrypt(PrivateKey, PlainText, CipherText, [encoding(utf8)]).
-
-rsa_public_decrypt(PublicKey, CipherText, PlainText) :-
-	rsa_public_decrypt(PublicKey, CipherText, PlainText, [encoding(utf8)]).
-
-rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
-	rsa_public_encrypt(PublicKey, PlainText, CipherText, [encoding(utf8)]).
-
-%%	rsa_sign(+Key, +Data, -Signature, +Options) is det.
-%
-%	Create an RSA signature for Data.  Options:
-%
-%	  - type(+Type)
-%	  SHA algorithm used to compute the digest.  Values are the
-%	  same as for sha_hash/3: `sha1` (default), `sha224`, `sha256`,
-%	  `sha384` or `sha512`
-%
-%	  - encoding(+Encoding)
-%	  Encoding to use for Data.  Default is `octet`.  Alternatives
-%	  are `utf8` and `text`.
-%
-%	This predicate is used  to   compute  a  _sha1WithRSAEncryption_
-%	signature as follows:
-%
-%	  ```
-%	  sha1_with_rsa(PemKeyFile, KeyPassword, Data, Signature) :-
-%	      DigestAlgorithm = sha1,
-%	      read_key(PemKeyFile, KeyPassword, PrivateKey),
-%	      sha_hash(Data, Digest, [algorithm(DigestAlgorithm)]),
-%	      rsa_sign(Key, Digest, Signature, [type(DigestAlgorithm)]).
-%
-%	  read_key(PemKeyFile, KeyPassword, PrivateKey) :-
-%	      setup_call_cleanup(
-%	          open(File, read, In, [type(binary)]),
-%	          load_private_key(In, Password, Key),
-%	          close(In).
-%	  ```
-
-rsa_sign(Key, Data, Signature, Options) :-
-	option(type(Type), Options, sha1),
-	option(encoding(Enc), Options, octet),
-	rsa_sign(Key, Type, Enc, Data, Signature).
-
-
-%%	rsa_verify(+Key, +Data, -Signature, +Options) is det.
-%
-%	Verifies an RSA signature for Data.  Options:
-%
-%	  - type(+Type)
-%	  SHA algorithm used to compute the digest.  Values are the
-%	  same as for sha_hash/3: `sha1` (default), `sha224`, `sha256`,
-%	  `sha384` or `sha512`
-%
-%	  - encoding(+Encoding)
-%	  Encoding to use for Data.  Default is `octet`.  Alternatives
-%	  are `utf8` and `text`.
-
-rsa_verify(Key, Data, Signature, Options) :-
-	option(type(Type), Options, sha1),
-	option(encoding(Enc), Options, octet),
-        rsa_verify(Key, Type, Enc, Data, Signature).
 
 
 /*
