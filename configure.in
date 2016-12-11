@@ -73,8 +73,8 @@ if test -z "$SSLPREFIX"; then
 fi
 
 if test "$SSL_ok" = yes; then
-  TARGETS="ssl4pl.$SO"
-  PLTARGETS="ssl.pl saml.pl xmldsig.pl xmlenc.pl"
+  TARGETS="ssl4pl.$SO crypto4pl.$SO"
+  PLTARGETS="crypto.pl ssl.pl saml.pl xmldsig.pl xmlenc.pl"
 else
   TARGETS=""
   PLTARGETS=""
