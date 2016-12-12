@@ -1735,40 +1735,42 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 		 *	     INSTALL		*
 		 *******************************/
 
+#define MKATOM(n) ATOM_ ## n = PL_new_atom(#n);
 
 install_t
 install_ssl4pl(void)
-{ ATOM_server               = PL_new_atom("server");
-  ATOM_client               = PL_new_atom("client");
-  ATOM_password             = PL_new_atom("password");
-  ATOM_host                 = PL_new_atom("host");
-  ATOM_cert                 = PL_new_atom("cert");
-  ATOM_peer_cert            = PL_new_atom("peer_cert");
-  ATOM_cacert_file          = PL_new_atom("cacert_file");
-  ATOM_certificate_file     = PL_new_atom("certificate_file");
-  ATOM_certificate          = PL_new_atom("certificate");
-  ATOM_key_file             = PL_new_atom("key_file");
-  ATOM_key                  = PL_new_atom("key");
-  ATOM_pem_password_hook    = PL_new_atom("pem_password_hook");
-  ATOM_cert_verify_hook     = PL_new_atom("cert_verify_hook");
-  ATOM_close_parent         = PL_new_atom("close_parent");
-  ATOM_close_notify         = PL_new_atom("close_notify");
-  ATOM_disable_ssl_methods  = PL_new_atom("disable_ssl_methods");
-  ATOM_min_protocol_version = PL_new_atom("min_protocol_version");
-  ATOM_max_protocol_version = PL_new_atom("max_protocol_version");
-  ATOM_cipher_list          = PL_new_atom("cipher_list");
-  ATOM_ecdh_curve           = PL_new_atom("ecdh_curve");
-  ATOM_root_certificates    = PL_new_atom("root_certificates");
-  ATOM_sni_hook             = PL_new_atom("sni_hook");
-  ATOM_sslv2                = PL_new_atom("sslv2");
-  ATOM_sslv23               = PL_new_atom("sslv23");
-  ATOM_sslv3                = PL_new_atom("sslv3");
-  ATOM_tlsv1                = PL_new_atom("tlsv1");
-  ATOM_tlsv1_1              = PL_new_atom("tlsv1_1");
-  ATOM_tlsv1_2              = PL_new_atom("tlsv1_2");
+{ MKATOM(server);
+  MKATOM(client);
+  MKATOM(password);
+  MKATOM(host);
+  MKATOM(cert);
+  MKATOM(peer_cert);
+  MKATOM(cacert_file);
+  MKATOM(certificate_file);
+  MKATOM(certificate);
+  MKATOM(key_file);
+  MKATOM(key);
+  MKATOM(pem_password_hook);
+  MKATOM(cert_verify_hook);
+  MKATOM(close_parent);
+  MKATOM(close_notify);
+  MKATOM(disable_ssl_methods);
+  MKATOM(min_protocol_version);
+  MKATOM(max_protocol_version);
+  MKATOM(cipher_list);
+  MKATOM(ecdh_curve);
+  MKATOM(root_certificates);
+  MKATOM(sni_hook);
+  MKATOM(sslv2);
+  MKATOM(sslv23);
+  MKATOM(sslv3);
+  MKATOM(tlsv1);
+  MKATOM(tlsv1_1);
+  MKATOM(tlsv1_2);
+  MKATOM(require_crl);
+  MKATOM(crl);
+
   ATOM_minus                = PL_new_atom("-");
-  ATOM_require_crl          = PL_new_atom("require_crl");
-  ATOM_crl                  = PL_new_atom("crl");
 
   FUNCTOR_error2            = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4        = PL_new_functor(PL_new_atom("ssl_error"), 4);
