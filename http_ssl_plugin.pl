@@ -55,7 +55,7 @@ SWI-Prolog installation directory.
 :- multifile
 	thread_httpd:make_socket_hook/3,
 	thread_httpd:accept_hook/2,
-	thread_httpd:open_client_hook/5,
+	thread_httpd:open_client_hook/6,
         http:http_protocol_hook/5,
 	http:open_options/2,
 	http:http_connection_over_proxy/6.
@@ -112,8 +112,12 @@ thread_httpd:accept_hook(Goal, Options) :-
 
 thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
 			      Goal, In, Out,
-			      [peer(Peer), protocol(https)]) :-
+			      [peer(Peer), protocol(https)],
+			      Options) :-
+	option(timeout(TMO), Options, 60),
         tcp_open_socket(Client, Read, Write),
+	set_stream(Read, timeout(TMO)),
+	set_stream(Write, timeout(TMO)),
 	catch(ssl_negotiate(SSL, Read, Write, In, Out),
 	      E,
 	      ssl_failed(Read, Write, E)).
