@@ -41,44 +41,8 @@
 #endif
 
 #include "ssllib.h"
+#include "cryptolib.h"
 #include <openssl/rand.h>
-
-#ifdef __SWI_PROLOG__
-#include <SWI-Stream.h>
-#include <SWI-Prolog.h>
-
-#ifdef __WINDOWS__
-#include <windows.h>
-#include <wincrypt.h>
-#endif
-#if defined(HAVE_SECURITY_SECURITY_H) && defined(HAVE_KSECCLASS) /*__APPLE__*/
-#include <Security/Security.h>
-#else
-#undef HAVE_SECURITY_SECURITY_H
-#endif
-#define perror(x) Sdprintf("%s: %s\n", x, strerror(errno));
-
-/*
- * Remap socket related calls to nonblockio library
- */
-#include "../clib/nonblockio.h"
-#define closesocket     nbio_closesocket
-#else   /* __SWI_PROLOG__ */
-#define Soutput         stdout
-#define Serror          stderr
-#define Svfprintf       vfprintf
-static int PL_handle_signals(void) { return 0; }
-#ifndef __WINDOWS__
-#define closesocket	close
-#endif
-#endif  /* __SWI_PROLOG__ */
-
-
-extern functor_t FUNCTOR_error2;
-extern functor_t FUNCTOR_ssl_error4;
-
-
-#include <openssl/rsa.h>
 
 typedef enum
 { SSL_PL_OK
@@ -87,10 +51,6 @@ typedef enum
 } SSL_PL_STATUS;
 
 #define SSL_CERT_VERIFY_MORE 0
-
-#ifndef DEBUG
-#define DEBUG 1
-#endif
 
 static void free_X509_crl_list(X509_crl_list *list);
 static X509_list *system_root_store = NULL;
@@ -102,61 +62,6 @@ static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
  */
 static int ssl_idx;
 static int ctx_idx;
-
-/**
- * ssl_error_term(long ex) returns a Prolog term representing the SSL
- * error.  If there is already a pending exception, this is returned.
- *
- */
-static int
-ssl_error_term(long e)
-{ term_t ex;
-  char buffer[256];
-  char* colon;
-  char *component[5] = {NULL, "unknown", "unknown", "unknown", "unknown"};
-  int n = 0;
-
-  if ( (ex=PL_exception(0)) )
-    return ex;					/* already pending exception */
-
-  ERR_error_string_n(e, buffer, 256);
-
-  /*
-   * Disect the following error string:
-   *
-   * error:[error code]:[library name]:[function name]:[reason string]
-   */
-  if ( (ex=PL_new_term_ref()) )
-  { for (colon = buffer, n = 0; n < 5 && colon != NULL; n++)
-    { component[n] = colon;
-      if ((colon = strchr(colon, ':')) == NULL) break;
-      *colon++ = 0;
-    }
-    if ( PL_unify_term(ex,
-		       PL_FUNCTOR, FUNCTOR_error2,
-		       PL_FUNCTOR, FUNCTOR_ssl_error4,
-		       PL_CHARS, component[1],
-		       PL_CHARS, component[2],
-		       PL_CHARS, component[3],
-		       PL_CHARS, component[4],
-		       PL_VARIABLE) )
-    { return ex;
-    }
-  }
-
-  return PL_exception(0);
-}
-
-
-int
-raise_ssl_error(long e)
-{ term_t ex;
-
-  if ( (ex = ssl_error_term(e)) )
-    return PL_raise_exception(ex);
-
-  return FALSE;
-}
 
 
 /**
@@ -2298,74 +2203,3 @@ ssl_lib_exit(void)
 #endif
     return 0;
 }
-
-
-/***********************************************************************
- * Warning, error and debug reporting
- ***********************************************************************/
-
-void
-ssl_msg(char *fmt, ...)
-{
-    va_list argpoint;
-
-    va_start(argpoint, fmt);
-	Svfprintf(Soutput, fmt, argpoint);
-    va_end(argpoint);
-}
-
-
-void
-ssl_err(char *fmt, ...)
-{
-    va_list argpoint;
-
-    va_start(argpoint, fmt);
-	Svfprintf(Serror, fmt, argpoint);
-    va_end(argpoint);
-}
-
-
-int
-ssl_set_debug(int level)
-{ return nbio_debug(level);
-}
-
-
-void
-ssl_deb(int level, char *fmt, ...)
-{
-#if DEBUG
-    if ( nbio_debug(-1) >= level )
-    { va_list argpoint;
-
-      fprintf(stderr, "Debug: ");
-      va_start(argpoint, fmt);
-      Svfprintf(Serror, fmt, argpoint);
-      va_end(argpoint);
-    }
-#endif
-}
-
-#if !defined(HAVE_OPENSSL_ZALLOC) && !defined(OPENSSL_zalloc)
-static void *
-OPENSSL_zalloc(size_t num)
-{ void *ret = OPENSSL_malloc(num);
-  if (ret != NULL)
-    memset(ret, 0, num);
-  return ret;
-}
-#endif
-
-#ifndef HAVE_EVP_MD_CTX_FREE
-void
-EVP_MD_CTX_free(EVP_MD_CTX *ctx)
-{ EVP_MD_CTX_cleanup(ctx);
-  OPENSSL_free(ctx);
-}
-
-EVP_MD_CTX *
-EVP_MD_CTX_new(void)
-{ return OPENSSL_zalloc(sizeof(EVP_MD_CTX));
-}
-#endif

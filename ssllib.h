@@ -61,11 +61,8 @@ typedef enum
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bn.h>
-#include <openssl/evp.h>
 #include <openssl/dh.h>
-#include <openssl/rsa.h>
-#include <openssl/dsa.h>
-#include <openssl/x509.h>
+#include "cryptolib.h"
 
 typedef struct X509_list
 { struct X509_list *next;
@@ -198,7 +195,6 @@ BOOL            ssl_set_peer_cert(PL_SSL *config, BOOL required);
 BOOL            ssl_set_close_parent(PL_SSL *config, int closeparent);
 BOOL            ssl_set_close_notify(PL_SSL *config, BOOL close_notify);
 void            ssl_set_method_options(PL_SSL *config, int options);
-int		raise_ssl_error(long e);
 X509_list *	system_root_certificates(void);
 
 BOOL            ssl_set_cb_cert_verify
@@ -227,18 +223,8 @@ BOOL            ssl_set_cb_sni
                                   void *
                                   );
 
-void            ssl_msg          (char *fmt, ...);
-void            ssl_err          (char *fmt, ...);
-int		ssl_set_debug	 (int level);
-void            ssl_deb          (int level, char *fmt, ...);
-
 extern BIO_METHOD *bio_read_method();
 extern BIO_METHOD *bio_write_method();
-
-#ifndef HAVE_EVP_MD_CTX_FREE
-void EVP_MD_CTX_free(EVP_MD_CTX *ctx);
-EVP_MD_CTX *EVP_MD_CTX_new(void);
-#endif
 
 #endif
 

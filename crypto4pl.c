@@ -37,12 +37,7 @@
 #include <SWI-Prolog.h>
 #include <assert.h>
 #include <string.h>
-#include "ssllib.h"
-#include <openssl/md5.h>
-
-#ifdef _REENTRANT
-#include <pthread.h>
-#endif
+#include "cryptolib.h"
 
 static atom_t ATOM_sslv23;
 static atom_t ATOM_minus;			/* "-" */
@@ -773,22 +768,9 @@ install_crypto4pl(void)
   PL_register_foreign("evp_decrypt", 6, pl_evp_decrypt, 0);
   PL_register_foreign("evp_encrypt", 6, pl_evp_encrypt, 0);
   PL_register_foreign("md5_hash", 3, pl_md5_hash, 0);
-
-  /*
-   * Initialize ssllib
-   */
-  (void) ssl_lib_init();
-
-  PL_set_prolog_flag("ssl_library_version", PL_ATOM,
-#ifdef HAVE_OPENSSL_VERSION
-		     OpenSSL_version(OPENSSL_VERSION)
-#else
-		     SSLeay_version(SSLEAY_VERSION)
-#endif
-		     );
 }
 
 install_t
 uninstall_crypto4pl(void)
-{ ssl_lib_exit();
+{
 }

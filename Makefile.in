@@ -22,7 +22,7 @@ LIBPL=		@PLTARGETS@
 TARGETS=	@TARGETS@
 EXAMPLES=	client.pl server.pl https.pl
 
-SSLOBJ=		crypto4pl.o ssl4pl.o ssllib.o ../clib/nonblockio.o ../clib/error.o
+SSLOBJ=		crypto4pl.o cryptolib.o ssl4pl.o ssllib.o ../clib/nonblockio.o ../clib/error.o
 
 all:		$(TARGETS)
 
