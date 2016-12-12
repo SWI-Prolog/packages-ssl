@@ -40,10 +40,6 @@
 #include <string.h>
 #include "ssllib.h"
 
-#ifdef _REENTRANT
-#include <pthread.h>
-#endif
-
 static atom_t ATOM_server;
 static atom_t ATOM_client;
 static atom_t ATOM_password;
@@ -1820,10 +1816,7 @@ install_ssl4pl(void)
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
 
-  /*
-   * Initialize ssllib
-   */
-  (void) ssl_lib_init();
+  ssl_lib_init();
 
   PL_set_prolog_flag("ssl_library_version", PL_ATOM,
 #ifdef HAVE_OPENSSL_VERSION

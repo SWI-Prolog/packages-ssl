@@ -36,13 +36,13 @@
 #include <string.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <openssl/rand.h>
 #ifdef _REENTRANT
 #include <pthread.h>
 #endif
 
 #include "ssllib.h"
 #include "cryptolib.h"
-#include <openssl/rand.h>
 
 typedef enum
 { SSL_PL_OK
@@ -1668,8 +1668,22 @@ ssl_lib_init(void)
     }
 #endif
 
-#ifdef _REENTRANT
-    ssl_thread_setup();
+    /*
+     * Initialize crypto library
+     */
+    crypto_lib_init();
+
+    return 0;
+}
+
+int
+ssl_lib_exit(void)
+/*
+ * One-time library exit calls
+ */
+{
+#ifdef __SWI_PROLOG__
+    nbio_cleanup();
 #endif
 
     return 0;
@@ -2053,153 +2067,4 @@ ssl_write(void *handle, char *buf, size_t size)
 	return -1;
     }
   }
-}
-
-                /*******************************
-                *            THREADING         *
-                *******************************/
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-OpenSSL is only thread-safe as of version 1.1.0.
-
-For earlier versions, we need to install the hooks below. This code is
-based on mttest.c distributed with the OpenSSL library.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-#ifdef _REENTRANT
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-static pthread_mutex_t *lock_cs;
-static long *lock_count;
-static void (*old_locking_callback)(int, int, const char*, int) = NULL;
-#ifdef HAVE_CRYPTO_THREADID_GET_CALLBACK
-static void (*old_id_callback)(CRYPTO_THREADID*) = NULL;
-#else
-static unsigned long (*old_id_callback)(void) = NULL;
-#endif
-
-static void
-pthreads_locking_callback(int mode, int type, const char *file, int line)
-{ if (mode & CRYPTO_LOCK)
-  { pthread_mutex_lock(&(lock_cs[type]));
-    lock_count[type]++;
-  } else
-  { pthread_mutex_unlock(&(lock_cs[type]));
-  }
-}
-
-
-/*  From OpenSSL manual:
-
-    id_function(void) is a function that returns a thread ID. It is not
-    needed on Windows nor on platforms where getpid() returns a different
-    ID for each thread (most notably Linux).
-
-    As for pthreads_win32 version 2, the thread identifier is no longer
-    integral, we are going to test this claim from the manual
-
-    JW: I don't think getpid() returns different thread ids on Linux any
-    longer, nor on many other Unix systems. Maybe we should use
-    PL_thread_self()?
-*/
-
-#ifndef __WINDOWS__
-#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
-static void
-pthreads_thread_id(CRYPTO_THREADID* id)
-{ CRYPTO_THREADID_set_numeric(id, (unsigned long)pthread_self());
-}
-#else
-static unsigned long
-pthreads_thread_id(void)
-{ unsigned long ret;
-
-  ret=(unsigned long)pthread_self();
-  return(ret);
-}
-#endif /* OpenSSL 1.0.0 */
-#endif /* WINDOWS */
-#endif /* OpenSSL 1.1.0 */
-
-void
-ssl_thread_exit(void* ignored)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-#ifdef HAVE_ERR_REMOVE_THREAD_STATE
-  ERR_remove_thread_state(0);
-#elif defined(HAVE_ERR_REMOVE_STATE)
-  ERR_remove_state(0);
-#else
-#error "Do not know how to remove SSL error state"
-#endif
-#endif /* ERR_remove_(thread)_state is deprecated in OpenSSL >= 1.1.0 */
-}
-
-int
-ssl_thread_setup(void)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  int i;
-  lock_cs = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
-  lock_count = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(long));
-  for (i=0; i<CRYPTO_num_locks(); i++)
-  { lock_count[i]=0;
-    pthread_mutex_init(&(lock_cs[i]), NULL);
-  }
-#ifdef HAVE_CRYPTO_THREADID_GET_CALLBACK
-  old_id_callback = CRYPTO_THREADID_get_callback();
-#else
-  old_id_callback = CRYPTO_get_id_callback();
-#endif
-  old_locking_callback = CRYPTO_get_locking_callback();
-#ifndef __WINDOWS__
-#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
-  CRYPTO_THREADID_set_callback(pthreads_thread_id);
-#else
-  CRYPTO_set_id_callback(pthreads_thread_id);
-#endif
-#endif
-  CRYPTO_set_locking_callback(pthreads_locking_callback);
-#endif
-  PL_thread_at_exit(ssl_thread_exit, NULL, TRUE);
-  return TRUE;
-}
-
-#else /*_REENTRANT*/
-
-int
-ssl_thread_init(void)
-{ return FALSE;
-}
-
-#endif /*_REENTRANT*/
-
-
-int
-ssl_lib_exit(void)
-/*
- * One-time library exit calls
- */
-{
-#ifdef __SWI_PROLOG__
-    nbio_cleanup();
-#endif
-
-/*
- * If the module is being unloaded, we should remove callbacks pointing to
- * our address space
- */
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-#ifdef _REENTRANT
-#ifndef __WINDOWS__
-#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
-    CRYPTO_THREADID_set_callback(old_id_callback);
-#else
-    CRYPTO_set_id_callback(old_id_callback);
-#endif
-#endif
-    CRYPTO_set_locking_callback(old_locking_callback);
-#endif
-#endif
-    return 0;
 }

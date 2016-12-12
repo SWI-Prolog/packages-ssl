@@ -172,7 +172,6 @@ int             ssl_accept       (PL_SSL *config, void *addr, socklen_t *addrlen
 int             ssl_connect      (PL_SSL *config);
 ssize_t         ssl_read         (void *handle, char *buf, size_t size);
 ssize_t         ssl_write        (void *handle, char *buf, size_t size);
-int		ssl_thread_setup (void);
 
 char *          ssl_set_host     (PL_SSL *config, const char *host);
 int             ssl_set_port     (PL_SSL *config, int port);

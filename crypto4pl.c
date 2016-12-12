@@ -768,9 +768,15 @@ install_crypto4pl(void)
   PL_register_foreign("evp_decrypt", 6, pl_evp_decrypt, 0);
   PL_register_foreign("evp_encrypt", 6, pl_evp_encrypt, 0);
   PL_register_foreign("md5_hash", 3, pl_md5_hash, 0);
+
+  /*
+   * Initialize crypto library
+   */
+  (void) crypto_lib_init();
+
 }
 
 install_t
 uninstall_crypto4pl(void)
-{
+{ crypto_lib_exit();
 }
