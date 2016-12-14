@@ -57,6 +57,7 @@
 :- use_module(library(error)).
 :- use_module(library(option)).
 :- use_module(library(debug)).
+:- use_module(library(crypto), []).	% force initialization of libcrypto
 
 :- use_foreign_library(foreign(ssl4pl)).
 

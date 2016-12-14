@@ -1818,6 +1818,10 @@ install_ssl4pl(void)
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
 
+/* Note that libcrypto threading needs to be initialized exactly once.
+   This is achieved by loading library(crypto) from library(ssl) and
+   do the initialization from the library(crypto) foreign installation.
+*/
   ssl_lib_init();
 
   PL_set_prolog_flag("ssl_library_version", PL_ATOM,

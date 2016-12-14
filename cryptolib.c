@@ -235,7 +235,7 @@ pthreads_thread_id(void)
 #endif /* WINDOWS */
 #endif /* OpenSSL 1.1.0 */
 
-void
+static void
 crypto_thread_exit(void* ignored)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -249,33 +249,36 @@ crypto_thread_exit(void* ignored)
 #endif /* ERR_remove_(thread)_state is deprecated in OpenSSL >= 1.1.0 */
 }
 
+#ifndef HAVE_CRYPTO_THREADID_GET_CALLBACK
+#define CRYPTO_THREADID_get_callback CRYPTO_get_id_callback
+#define CRYPTO_THREADID_set_callback CRYPTO_set_id_callback
+#endif
+
 int
 crypto_lib_init(void)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-  int i;
-  lock_cs = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
-  lock_count = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(long));
-  for (i=0; i<CRYPTO_num_locks(); i++)
-  { lock_count[i]=0;
-    pthread_mutex_init(&(lock_cs[i]), NULL);
+  if ( (old_id_callback=CRYPTO_THREADID_get_callback()) == 0 )
+  { int i;
+
+    lock_cs = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(pthread_mutex_t));
+    lock_count = OPENSSL_malloc(CRYPTO_num_locks() * sizeof(long));
+
+    for (i=0; i<CRYPTO_num_locks(); i++)
+    { lock_count[i]=0;
+      pthread_mutex_init(&(lock_cs[i]), NULL);
+    }
+
+    old_locking_callback = CRYPTO_get_locking_callback();
+#ifndef __WINDOWS__			/* JW: why not for Windows? */
+    CRYPTO_THREADID_set_callback(pthreads_thread_id);
+#endif
+    CRYPTO_set_locking_callback(pthreads_locking_callback);
+
+    PL_thread_at_exit(crypto_thread_exit, NULL, TRUE);
   }
-#ifdef HAVE_CRYPTO_THREADID_GET_CALLBACK
-  old_id_callback = CRYPTO_THREADID_get_callback();
-#else
-  old_id_callback = CRYPTO_get_id_callback();
-#endif
-  old_locking_callback = CRYPTO_get_locking_callback();
-#ifndef __WINDOWS__
-#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
-  CRYPTO_THREADID_set_callback(pthreads_thread_id);
-#else
-  CRYPTO_set_id_callback(pthreads_thread_id);
-#endif
-#endif
-  CRYPTO_set_locking_callback(pthreads_locking_callback);
-#endif
-  PL_thread_at_exit(crypto_thread_exit, NULL, TRUE);
+#endif /*OPENSSL_VERSION_NUMBER < 0x10100000L*/
+
   return TRUE;
 }
 
@@ -302,11 +305,7 @@ crypto_lib_exit(void)
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 #ifdef _REENTRANT
 #ifndef __WINDOWS__
-#ifdef HAVE_CRYPTO_THREADID_SET_CALLBACK
     CRYPTO_THREADID_set_callback(old_id_callback);
-#else
-    CRYPTO_set_id_callback(old_id_callback);
-#endif
 #endif
     CRYPTO_set_locking_callback(old_locking_callback);
 #endif

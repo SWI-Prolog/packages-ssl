@@ -42,7 +42,6 @@
 #endif
 
 #include "ssllib.h"
-#include "cryptolib.h"
 
 typedef enum
 { SSL_PL_OK
@@ -1667,11 +1666,6 @@ ssl_lib_init(void)
       return -1;
     }
 #endif
-
-    /*
-     * Initialize crypto library
-     */
-    crypto_lib_init();
 
     return 0;
 }
