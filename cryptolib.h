@@ -86,9 +86,6 @@ EVP_MD_CTX *EVP_MD_CTX_new(void);
 extern functor_t FUNCTOR_error2;
 extern functor_t FUNCTOR_ssl_error4;
 
-int             crypto_lib_init(void);
-int             crypto_lib_exit(void);
-
 int             raise_ssl_error(long e);
 int             ssl_error_term(long e);
 
