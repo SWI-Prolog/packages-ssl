@@ -86,7 +86,7 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
   return FALSE;
 }
 
- 
+
 static int
 recover_rsa(term_t t, RSA** rsap)
 { RSA *rsa = RSA_new();
@@ -661,6 +661,18 @@ static unsigned long (*old_id_callback)(void) = NULL;
 #endif
 
 static void
+crypto_thread_exit(void* ignored)
+{
+#ifdef HAVE_ERR_REMOVE_THREAD_STATE
+  ERR_remove_thread_state(0);
+#elif defined(HAVE_ERR_REMOVE_STATE)
+  ERR_remove_state(0);
+#else
+#error "Do not know how to remove SSL error state"
+#endif
+}
+
+static void
 pthreads_locking_callback(int mode, int type, const char *file, int line)
 { if (mode & CRYPTO_LOCK)
   { pthread_mutex_lock(&(lock_cs[type]));
@@ -703,21 +715,7 @@ pthreads_thread_id(void)
 #endif /* WINDOWS */
 #endif /* OpenSSL 1.1.0 */
 
-static void
-crypto_thread_exit(void* ignored)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-#ifdef HAVE_ERR_REMOVE_THREAD_STATE
-  ERR_remove_thread_state(0);
-#elif defined(HAVE_ERR_REMOVE_STATE)
-  ERR_remove_state(0);
-#else
-#error "Do not know how to remove SSL error state"
-#endif
-#endif /* ERR_remove_(thread)_state is deprecated in OpenSSL >= 1.1.0 */
-}
-
-#ifndef HAVE_CRYPTO_THREADID_GET_CALLBACK
+#if !defined(HAVE_CRYPTO_THREADID_GET_CALLBACK) && !defined(CRYPTO_THREADID_get_callback)
 #define CRYPTO_THREADID_get_callback CRYPTO_get_id_callback
 #define CRYPTO_THREADID_set_callback CRYPTO_set_id_callback
 #endif
@@ -780,7 +778,6 @@ crypto_lib_exit(void)
 #endif
     return 0;
 }
-
 
 
 		 /*******************************
