@@ -3,7 +3,7 @@
     Author:        Jan van der Steen, Jan Wielemaker and Matt Lilley
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2015, SWI-Prolog Foundation
+    Copyright (c)  2004-2016, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
