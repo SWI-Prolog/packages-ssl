@@ -44,8 +44,7 @@
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_sign/4,                 % +Key, +Data, -Signature, +Options
-            rsa_verify/4,               % +Key, +Data, -Signature, +Options
-            md5_hash/3                  % +Data, -Hash, +Options
+            rsa_verify/4                % +Key, +Data, -Signature, +Options
           ]).
 :- use_module(library(error)).
 :- use_module(library(option)).
@@ -206,26 +205,6 @@ rsa_verify(Key, Data, Signature, Options) :-
 %%                  +Options).
 %       Encrypt the given PlainText, using the symmetric algorithm Algorithm, key Key,
 %       and iv IV, to give CipherText. See evp_decrypt/6.
-
-%%	md5_hash(+Data, -Hash, +Options) is det.
-%
-%	Hash is the MD5 hash of Data.   The  conversion is controlled by
-%	Options:
-%
-%	  * encoding(+Encoding)
-%	  If Data is a sequence of character _codes_, this must be
-%	  translated into a sequence of _bytes_, because that is what
-%	  the hashing requires.  The default encoding is =utf8=.  The
-%	  other meaningful value is =octet=, claiming that Data contains
-%	  raw bytes.
-%
-%	@arg Data is either an atom, string, code-list or char-list.
-%	@arg Hash is an atom holding 32 characters, representing the
-%	hash in hexadecimal notation
-
-:- multifile sandbox:safe_primitive/1.
-
-sandbox:safe_primitive(crypto:md5_hash(_,_,_)).
 
 
 		 /*******************************
