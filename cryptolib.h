@@ -83,9 +83,6 @@ void EVP_MD_CTX_free(EVP_MD_CTX *ctx);
 EVP_MD_CTX *EVP_MD_CTX_new(void);
 #endif
 
-extern functor_t FUNCTOR_error2;
-extern functor_t FUNCTOR_ssl_error4;
-
 int             raise_ssl_error(long e);
 int             ssl_error_term(long e);
 

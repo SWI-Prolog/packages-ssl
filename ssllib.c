@@ -62,6 +62,8 @@ static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ssl_idx;
 static int ctx_idx;
 
+static functor_t FUNCTOR_error2;
+static functor_t FUNCTOR_ssl_error4;
 
 /**
  * Raise syscall_error(id, string)
@@ -1658,6 +1660,9 @@ ssl_lib_init(void)
     ssl_idx = SSL_get_ex_new_index(0, "config", NULL, NULL, NULL);
 
 #ifdef __SWI_PROLOG__
+    FUNCTOR_error2     = PL_new_functor(PL_new_atom("error"),     2);
+    FUNCTOR_ssl_error4 = PL_new_functor(PL_new_atom("ssl_error"), 4);
+
     /*
      * Initialize the nonblockio library
      */

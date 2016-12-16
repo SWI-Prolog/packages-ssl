@@ -77,9 +77,16 @@ ssl_error_term(long e)
   char* colon;
   char *component[5] = {NULL, "unknown", "unknown", "unknown", "unknown"};
   int n = 0;
+  static functor_t FUNCTOR_error2 = 0;
+  static functor_t FUNCTOR_ssl_error4 = 0;
 
   if ( (ex=PL_exception(0)) )
     return ex;					/* already pending exception */
+
+  if ( !FUNCTOR_error2 )
+  { FUNCTOR_error2     = PL_new_functor(PL_new_atom("error"),     2);
+    FUNCTOR_ssl_error4 = PL_new_functor(PL_new_atom("ssl_error"), 4);
+  }
 
   ERR_error_string_n(e, buffer, 256);
 

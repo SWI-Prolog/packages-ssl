@@ -75,8 +75,8 @@ static atom_t ATOM_minus;			/* "-" */
 
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_system1;
-       functor_t FUNCTOR_error2;	/* also used in ssllib.c */
-       functor_t FUNCTOR_ssl_error4;	/* also used in ssllib.c */
+static functor_t FUNCTOR_error2;	/* also used in ssllib.c */
+static functor_t FUNCTOR_ssl_error4;	/* also used in ssllib.c */
 static functor_t FUNCTOR_permission_error3;
 static functor_t FUNCTOR_version1;
 static functor_t FUNCTOR_notbefore1;
