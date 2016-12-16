@@ -34,7 +34,7 @@
 */
 
 #ifndef CRYPTOLIBH__
-#define CRYTPOLIBH__
+#define CRYPTOLIBH__
 
 #include <openssl/rsa.h>
 #include <openssl/dsa.h>
@@ -94,4 +94,4 @@ void            ssl_err          (char *fmt, ...);
 int             ssl_set_debug    (int level);
 void            ssl_deb          (int level, char *fmt, ...);
 
-#endif
+#endif /*CRYPTOLIBH__*/
