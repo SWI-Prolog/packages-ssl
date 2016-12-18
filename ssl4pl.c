@@ -136,16 +136,6 @@ typedef enum
 , PL_SSL_CLIENT
 } PL_SSL_ROLE;
 
-typedef struct X509_list
-{ struct X509_list *next;
-  X509 *cert;
-} X509_list;
-
-typedef struct X509_crl_list
-{ struct X509_crl_list *next;
-  X509_CRL *crl;
-} X509_crl_list;
-
 typedef enum
 { SSL_PL_OK
 , SSL_PL_RETRY
@@ -154,8 +144,7 @@ typedef enum
 
 #define SSL_CERT_VERIFY_MORE 0
 
-static void free_X509_crl_list(X509_crl_list *list);
-static X509_list *system_root_store = NULL;
+static STACK_OF(X509) *system_root_store = NULL;
 static int system_root_store_fetched = FALSE;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -202,7 +191,7 @@ typedef struct pl_ssl {
     char *              pl_ssl_key;
     char *              pl_ssl_cipher_list;
     char *              pl_ssl_ecdh_curve;
-    X509_crl_list *     pl_ssl_crl_list;
+    STACK_OF(X509_CRL) *pl_ssl_crl_list;
     char *              pl_ssl_password;
     BOOL                pl_ssl_cert_required;
     BOOL                pl_ssl_crl_required;
@@ -1528,7 +1517,8 @@ ssl_free(PL_SSL *config)
     free(config->pl_ssl_key);
     free(config->pl_ssl_cipher_list);
     free(config->pl_ssl_ecdh_curve);
-    free_X509_crl_list(config->pl_ssl_crl_list);
+    if ( config->pl_ssl_crl_list )
+      sk_X509_CRL_pop_free(config->pl_ssl_crl_list, X509_CRL_free);
     if ( config->pl_ssl_certificate_X509 )
       X509_free(config->pl_ssl_certificate_X509);
     free(config->pl_ssl_password);
@@ -1679,15 +1669,15 @@ ssl_set_key(PL_SSL *config, const char *key)
     return config->pl_ssl_key;
 }
 
-X509_crl_list *
-ssl_set_crl_list(PL_SSL *config, X509_crl_list *crl)
+STACK_OF(X509_CRL) *
+ssl_set_crl_list(PL_SSL *config, STACK_OF(X509_CRL) *crl)
 /*
  * Store CRL location in config storage
  */
 {
     if (crl)
     { if (config->pl_ssl_crl_list)
-      { free_X509_crl_list(config->pl_ssl_crl_list);
+      { sk_X509_CRL_pop_free(config->pl_ssl_crl_list, X509_CRL_free);
       }
       config->pl_ssl_crl_list = crl;
     }
@@ -2154,78 +2144,6 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-ssl_system_verify_locations() adds trusted  root   certificates  from OS
-dependent locations if cacert_file(system(root_certificates)) is passed.
-
-The code is written after this StackOverflow message
-http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trusted-ca-certificates
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-static void
-free_509_list(X509_list *list)
-{ X509_list *next;
-
-  for(; list; list=next)
-  { next = list->next;
-    X509_free(list->cert);
-    free(list);
-  }
-}
-
-
-static int
-list_add_X509(X509 *cert, X509_list **head, X509_list **tail)
-{ X509_list *cell = malloc(sizeof(*cell));
-
-  if ( cell )
-  { cell->cert = cert;
-    cell->next = NULL;
-    if ( *head )
-    { (*tail)->next = cell;
-      (*tail) = cell;
-    } else
-    { *head = *tail = cell;
-    }
-
-    return TRUE;
-  }
-
-  return FALSE;
-}
-
-int
-list_add_X509_crl(X509_CRL *crl, X509_crl_list **head, X509_crl_list **tail)
-{ X509_crl_list *cell = malloc(sizeof(*cell));
-
-  if ( cell )
-  { cell->crl = crl;
-    cell->next = NULL;
-    if ( *head )
-    { (*tail)->next = cell;
-      (*tail) = cell;
-    } else
-    { *head = *tail = cell;
-    }
-
-    return TRUE;
-  }
-
-  return FALSE;
-}
-
-static void
-free_X509_crl_list(X509_crl_list *list)
-{ X509_crl_list *next;
-
-  for(; list; list=next)
-  { next = list->next;
-    X509_CRL_free(list->crl);
-    free(list);
-  }
-}
-
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Extract   the   system   certificate   file   from   the   Prolog   flag
 system_cacert_filename
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -2259,12 +2177,20 @@ system_cacert_filename(void)
   return cacert_filename;
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ssl_system_verify_locations() adds trusted  root   certificates  from OS
+dependent locations if cacert_file(system(root_certificates)) is passed.
 
+The code is written after this StackOverflow message
+http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trusted-ca-certificates
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-static X509_list *
+static STACK_OF(X509) *
 ssl_system_verify_locations(void)
-{ X509_list *head=NULL, *tail=NULL;
+{ STACK_OF(X509) *system_certs = sk_X509_new_null();
   int ok = TRUE;
+
+  if (!system_certs) return NULL;
 
 #ifdef __WINDOWS__
   HCERTSTORE hSystemStore;
@@ -2277,7 +2203,7 @@ ssl_system_verify_locations(void)
 
       X509 *cert = d2i_X509(NULL, &ce, (int)pCertCtx->cbCertEncoded);
       if ( cert )
-      { if ( !list_add_X509(cert, &head, &tail) )
+      { if ( !sk_X509_push(system_certs, cert) )
         { ok = FALSE;
           break;
         }
@@ -2320,7 +2246,7 @@ ssl_system_verify_locations(void)
         x509 = d2i_X509(NULL, &der, cert_data_length);
         CFRelease(cert_data);
         if ( x509 )
-        { if ( !list_add_X509(x509, &head, &tail) )
+        { if ( !sk_X509_push(system_certs, x509) )
           { ok = FALSE;
             break;
           }
@@ -2342,7 +2268,7 @@ ssl_system_verify_locations(void)
 
     if ( cafile != NULL )
     { while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
-      { if ( !list_add_X509(cert, &head, &tail) )
+      { if ( !sk_X509_push(system_certs, cert) )
         { ok = FALSE;
           break;
         }
@@ -2354,15 +2280,15 @@ ssl_system_verify_locations(void)
 #endif
 
   if ( ok )
-  { return head;
+  { return system_certs;
   } else
-  { free_509_list(head);
+  { sk_X509_pop_free(system_certs, X509_free);
     return NULL;                                /* no memory */
   }
 }
 
 
-X509_list *
+STACK_OF(X509) *
 system_root_certificates(void)
 { pthread_mutex_lock(&root_store_lock);
   if ( !system_root_store_fetched )
@@ -2378,16 +2304,16 @@ system_root_certificates(void)
 static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->use_system_cacert )
-  { X509_list *certs = system_root_certificates();
+  { STACK_OF(X509) *certs = system_root_certificates();
 
     if ( certs )
     { X509_STORE *store = X509_STORE_new();
 
       if ( store )
-      { X509_list *head;
+      { int index = 0;
 
-        for(head = certs; head; head=head->next)
-        { X509_STORE_add_cert(store, head->cert);
+        while (index < sk_X509_num(certs))
+        { X509_STORE_add_cert(store, sk_X509_value(certs, index++));
         }
         SSL_CTX_set_cert_store(config->pl_ssl_ctx, store);
       }
@@ -2401,15 +2327,16 @@ ssl_init_verify_locations(PL_SSL *config)
   }
   if ( config->pl_ssl_crl_list )
   { X509_STORE *store = SSL_CTX_get_cert_store(config->pl_ssl_ctx);
-    X509_crl_list* head;
-    for (head = config->pl_ssl_crl_list; head; head=head->next)
-    { X509_STORE_add_crl(store, head->crl);
+    int i = 0;
+    while (i < sk_X509_CRL_num(config->pl_ssl_crl_list))
+    { X509_STORE_add_crl(store, sk_X509_CRL_value(config->pl_ssl_crl_list, i));
     /*
       Sdprintf("Added a CRL...\n");
       BIO * bio = BIO_new_fp(stdout, BIO_NOCLOSE);
-      X509_CRL_print(bio, head->crl);
+      X509_CRL_print(bio, sk_X509_CRL_value(config->pl_ssl_crl_list, i));
       BIO_free(bio);
     */
+      i++;
     }
   }
 
@@ -2986,7 +2913,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       conf->pl_ssl_crl_required = val;
     } else if ( name == ATOM_crl && arity == 1 )
-    { X509_crl_list *x_head=NULL, *x_tail=NULL;
+    { STACK_OF(X509_CRL) *crls = sk_X509_CRL_new_null();
       term_t list_head = PL_new_term_ref();
       term_t list_tail = PL_new_term_ref();
       _PL_get_arg(1, head, list_tail);
@@ -2997,12 +2924,12 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
         { FILE *file = fopen(PL_atom_chars(crl_name), "rb");
           if ( file )
           { crl = PEM_read_X509_CRL(file, NULL, NULL, NULL);
-            list_add_X509_crl(crl, &x_head, &x_tail);
+            sk_X509_CRL_push(crls, crl);
           } else
             return PL_existence_error("file", list_head);
         }
       }
-      ssl_set_crl_list(conf, x_head);
+      ssl_set_crl_list(conf, crls);
     } else if ( name == ATOM_cacert_file && arity == 1 )
     { term_t val = PL_new_term_ref();
       char *file;
@@ -3440,16 +3367,17 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 
 static foreign_t
 pl_system_root_certificates(term_t list)
-{ X509_list *certs;
+{ STACK_OF(X509) *certs;
   term_t head = PL_new_term_ref();
   term_t tail = PL_copy_term_ref(list);
+  int index = 0;
 
   if ( !(certs=system_root_certificates()) )
     return PL_unify_nil(list);
 
-  for(; certs; certs = certs->next)
+  while (index < sk_X509_num(certs))
   { if ( !(PL_unify_list(tail, head, tail) &&
-	   unify_certificate(head, certs->cert)))
+	   unify_certificate(head, sk_X509_value(certs, index++))) )
     { return FALSE;
     }
   }
