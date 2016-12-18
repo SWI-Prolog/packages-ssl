@@ -171,3 +171,246 @@ ssl_deb(int level, char *fmt, ...)
     }
 #endif
 }
+
+
+/*
+ * BIO routines for SSL over streams
+ */
+
+/*
+ * Read function.  To allow for setting a timeout on the SSL stream, we
+ * use the timeout of this stream if we do not have a timeout ourselves.
+ *
+ * Note that if the underlying stream received a timeout, we lift this
+ * error to the ssl stream and clear the error on the underlying stream.
+ * This way, the normal timeout-reset in pl-stream.c correctly resets
+ * a possible timeout.  See also test_ssl.c.  Patch and analysis by
+ * Keri Harris.
+ */
+
+int bio_read(BIO* bio, char* buf, int len)
+{
+   IOSTREAM *stream = BIO_get_ex_data(bio, 0);
+   IOSTREAM *ssl_stream = stream->upstream;
+   int rc;
+
+   if ( ssl_stream &&
+	stream->timeout < 0 &&
+	ssl_stream->timeout > 0 )
+   { stream->timeout = ssl_stream->timeout;
+     rc = (int)Sfread(buf, sizeof(char), len, stream);
+     stream->timeout = -1;
+   } else
+   { rc = (int)Sfread(buf, sizeof(char), len, stream);
+   }
+
+   if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
+   { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
+     Sclearerr(stream);
+   }
+
+   return rc;
+}
+
+/*
+ * Gets function. If only OpenSSL actually had usable documentation, I might know
+ * what this was actually meant to do....
+ */
+
+int bio_gets(BIO* bio, char* buf, int len)
+{
+   IOSTREAM* stream;
+   int r = 0;
+   stream = BIO_get_app_data(bio);
+   for (r = 0; r < len; r++)
+   {
+      int c = Sgetc(stream);
+      if (c == EOF)
+         return r-1;
+      buf[r] = (char)c;
+      if (buf[r] == '\n')
+         break;
+   }
+   return r;
+}
+
+/*
+ * Write function
+ */
+
+int bio_write(BIO* bio, const char* buf, int len)
+{
+   IOSTREAM* stream = BIO_get_ex_data(bio, 0);
+   IOSTREAM* ssl_stream = stream->upstream;
+   int r;
+
+   if ( ssl_stream &&
+	stream->timeout < 0 &&
+	ssl_stream->timeout > 0 )
+   { stream->timeout = ssl_stream->timeout;
+     r = (int)Sfwrite(buf, sizeof(char), len, stream);
+     /* OpenSSL expects there to be no buffering when it writes. Flush here */
+     Sflush(stream);
+     stream->timeout = -1;
+   } else
+   { r = (int)Sfwrite(buf, sizeof(char), len, stream);
+     Sflush(stream);
+   }
+
+   if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
+   { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
+     Sclearerr(stream);
+   }
+
+   return r;
+}
+
+/*
+ * Control function. Currently only supports flushing and detecting EOF.
+ * There are several more mandatory, but as-yet unsupported functions...
+ */
+
+long bio_control(BIO* bio, int cmd, long num, void* ptr)
+{
+   IOSTREAM* stream;
+   stream  = BIO_get_ex_data(bio, 0);
+   switch(cmd)
+   {
+     case BIO_CTRL_FLUSH:
+        Sflush(stream);
+        return 1;
+     case BIO_CTRL_EOF:
+        return Sfeof(stream);
+   }
+   return 0;
+}
+
+/*
+ * Create function. Called when a new BIO is created
+ * It is our responsibility to set init to 1 here
+ */
+
+int bio_create(BIO* bio)
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+   bio->shutdown = 1;
+   bio->init = 1;
+   bio->num = -1;
+   bio->ptr = NULL;
+#else
+   BIO_set_shutdown(bio, 1);
+   BIO_set_init(bio, 1);
+   /* bio->num = -1;  (what to do in OpenSSL >= 1.1.0?)
+      bio->ptr = NULL; */
+#endif
+   return 1;
+}
+
+/*
+ * Destroy function. Called when a BIO is freed
+ */
+
+int bio_destroy(BIO* bio)
+{
+   if (bio == NULL)
+   {
+      return 0;
+   }
+   return 1;
+}
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+/*
+ * Specify the BIO read and write function structures
+ */
+
+BIO_METHOD bio_read_functions = {BIO_TYPE_MEM,
+                                 "read",
+                                 NULL,
+                                 &bio_read,
+                                 NULL,
+                                 &bio_gets,
+                                 &bio_control,
+                                 &bio_create,
+                                 &bio_destroy};
+
+BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
+                                  "write",
+                                  &bio_write,
+                                  NULL,
+                                  NULL,
+                                  NULL,
+                                  &bio_control,
+                                  &bio_create,
+                                  &bio_destroy};
+
+BIO_METHOD *bio_read_method()
+{
+  return &bio_read_functions;
+}
+
+BIO_METHOD *bio_write_method()
+{
+  return &bio_write_functions;
+}
+#else
+/*
+ * In OpenSSL >= 1.1.0, the BIO methods are constructed
+ * using functions. We initialize them exactly once.
+ */
+
+static CRYPTO_ONCE once_read  = CRYPTO_ONCE_STATIC_INIT;
+static CRYPTO_ONCE once_write = CRYPTO_ONCE_STATIC_INIT;
+
+static BIO_METHOD *read_method = NULL;
+static BIO_METHOD *write_method = NULL;
+
+void read_method_init ()
+{
+  BIO_METHOD *rm = BIO_meth_new(BIO_TYPE_MEM, "read");
+
+  if ( rm == NULL ||
+       (BIO_meth_set_read(rm, &bio_read) <= 0) ||
+       (BIO_meth_set_gets(rm, &bio_gets) <= 0) ||
+       (BIO_meth_set_ctrl(rm, &bio_control) <= 0) ||
+       (BIO_meth_set_create(rm, &bio_create) <= 0) ||
+       (BIO_meth_set_destroy(rm, &bio_destroy) <= 0) )
+    return;
+
+  read_method = rm;
+}
+
+BIO_METHOD *bio_read_method()
+{
+  if (read_method != NULL) return read_method;
+
+  if ( !CRYPTO_THREAD_run_once(&once_read, read_method_init) )
+    return NULL;
+
+  return read_method;
+}
+
+void write_method_init ()
+{
+  BIO_METHOD *wm = BIO_meth_new(BIO_TYPE_MEM, "write");
+
+  if ( wm == NULL ||
+       (BIO_meth_set_write(wm, &bio_write) <= 0) ||
+       (BIO_meth_set_ctrl(wm, &bio_control) <= 0) ||
+       (BIO_meth_set_create(wm, &bio_create) <= 0) ||
+       (BIO_meth_set_destroy(wm, &bio_destroy) <= 0) )
+    return;
+
+  write_method = wm;
+}
+
+BIO_METHOD *bio_write_method()
+{
+  if (write_method != NULL) return write_method;
+
+  if ( !CRYPTO_THREAD_run_once(&once_write, write_method_init) )
+    return NULL;
+
+  return write_method;
+}
+#endif

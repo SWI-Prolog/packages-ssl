@@ -91,4 +91,8 @@ void            ssl_err          (char *fmt, ...);
 int             ssl_set_debug    (int level);
 void            ssl_deb          (int level, char *fmt, ...);
 
+BIO_METHOD      *bio_read_method();
+BIO_METHOD      *bio_write_method();
+
 #endif /*CRYPTOLIBH__*/
+
