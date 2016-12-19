@@ -564,50 +564,6 @@ cert_accept_any(_SSL,
                 _Error).
 
 
-
-%!  evp_decrypt(+CipherText,
-%!              +Algorithm,
-%!              +Key,
-%!              +IV,
-%!              -PlainText,
-%!              +Options).
-%   Decrypt the given CipherText, using the symmetric algorithm Algorithm, key Key,
-%   and iv IV, to give PlainText. CipherText, Key and IV should all be strings, and
-%   PlainText is created as a string as well. Algorithm should be an algorithm which
-%   your copy of OpenSSL knows about. Examples are:
-%       * aes-128-cbc
-%       * aes-256-cbc
-%       * des3
-%   If the IV is not needed for your decryption algorithm (such as aes-128-ecb) then
-%   any string can be provided as it will be ignored by the underlying implementation
-%
-%   Options:
-%
-%     - encoding(+Encoding)
-%     Encoding to use for Data.  Default is `utf8`.  Alternatives
-%     are `utf8` and `octet`.
-%
-%     - padding(+PaddingScheme)
-%     Padding scheme to use.  Default is `block`.  You can disable padding by supplying
-%     `none` here.
-%
-%   Example of aes-128-cbc encryption:
-%   ?- evp_encrypt("this is some input", 'aes-128-cbc', "sixteenbyteofkey",
-%                  "sixteenbytesofiv", CipherText, []),
-%      evp_decrypt(CipherText, 'aes-128-cbc', "sixteenbyteofkey", "sixteenbytesofiv",
-%                  RecoveredText, []).
-%   CipherText = <binary string>
-%   RecoveredText = "this is some input".
-
-%!  evp_encrypt(+PlainText,
-%!              +Algorithm,
-%!              +Key,
-%!              +IV,
-%!              -CipherTExt,
-%!              +Options).
-%   Encrypt the given PlainText, using the symmetric algorithm Algorithm, key Key,
-%   and iv IV, to give CipherText. See evp_decrypt/6.
-
                  /*******************************
                  *           MESSAGES           *
                  *******************************/
