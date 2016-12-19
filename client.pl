@@ -33,51 +33,51 @@
 */
 
 :- module(client,
-	  [ client/0
-	  ]).
+          [ client/0
+          ]).
 
 :- use_module(library(ssl)).
 :- use_module(library(socket)).
 
 client :-
-	ssl_context(client, SSL,
-		 [ host('localhost'),
-		   cert_verify_hook(cert_verify),
-		   cacert_file('etc/demoCA/cacert.pem'),
-		   certificate_file('etc/client/client-cert.pem'),
-		   key_file('etc/client/client-key.pem'),
-		   close_parent(true),
-		   close_notify(true),
-%		   password('apenoot2'),
-		   pem_password_hook(get_client_pwd)
-		 ]),
-	Port = 1111,
-	tcp_connect(localhost:Port, StreamPair, []),
-	stream_pair(StreamPair, Read, Write),
-	catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
-	      E,
-	      ( close(StreamPair), throw(E))),
-	client_loop(SSLRead, SSLWrite).
+    ssl_context(client, SSL,
+             [ host('localhost'),
+               cert_verify_hook(cert_verify),
+               cacert_file('etc/demoCA/cacert.pem'),
+               certificate_file('etc/client/client-cert.pem'),
+               key_file('etc/client/client-key.pem'),
+               close_parent(true),
+               close_notify(true),
+%                  password('apenoot2'),
+               pem_password_hook(get_client_pwd)
+             ]),
+    Port = 1111,
+    tcp_connect(localhost:Port, StreamPair, []),
+    stream_pair(StreamPair, Read, Write),
+    catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
+          E,
+          ( close(StreamPair), throw(E))),
+    client_loop(SSLRead, SSLWrite).
 
 client_loop(In, Out) :-
-	write_server(In, Out),
-	write_server(In, Out),
-	write_server(In, Out),
-	call_cleanup(close(In), close(Out)).
+    write_server(In, Out),
+    write_server(In, Out),
+    write_server(In, Out),
+    call_cleanup(close(In), close(Out)).
 
 write_server(In, Out) :-
-	format(Out, 'Hello~n', ''),
-	flush_output(Out),
-	read_line_to_codes(In, Line),
-	(   Line == end_of_file
-	->  true
-	;   format('Got ~s~n', [Line])
-	).
+    format(Out, 'Hello~n', ''),
+    flush_output(Out),
+    read_line_to_codes(In, Line),
+    (   Line == end_of_file
+    ->  true
+    ;   format('Got ~s~n', [Line])
+    ).
 
 user:get_client_pwd(_SSL, apenoot2) :-
-	format('Returning password from client passwd hook~n').
+    format('Returning password from client passwd hook~n').
 
 cert_verify(_SSL, Certificate, _AllCerts, _FirstCert, Error) :-
-	format('Handling detailed certificate verification~n'),
-	format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
-	format('Client accepts the server certificate~n').
+    format('Handling detailed certificate verification~n'),
+    format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
+    format('Client accepts the server certificate~n').

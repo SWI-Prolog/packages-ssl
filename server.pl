@@ -33,8 +33,8 @@
 */
 
 :- module(server,
-	  [ server/0
-	  ]).
+          [ server/0
+          ]).
 
 :- use_module(library(ssl)).
 :- use_module(library(socket)).
@@ -42,56 +42,56 @@
 :- debug(connection).
 
 server :-
-	ssl_context(server, SSL,
-		    [ peer_cert(true),
-		      cacert_file('etc/demoCA/cacert.pem'),
-		      certificate_file('etc/server/server-cert.pem'),
-		      key_file('etc/server/server-key.pem'),
-		      cert_verify_hook(get_cert_verify),
-		      close_notify(true),
-		      % password('apenoot1'),
-		      pem_password_hook(get_server_pwd)
-		    ]),
-	Port = 1111,
-	tcp_socket(Socket),
-	tcp_setopt(Socket, reuseaddr),
-	tcp_bind(Socket, localhost:Port),
-	tcp_listen(Socket, 5),
-	thread_create(server_loop(SSL, Socket), _, []).
+    ssl_context(server, SSL,
+                [ peer_cert(true),
+                  cacert_file('etc/demoCA/cacert.pem'),
+                  certificate_file('etc/server/server-cert.pem'),
+                  key_file('etc/server/server-key.pem'),
+                  cert_verify_hook(get_cert_verify),
+                  close_notify(true),
+                  % password('apenoot1'),
+                  pem_password_hook(get_server_pwd)
+                ]),
+    Port = 1111,
+    tcp_socket(Socket),
+    tcp_setopt(Socket, reuseaddr),
+    tcp_bind(Socket, localhost:Port),
+    tcp_listen(Socket, 5),
+    thread_create(server_loop(SSL, Socket), _, []).
 
 server_loop(SSL, Server) :-
-	tcp_accept(Server, Socket, Peer),
-	debug(connection, 'Connection from ~p', [Peer]),
-	setup_call_cleanup(tcp_open_socket(Socket, Read, Write),
-			   handle_client(SSL, Read, Write),
-			   tcp_close_socket(Socket)),
-	server_loop(SSL, Server).
+    tcp_accept(Server, Socket, Peer),
+    debug(connection, 'Connection from ~p', [Peer]),
+    setup_call_cleanup(tcp_open_socket(Socket, Read, Write),
+                       handle_client(SSL, Read, Write),
+                       tcp_close_socket(Socket)),
+    server_loop(SSL, Server).
 
 handle_client(SSL, Read, Write) :-
-	catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
-	      Exception,
-	      true),
-	(   nonvar(Exception)
-	->  format("Exception during negotation: ~w~n", [Exception])
-	;   copy_client(SSLRead, SSLWrite),
-	    call_cleanup(close(SSLRead), close(SSLWrite))
-	).
+    catch(ssl_negotiate(SSL, Read, Write, SSLRead, SSLWrite),
+          Exception,
+          true),
+    (   nonvar(Exception)
+    ->  format("Exception during negotation: ~w~n", [Exception])
+    ;   copy_client(SSLRead, SSLWrite),
+        call_cleanup(close(SSLRead), close(SSLWrite))
+    ).
 
 copy_client(In, Out) :-
-	read_line_to_codes(In, Line),
-	(   Line == end_of_file
-	->  true
-	;   format('Got ~s~n', [Line]),
-	    format(Out, '~s~n', [Line]),
-	    flush_output(Out),
-	    copy_client(In, Out)
-	).
+    read_line_to_codes(In, Line),
+    (   Line == end_of_file
+    ->  true
+    ;   format('Got ~s~n', [Line]),
+        format(Out, '~s~n', [Line]),
+        flush_output(Out),
+        copy_client(In, Out)
+    ).
 
 get_server_pwd(_SSL, apenoot1) :-
-	format('Returning password from server passwd hook~n').
+    format('Returning password from server passwd hook~n').
 
 get_cert_verify(_SSL, Certificate, _AllCerts, _FirstCert, Error) :-
-	format('Handling detailed certificate verification~n'),
-	format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
-	format('Server accepts the client certificate~n').
+    format('Handling detailed certificate verification~n'),
+    format('Certificate: ~w, error: ~w~n', [Certificate, Error]),
+    format('Server accepts the client certificate~n').
 

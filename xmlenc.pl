@@ -35,7 +35,7 @@
 
 
 :-module(xmlenc,
-	 [ decrypt_xml/4   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
+         [ decrypt_xml/4   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
          ]).
 :- use_module(library(ssl)).
 :- use_module(library(sgml)).
@@ -43,7 +43,7 @@
 :- use_module(library(error)).
 
 :- meta_predicate
-	decrypt_xml(+, -, 3, +).
+    decrypt_xml(+, -, 3, +).
 
 /** <module> XML encryption library
 
@@ -61,65 +61,67 @@ ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes128-cbc',    'aes-128-cbc', 1
 ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes256-cbc',    'aes-256-cbc', 32).
 ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes192-cbc',    'aes-192-cbc', 24).
 
-%%	decrypt_xml(+DOMIn, -DOMOut, :KeyCallback, +Options) is det.
+%!  decrypt_xml(+DOMIn, -DOMOut, :KeyCallback, +Options) is det.
 %
-%	@arg KeyCallback may be called as follows:
-%		- call(KeyCallback, name,        KeyName,         Key)
-%		- call(KeyCallback, public_key,  public_key(RSA), Key)
-%		- call(KeyCallback, certificate, Certificate,     Key)
+%   @arg KeyCallback may be called as follows:
+%           - call(KeyCallback, name,        KeyName,         Key)
+%           - call(KeyCallback, public_key,  public_key(RSA), Key)
+%           - call(KeyCallback, certificate, Certificate,     Key)
 
 decrypt_xml([], [], _, _):- !.
 decrypt_xml([element(ns(_, 'http://www.w3.org/2001/04/xmlenc#'):'EncryptedData',
-		     Attributes, EncryptedData)|Siblings],
-	    [Decrypted|NewSiblings], KeyCallback, Options) :- !,
-        decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options),
-	decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
+                     Attributes, EncryptedData)|Siblings],
+            [Decrypted|NewSiblings], KeyCallback, Options) :-
+    !,
+    decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options),
+    decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
 
 decrypt_xml([element(Tag, Attributes, Children)|Siblings],
-	    [element(Tag, Attributes, NewChildren)|NewSiblings], KeyCallback, Options) :- !,
-	decrypt_xml(Children, NewChildren, KeyCallback, Options),
-	decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
+            [element(Tag, Attributes, NewChildren)|NewSiblings], KeyCallback, Options) :-
+    !,
+    decrypt_xml(Children, NewChildren, KeyCallback, Options),
+    decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
 decrypt_xml([Other|Siblings], [Other|NewSiblings], KeyCallback, Options):-
-	decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
+    decrypt_xml(Siblings, NewSiblings, KeyCallback, Options).
 
-%%       decrypt_element(+Attributes,
-%%			 +EncryptedData,
-%%			 -DecryptedElement,
-%%			 +Options).
+%!   decrypt_element(+Attributes,
+%!                   +EncryptedData,
+%!                   -DecryptedElement,
+%!                   +Options).
 %
-%	 Decrypt an EncryptedData element  with   Attributes  and  child
-%	 EncryptedData DecryptedElement will either be an element/3 term
-%	 or a string as dictacted by   the Type attribute in Attributes.
-%	 If Attributes does not contain a  Type attribute then we assume
-%	 it is a string
+%    Decrypt an EncryptedData element  with   Attributes  and  child
+%    EncryptedData DecryptedElement will either be an element/3 term
+%    or a string as dictacted by   the Type attribute in Attributes.
+%    If Attributes does not contain a  Type attribute then we assume
+%    it is a string
 
 :-meta_predicate(decrypt_element(+, +, -, 3, +)).
 
 decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
-	XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
-	(  memberchk(element(XENC:'CipherData', _, CipherData), EncryptedData)
-        -> true
-        ;  existence_error(cipher_data, EncryptedData)
-	),
-	% The Type attribute is not mandatory. However, 3.1 states that
-	% "Without this information, the decryptor will be unable to automatically restore the XML document to its original cleartext form."
-        (  memberchk('Type'=Type, Attributes)
-        -> true
-        ;  Type = 'http://www.w3.org/2001/04/xmlenc#Content'
-	),
+    XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
+    (  memberchk(element(XENC:'CipherData', _, CipherData), EncryptedData)
+    -> true
+    ;  existence_error(cipher_data, EncryptedData)
+    ),
+    % The Type attribute is not mandatory. However, 3.1 states that
+    % "Without this information, the decryptor will be unable to automatically restore the XML document to its original cleartext form."
+    (  memberchk('Type'=Type, Attributes)
+    -> true
+    ;  Type = 'http://www.w3.org/2001/04/xmlenc#Content'
+    ),
 
-	% First of all, determine the algorithm used to encrypt the data
-        determine_encryption_algorithm(EncryptedData, Algorithm, IVSize),
+    % First of all, determine the algorithm used to encrypt the data
+    determine_encryption_algorithm(EncryptedData, Algorithm, IVSize),
 
-        % There are now two tasks remaining, and they seem like they ought to be quite simple, but unfortunately they are not
-        % First, we must determine the key used to encrypt the message
-        determine_key(EncryptedData, Key, KeyCallback, Options),
+    % There are now two tasks remaining, and they seem like they ought to be quite simple, but unfortunately they are not
+    % First, we must determine the key used to encrypt the message
+    determine_key(EncryptedData, Key, KeyCallback, Options),
 
-        % Then, we must determine what the encrypted data even IS
-        % If the message includes a CipherValue then this is straightfoward - the encrypted data is the base64-encoded child
-        % of this element.
-        (  memberchk(element(XENC:'CipherValue', _, CipherValueElement), CipherData)
-        -> base64_element(CipherValueElement, CipherValueWithIV),
+    % Then, we must determine what the encrypted data even IS
+    % If the message includes a CipherValue then this is straightfoward - the encrypted data is the base64-encoded child
+    % of this element.
+    (  memberchk(element(XENC:'CipherValue', _, CipherValueElement), CipherData)
+    -> base64_element(CipherValueElement, CipherValueWithIV),
            string_codes(CipherValueWithIV, CipherValueWithIVCodes),
            length(IVCodes, IVSize),
            append(IVCodes, CipherCodes, CipherValueWithIVCodes),
@@ -127,11 +129,11 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
            string_codes(CipherText, CipherCodes),
            length(CipherValueWithIVCodes, _),
            evp_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
-	;  memberchk(element(XENC:'CipherReference', CipherReferenceAttributes, CipherReference), CipherData)->
+    ;  memberchk(element(XENC:'CipherReference', CipherReferenceAttributes, CipherReference), CipherData)->
            % However, it is allowed to include CipherReference instead. This is an arbitrary URI and a list of transforms to convert the
            % data identified by that URI into the raw octets that represent the encrypted data
            % The URI attribute of the CipherReference element is mandatory
-	   memberchk('URI'=CipherURI, CipherReferenceAttributes),
+           memberchk('URI'=CipherURI, CipherReferenceAttributes),
            % The transforms attribute is optional, though.
            (  memberchk(element('Transforms', _, Transforms), CipherReference)
            -> true
@@ -139,199 +141,200 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
            ),
            uri_components(CipherURI, uri_components(Scheme, _, _, _, _)),
            (  ( Scheme == 'http' ; Scheme == 'https')
-	      % FIXME: URI may not be an *absolute* URL
-	   ->  with_output_to(string(RawCipherValue),
-			      setup_call_cleanup(http_open(CipherURI, HTTPStream, []),
-						 copy_stream_data(HTTPStream, current_output),
-						 close(HTTPStream)))
+              % FIXME: URI may not be an *absolute* URL
+           ->  with_output_to(string(RawCipherValue),
+                          setup_call_cleanup(http_open(CipherURI, HTTPStream, []),
+                                             copy_stream_data(HTTPStream, current_output),
+                                             close(HTTPStream)))
            ;  domain_error(resolvable_uri, CipherURI)
            ),
            apply_ciphertext_transforms(RawCipherValue, Transforms, CipherValue),
            sub_string(CipherValue, 0, IVSize, _, IV),
            sub_string(CipherValue, IVSize, _, 0, CipherText),
            evp_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
-        ),
-        % The XML-ENC padding scheme does not comply with RFC-1423. This has been noted a few times by people trying to write
-        % XML-ENC decryptors backed by OpenSSL, which insists on compliance. The only recourse we have is to disable padding entirely
-        % and do it in our application
-        xmlenc_padding(DecryptedStringWithPadding, DecryptedString),
-        % Now that we have the decrypted data, we can decide whether to turn it into an element or leave it as
-        % content
-        (  Type == 'http://www.w3.org/2001/04/xmlenc#Element'
-        -> setup_call_cleanup(open_string(DecryptedString, StringStream),
-                              load_structure(StringStream, [Decrypted], [dialect(xmlns), keep_prefix(true)]),
-                              close(StringStream))
-        ;  Decrypted = DecryptedString
-	).
+    ),
+    % The XML-ENC padding scheme does not comply with RFC-1423. This has been noted a few times by people trying to write
+    % XML-ENC decryptors backed by OpenSSL, which insists on compliance. The only recourse we have is to disable padding entirely
+    % and do it in our application
+    xmlenc_padding(DecryptedStringWithPadding, DecryptedString),
+    % Now that we have the decrypted data, we can decide whether to turn it into an element or leave it as
+    % content
+    (  Type == 'http://www.w3.org/2001/04/xmlenc#Element'
+    -> setup_call_cleanup(open_string(DecryptedString, StringStream),
+                          load_structure(StringStream, [Decrypted], [dialect(xmlns), keep_prefix(true)]),
+                          close(StringStream))
+    ;  Decrypted = DecryptedString
+    ).
 
 xmlenc_padding(DecryptedStringWithPadding, DecryptedString):-
-        string_length(DecryptedStringWithPadding, _),
-        string_codes(DecryptedStringWithPadding, Codes),
-        append(_, [LastCode], Codes),
-        length(Padding, LastCode),
-        append(DecryptedCodes, Padding, Codes),
-        !,
-        string_codes(DecryptedString, DecryptedCodes).
+    string_length(DecryptedStringWithPadding, _),
+    string_codes(DecryptedStringWithPadding, Codes),
+    append(_, [LastCode], Codes),
+    length(Padding, LastCode),
+    append(DecryptedCodes, Padding, Codes),
+    !,
+    string_codes(DecryptedString, DecryptedCodes).
 
 apply_ciphertext_transforms(CipherValue, [], CipherValue):- !.
 apply_ciphertext_transforms(_, [_AnythingElse|_], _):-
-	% FIXME: Not implemented
-	throw(error(implementation_missing('CipherReference transforms are not implemented', _))).
+    % FIXME: Not implemented
+    throw(error(implementation_missing('CipherReference transforms are not implemented', _))).
 
 :- meta_predicate determine_key(+,-,3,+).
 determine_key(EncryptedData, Key, KeyCallback, Options):-
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	(  memberchk(element(DS:'KeyInfo', _, KeyInfo), EncryptedData)
-	-> true
-	;  % Technically the KeyInfo is not mandatory. However, without a key we cannot decrypt
-	   % so raise an error. In the future Options could contain a key if it is agreed upon
-	   % by some other channel
-	   existence_error(key_info, EncryptedData)
-	),
-        resolve_key(KeyInfo, Key, KeyCallback, Options).
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    (  memberchk(element(DS:'KeyInfo', _, KeyInfo), EncryptedData)
+    -> true
+    ;  % Technically the KeyInfo is not mandatory. However, without a key we cannot decrypt
+           % so raise an error. In the future Options could contain a key if it is agreed upon
+           % by some other channel
+           existence_error(key_info, EncryptedData)
+    ),
+    resolve_key(KeyInfo, Key, KeyCallback, Options).
 
 :- meta_predicate resolve_key(+,-,3,+).
 
 resolve_key(Info, Key, KeyCallback, Options):-
-	% EncryptedKey
-        XENC = 'http://www.w3.org/2001/04/xmlenc#',
-	memberchk(element(ns(_, XENC):'EncryptedKey', _KeyAttributes, EncryptedKey), Info),
-	!,
-	% The EncryptedKey is slightly different to EncryptedData. For a start, the algorithms used to decrypt the
-	% key are orthogonal to those used for EncryptedData. However we can recursively search for the keys then
-	% decrypt them using the different algorithms as needed
-        memberchk(element(ns(_, XENC):'EncryptionMethod', MethodAttributes, EncryptionMethod), EncryptedKey),
-        memberchk('Algorithm'=Algorithm, MethodAttributes),
+    % EncryptedKey
+    XENC = 'http://www.w3.org/2001/04/xmlenc#',
+    memberchk(element(ns(_, XENC):'EncryptedKey', _KeyAttributes, EncryptedKey), Info),
+    !,
+    % The EncryptedKey is slightly different to EncryptedData. For a start, the algorithms used to decrypt the
+    % key are orthogonal to those used for EncryptedData. However we can recursively search for the keys then
+    % decrypt them using the different algorithms as needed
+    memberchk(element(ns(_, XENC):'EncryptionMethod', MethodAttributes, EncryptionMethod), EncryptedKey),
+    memberchk('Algorithm'=Algorithm, MethodAttributes),
 
-	% Now find the KeyInfo
-        determine_key(EncryptedKey, PrivateKey, KeyCallback, Options),
+    % Now find the KeyInfo
+    determine_key(EncryptedKey, PrivateKey, KeyCallback, Options),
 
-        memberchk(element(ns(_, XENC):'CipherData', _, CipherData), EncryptedKey),
-        memberchk(element(ns(_, XENC):'CipherValue', _, CipherValueElement), CipherData),
-        base64_element(CipherValueElement, CipherValue),
-        (  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p'
-        -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs_oaep)])
-        ;  Algorithm == 'http://www.w3.org/2009/xmlenc11#rsa-oaep',
+    memberchk(element(ns(_, XENC):'CipherData', _, CipherData), EncryptedKey),
+    memberchk(element(ns(_, XENC):'CipherValue', _, CipherValueElement), CipherData),
+    base64_element(CipherValueElement, CipherValue),
+    (  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p'
+    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs_oaep)])
+    ;  Algorithm == 'http://www.w3.org/2009/xmlenc11#rsa-oaep',
            memberchk(element(ns(_, 'http://www.w3.org/2009/xmlenc11#'):'MGF', MGFAttributes, _), EncryptionMethod),
            memberchk('Algorithm'='http://www.w3.org/2009/xmlenc11#mgf1sha1', MGFAttributes)   % This is just the same as rsa-oaep-mgf1p!
-        -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs_oaep)])
-        ;  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-1_5'
-        -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs)])
-        ;  domain_error(key_transport, Algorithm)
-        ).
+    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs_oaep)])
+    ;  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-1_5'
+    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs)])
+    ;  domain_error(key_transport, Algorithm)
+    ).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
-	% AgreementMethod. FIXME: Not implemented
-	XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
-	memberchk(element(XENC:'AgreementMethod', _KeyAttributes, _AgreementMethod), KeyInfo),
-	!,
-	throw(not_implemented).
+    % AgreementMethod. FIXME: Not implemented
+    XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
+    memberchk(element(XENC:'AgreementMethod', _KeyAttributes, _AgreementMethod), KeyInfo),
+    !,
+    throw(not_implemented).
 % Additionally, we are allowed to use any elements from XML-DSIG
 resolve_key(KeyInfo, Key, KeyCallback, _Options):-
-	% KeyName. Use the callback with type=name and hint=KeyName
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'KeyName', _KeyAttributes, [KeyName]), KeyInfo),
-	!,
-	call(KeyCallback, name, KeyName, Key).
+    % KeyName. Use the callback with type=name and hint=KeyName
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'KeyName', _KeyAttributes, [KeyName]), KeyInfo),
+    !,
+    call(KeyCallback, name, KeyName, Key).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
-	% RetrievalMethod. FIXME: Not implemented
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'RetrievalMethod', _KeyAttributes, _RetrievalMethod), KeyInfo),
-	!,
-	throw(not_implemented).
+    % RetrievalMethod. FIXME: Not implemented
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'RetrievalMethod', _KeyAttributes, _RetrievalMethod), KeyInfo),
+    !,
+    throw(not_implemented).
 resolve_key(KeyInfo, Key, KeyCallback, _Options):-
-	% KeyValue.
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'KeyValue', _KeyAttributes, KeyValue), KeyInfo),
-	!,
-	(  memberchk(element(DS:'RSAKeyValue', _, RSAKeyValue), KeyInfo)
-	-> memberchk(element(DS:'Modulus', _, [ModulusBase64]), RSAKeyValue),
-	   memberchk(element(DS:'Exponent', _, [ExponentBase64]), RSAKeyValue),
-	   base64_to_hex(ModulusBase64, Modulus),
-	   base64_to_hex(ExponentBase64, Exponent),
-	   call(KeyCallback, public_key, public_key(rsa(Modulus, Exponent, -, -, -, -, -, -)), Key)
-	;  memberchk(element(DS:'DSAKeyValue', _, _DSAKeyValue), KeyInfo)
-	-> throw(error(not_implemented(dsa_key), _)) % FIXME: Not implemented
-	;  existence_error(usable_key_value, KeyValue)
-	).
+    % KeyValue.
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'KeyValue', _KeyAttributes, KeyValue), KeyInfo),
+    !,
+    (  memberchk(element(DS:'RSAKeyValue', _, RSAKeyValue), KeyInfo)
+    -> memberchk(element(DS:'Modulus', _, [ModulusBase64]), RSAKeyValue),
+           memberchk(element(DS:'Exponent', _, [ExponentBase64]), RSAKeyValue),
+           base64_to_hex(ModulusBase64, Modulus),
+           base64_to_hex(ExponentBase64, Exponent),
+           call(KeyCallback, public_key, public_key(rsa(Modulus, Exponent, -, -, -, -, -, -)), Key)
+    ;  memberchk(element(DS:'DSAKeyValue', _, _DSAKeyValue), KeyInfo)
+    -> throw(error(not_implemented(dsa_key), _)) % FIXME: Not implemented
+    ;  existence_error(usable_key_value, KeyValue)
+    ).
 resolve_key(KeyInfo, Key, KeyCallback, _Options):-
-	% X509Data.
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'X509Data', _, X509Data), KeyInfo),
-        memberchk(element(DS:'X509Certificate', _, [X509Certificate]), X509Data),
-	!,
-	string_concat("-----BEGIN CERTIFICATE-----\n", X509Certificate, X509CertificateWithHeader),
-        string_concat(X509CertificateWithHeader, "\n-----END CERTIFICATE-----", X509CertificateWithHeaderAndFooter),
-        setup_call_cleanup(open_string(X509CertificateWithHeaderAndFooter, X509Stream),
-                           load_certificate(X509Stream, Certificate),
-			   close(X509Stream)),
-	call(KeyCallback, certificate, Certificate, Key).
+    % X509Data.
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'X509Data', _, X509Data), KeyInfo),
+    memberchk(element(DS:'X509Certificate', _, [X509Certificate]), X509Data),
+    !,
+    string_concat("-----BEGIN CERTIFICATE-----\n", X509Certificate, X509CertificateWithHeader),
+    string_concat(X509CertificateWithHeader, "\n-----END CERTIFICATE-----", X509CertificateWithHeaderAndFooter),
+    setup_call_cleanup(open_string(X509CertificateWithHeaderAndFooter, X509Stream),
+                       load_certificate(X509Stream, Certificate),
+                       close(X509Stream)),
+    call(KeyCallback, certificate, Certificate, Key).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
-	% PGPData. FIXME: Not implemented
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'PGPData', _KeyAttributes, _PGPData), KeyInfo),
-	!,
-	throw(not_implemented).
+    % PGPData. FIXME: Not implemented
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'PGPData', _KeyAttributes, _PGPData), KeyInfo),
+    !,
+    throw(not_implemented).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
-	% SPKIData. FIXME: Not implemented
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'SPKIData', _KeyAttributes, _SPKIData), KeyInfo),
-	!,
-	throw(not_implemented).
+    % SPKIData. FIXME: Not implemented
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'SPKIData', _KeyAttributes, _SPKIData), KeyInfo),
+    !,
+    throw(not_implemented).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
-	% MgmtData. FIXME: Not implemented
-	DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-	memberchk(element(DS:'MgmtData', _KeyAttributes, _SPKIData), KeyInfo),
-	!,
-	throw(not_implemented).
+    % MgmtData. FIXME: Not implemented
+    DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
+    memberchk(element(DS:'MgmtData', _KeyAttributes, _SPKIData), KeyInfo),
+    !,
+    throw(not_implemented).
 resolve_key(Info, _, _, _):-
-	% The XML-ENC standard allows for arbitrary other means of transmitting keys in application-specific
-	% protocols. This is not supported here, though. In the future a callback could be provided in Options
-	% to obtain the key information from a KeyInfo structure.
-	existence_error(usable_key, Info).
+    % The XML-ENC standard allows for arbitrary other means of transmitting keys in application-specific
+    % protocols. This is not supported here, though. In the future a callback could be provided in Options
+    % to obtain the key information from a KeyInfo structure.
+    existence_error(usable_key, Info).
 
 
 base64_to_hex(Base64, HexString):-
-	base64(Raw, Base64),
-	atom_codes(Raw, Codes),
-	phrase(hex_bytes(HexCodes), Codes),
-	string_codes(HexString, HexCodes).
+    base64(Raw, Base64),
+    atom_codes(Raw, Codes),
+    phrase(hex_bytes(HexCodes), Codes),
+    string_codes(HexString, HexCodes).
 
 hex_bytes([A,B|T]) -->
-	[Byte], !,
-	{Hi is (Byte >> 4) /\ 0xf,
-	 Lo is Byte /\ 0xf,
-	 (  Hi >= 10
-	 -> A is 55 + Hi
-	 ;  A is 48 + Hi
-	 ),
-	 (  Lo >= 10
-	 -> B is 55 + Lo
-	 ;  B is 48 + Lo
-	 )},
-	hex_bytes(T).
+    [Byte],
+    !,
+    {Hi is (Byte >> 4) /\ 0xf,
+     Lo is Byte /\ 0xf,
+     (  Hi >= 10
+     -> A is 55 + Hi
+     ;  A is 48 + Hi
+     ),
+     (  Lo >= 10
+     -> B is 55 + Lo
+     ;  B is 48 + Lo
+     )},
+    hex_bytes(T).
 hex_bytes([]) --> [].
 
 
 determine_encryption_algorithm(EncryptedData, Algorithm, IVSize):-
-	XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
-	(  memberchk(element(XENC:'EncryptionMethod', EncryptionMethodAttributes, _), EncryptedData)
-	-> % This is a mandatory attribute
-	   memberchk('Algorithm'=XMLAlgorithm, EncryptionMethodAttributes),
-	   (  ssl_algorithm(XMLAlgorithm, Algorithm, IVSize)
-	   -> true
-	   ; domain_error(block_cipher, XMLAlgorithm)
-	   )
-	% In theory the EncryptionMethod is optional. In pracitse though, if the method is not supplied we
-	% cannot decrypt the data. In the future we could support encryption_algorithm/1 as an option to
-	% decrypt_element/3 but for now raise an exception
-	; existence_error(encryption_method, EncryptedData)
-	).
+    XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
+    (  memberchk(element(XENC:'EncryptionMethod', EncryptionMethodAttributes, _), EncryptedData)
+    -> % This is a mandatory attribute
+           memberchk('Algorithm'=XMLAlgorithm, EncryptionMethodAttributes),
+           (  ssl_algorithm(XMLAlgorithm, Algorithm, IVSize)
+           -> true
+           ; domain_error(block_cipher, XMLAlgorithm)
+           )
+        % In theory the EncryptionMethod is optional. In pracitse though, if the method is not supplied we
+        % cannot decrypt the data. In the future we could support encryption_algorithm/1 as an option to
+        % decrypt_element/3 but for now raise an exception
+    ; existence_error(encryption_method, EncryptedData)
+    ).
 
 base64_element([CipherValueElement], CipherValue):-
-        atom_codes(CipherValueElement, Base64Codes),
-        delete_newlines(Base64Codes, TrimmedCodes),
-        string_codes(Trimmed, TrimmedCodes),
-        base64(CipherValue, Trimmed).
+    atom_codes(CipherValueElement, Base64Codes),
+    delete_newlines(Base64Codes, TrimmedCodes),
+    string_codes(Trimmed, TrimmedCodes),
+    base64(CipherValue, Trimmed).
 
 delete_newlines([], []):- !.
 delete_newlines([13|As], B):- !, delete_newlines(As, B).
