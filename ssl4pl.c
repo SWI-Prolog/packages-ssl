@@ -156,55 +156,55 @@ static int ctx_idx;
 
 
 typedef struct pl_ssl {
-    long                magic;
+    long                 magic;
     /*
      * Are we server or client
      */
-    PL_SSL_ROLE         pl_ssl_role;
+    PL_SSL_ROLE          role;
 
-    int                 sock;           /* the listening/connected socket */
-    int                 close_parent;
-    atom_t              atom;
-    BOOL                close_notify;
+    int                  sock;           /* the listening/connected socket */
+    int                  close_parent;
+    atom_t               atom;
+    BOOL                 close_notify;
 
     /*
      * Context, Certificate, SSL info
      */
-    SSL_CTX *           pl_ssl_ctx;
-    int                 pl_ssl_idx;
-    X509 *              pl_ssl_peer_cert;
+    SSL_CTX             *ctx;
+    int                  idx;
+    X509                *peer_cert;
 
     /*
      * In case of the client the host we're connecting to.
      */
-    char *              pl_ssl_host;
+    char                *host;
 
     /*
      * Various parameters affecting the SSL layer
      */
-    int                 use_system_cacert;
-    char *              pl_ssl_cacert;
-    char *              pl_ssl_certf;
-    char *              pl_ssl_certificate;
-    X509 *              pl_ssl_certificate_X509;
-    char *              pl_ssl_keyf;
-    char *              pl_ssl_key;
-    char *              pl_ssl_cipher_list;
-    char *              pl_ssl_ecdh_curve;
-    STACK_OF(X509_CRL) *pl_ssl_crl_list;
-    char *              pl_ssl_password;
-    BOOL                pl_ssl_cert_required;
-    BOOL                pl_ssl_crl_required;
-    BOOL                pl_ssl_peer_cert_required;
+    int                  use_system_cacert;
+    char                *cacert;
+    char                *certificate_file;
+    char                *certificate;
+    X509                *certificate_X509;
+    char                *key_file;
+    char                *key;
+    char                *cipher_list;
+    char                *ecdh_curve;
+    STACK_OF(X509_CRL)  *crl_list;
+    char                *password;
+    BOOL                 cert_required;
+    BOOL                 crl_required;
+    BOOL                 peer_cert_required;
 
     /*
      * Application defined handlers
      */
-    predicate_t         *pl_ssl_cb_cert_verify_pred;
-    predicate_t         *pl_ssl_cb_pem_passwd_pred;
-    predicate_t         *pl_ssl_cb_sni_pred;
+    predicate_t         *cb_cert_verify_pred;
+    predicate_t         *cb_pem_passwd_pred;
+    predicate_t         *cb_sni_pred;
 #ifndef HAVE_X509_CHECK_HOST
-    int                 hostname_check_status;
+    int                  hostname_check_status;
 #endif
 } PL_SSL;
 
@@ -1044,7 +1044,7 @@ acquire_ssl(atom_t atom)
 void
 ssl_exit(PL_SSL *config)
 { if ( config )
-  { if ( config->pl_ssl_role == PL_SSL_SERVER && config->sock >= 0 )
+  { if ( config->role == PL_SSL_SERVER && config->sock >= 0 )
     { /* If the socket has been stored, then we ought to close it
          if the SSL is being closed
          FIXME: this beast is owned by Prolog now, no?
@@ -1053,9 +1053,9 @@ ssl_exit(PL_SSL *config)
       config->sock = -1;
     }
 
-    if (config->pl_ssl_ctx)
+    if (config->ctx)
     { ssl_deb(1, "Calling SSL_CTX_free()\n");
-      SSL_CTX_free(config->pl_ssl_ctx);	/* doesn't call free hook? */
+      SSL_CTX_free(config->ctx);	/* doesn't call free hook? */
     } else
     { ssl_deb(1, "config without CTX encountered\n");
     }
@@ -1153,7 +1153,7 @@ static char *
 pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
 { fid_t fid = PL_open_foreign_frame();
   term_t av = PL_new_term_refs(2);
-  predicate_t pred = config->pl_ssl_cb_pem_passwd_pred;
+  predicate_t pred = config->cb_pem_passwd_pred;
   char *passwd = NULL;
   size_t len;
 
@@ -1183,7 +1183,7 @@ static PL_SSL *
 pl_sni_hook(PL_SSL *config, const char *host)
 { fid_t fid = PL_open_foreign_frame();
   term_t av = PL_new_term_refs(3);
-  predicate_t pred = config->pl_ssl_cb_sni_pred;
+  predicate_t pred = config->cb_sni_pred;
   PL_SSL *new_config = NULL;
 
   /*
@@ -1208,7 +1208,7 @@ pl_cert_verify_hook(PL_SSL *config,
 { fid_t fid = PL_open_foreign_frame();
   term_t av = PL_new_term_refs(5);
   term_t error_term = PL_new_term_ref();
-  predicate_t pred = config->pl_ssl_cb_cert_verify_pred;
+  predicate_t pred = config->cb_cert_verify_pred;
   int val;
   STACK_OF(X509)* stack;
 
@@ -1461,40 +1461,40 @@ ssl_new(void)
     PL_SSL *new = NULL;
 
     if ((new = malloc(sizeof(*new))) != NULL) {
-        new->pl_ssl_role                = PL_SSL_NONE;
+        new->role                = PL_SSL_NONE;
 
-        new->sock                       = -1;
-        new->close_parent               = FALSE;
-        new->atom                       = 0;
-        new->close_notify               = FALSE;
+        new->sock                = -1;
+        new->close_parent        = FALSE;
+        new->atom                = 0;
+        new->close_notify        = FALSE;
 
-        new->pl_ssl_peer_cert           = NULL;
-        new->pl_ssl_ctx                 = NULL;
-        new->pl_ssl_idx                 = -1;
-        new->pl_ssl_password            = NULL;
+        new->peer_cert           = NULL;
+        new->ctx                 = NULL;
+        new->idx                 = -1;
+        new->password            = NULL;
 
-        new->use_system_cacert          = FALSE;
-        new->pl_ssl_host                = NULL;
+        new->use_system_cacert   = FALSE;
+        new->host                = NULL;
 
-        new->pl_ssl_cacert              = NULL;
-        new->pl_ssl_cert_required       = FALSE;
-        new->pl_ssl_certf               = NULL;
-        new->pl_ssl_certificate         = NULL;
-        new->pl_ssl_certificate_X509    = NULL;
-        new->pl_ssl_keyf                = NULL;
-        new->pl_ssl_key                 = NULL;
-        new->pl_ssl_cipher_list         = NULL;
-        new->pl_ssl_ecdh_curve          = NULL;
-        new->pl_ssl_crl_list            = NULL;
-        new->pl_ssl_peer_cert_required  = FALSE;
-        new->pl_ssl_crl_required        = FALSE;
-        new->pl_ssl_cb_sni_pred         = NULL;
-        new->pl_ssl_cb_cert_verify_pred = NULL;
-        new->pl_ssl_cb_pem_passwd_pred  = NULL;
+        new->cacert              = NULL;
+        new->cert_required       = FALSE;
+        new->certificate_file    = NULL;
+        new->certificate         = NULL;
+        new->certificate_X509    = NULL;
+        new->key_file            = NULL;
+        new->key                 = NULL;
+        new->cipher_list         = NULL;
+        new->ecdh_curve          = NULL;
+        new->crl_list            = NULL;
+        new->peer_cert_required  = FALSE;
+        new->crl_required        = FALSE;
+        new->cb_sni_pred         = NULL;
+        new->cb_cert_verify_pred = NULL;
+        new->cb_pem_passwd_pred  = NULL;
 #ifndef HAVE_X509_CHECK_HOST
-        new->hostname_check_status      = 0;
+        new->hostname_check_status = 0;
 #endif
-        new->magic                      = SSL_CONFIG_MAGIC;
+        new->magic                 = SSL_CONFIG_MAGIC;
     }
     ssl_deb(1, "Allocated config structure\n");
 
@@ -1509,21 +1509,21 @@ ssl_free(PL_SSL *config)
 { if ( config )
   { assert(config->magic == SSL_CONFIG_MAGIC);
     config->magic = 0;
-    free(config->pl_ssl_host);
-    free(config->pl_ssl_cacert);
-    free(config->pl_ssl_certf);
-    free(config->pl_ssl_certificate);
-    free(config->pl_ssl_keyf);
-    free(config->pl_ssl_key);
-    free(config->pl_ssl_cipher_list);
-    free(config->pl_ssl_ecdh_curve);
-    if ( config->pl_ssl_crl_list )
-      sk_X509_CRL_pop_free(config->pl_ssl_crl_list, X509_CRL_free);
-    if ( config->pl_ssl_certificate_X509 )
-      X509_free(config->pl_ssl_certificate_X509);
-    free(config->pl_ssl_password);
-    if ( config->pl_ssl_peer_cert )
-      X509_free(config->pl_ssl_peer_cert);
+    free(config->host);
+    free(config->cacert);
+    free(config->certificate_file);
+    free(config->certificate);
+    free(config->key_file);
+    free(config->key);
+    free(config->cipher_list);
+    free(config->ecdh_curve);
+    if ( config->crl_list )
+      sk_X509_CRL_pop_free(config->crl_list, X509_CRL_free);
+    if ( config->certificate_X509 )
+      X509_free(config->certificate_X509);
+    free(config->password);
+    if ( config->peer_cert )
+      X509_free(config->peer_cert);
     free(config);
     ssl_deb(1, "Released config structure\n");
   } else
@@ -1610,24 +1610,24 @@ ssl_set_cacert(PL_SSL *config, const char *cacert)
  */
 {
     if (cacert) {
-        if (config->pl_ssl_cacert) free(config->pl_ssl_cacert);
-        config->pl_ssl_cacert = ssl_strdup(cacert);
+        if (config->cacert) free(config->cacert);
+        config->cacert = ssl_strdup(cacert);
     }
-    return config->pl_ssl_cacert;
+    return config->cacert;
 }
 
 
 char *
-ssl_set_certf(PL_SSL *config, const char *certf)
+ssl_set_certificate_file(PL_SSL *config, const char *certificate_file)
 /*
  * Store certificate file location in config storage
  */
 {
-    if (certf) {
-        if (config->pl_ssl_certf) free(config->pl_ssl_certf);
-        config->pl_ssl_certf = ssl_strdup(certf);
+    if (certificate_file) {
+        if (config->certificate_file) free(config->certificate_file);
+        config->certificate_file = ssl_strdup(certificate_file);
     }
-    return config->pl_ssl_certf;
+    return config->certificate_file;
 }
 
 char *
@@ -1637,10 +1637,10 @@ ssl_set_certificate(PL_SSL *config, const char *cert)
  */
 {
     if (cert) {
-        if (config->pl_ssl_certificate) free(config->pl_ssl_certificate);
-        config->pl_ssl_certificate = ssl_strdup(cert);
+        if (config->certificate) free(config->certificate);
+        config->certificate = ssl_strdup(cert);
     }
-    return config->pl_ssl_certificate;
+    return config->certificate;
 }
 
 char *
@@ -1650,10 +1650,10 @@ ssl_set_keyf(PL_SSL *config, const char *keyf)
  */
 {
     if (keyf) {
-        if (config->pl_ssl_keyf) free(config->pl_ssl_keyf);
-        config->pl_ssl_keyf = ssl_strdup(keyf);
+        if (config->key_file) free(config->key_file);
+        config->key_file = ssl_strdup(keyf);
     }
-    return config->pl_ssl_keyf;
+    return config->key_file;
 }
 
 char *
@@ -1663,10 +1663,10 @@ ssl_set_key(PL_SSL *config, const char *key)
  */
 {
     if (key) {
-        if (config->pl_ssl_key) free(config->pl_ssl_key);
-        config->pl_ssl_key = ssl_strdup(key);
+        if (config->key) free(config->key);
+        config->key = ssl_strdup(key);
     }
-    return config->pl_ssl_key;
+    return config->key;
 }
 
 STACK_OF(X509_CRL) *
@@ -1676,34 +1676,34 @@ ssl_set_crl_list(PL_SSL *config, STACK_OF(X509_CRL) *crl)
  */
 {
     if (crl)
-    { if (config->pl_ssl_crl_list)
-      { sk_X509_CRL_pop_free(config->pl_ssl_crl_list, X509_CRL_free);
+    { if (config->crl_list)
+      { sk_X509_CRL_pop_free(config->crl_list, X509_CRL_free);
       }
-      config->pl_ssl_crl_list = crl;
+      config->crl_list = crl;
     }
-    return config->pl_ssl_crl_list;
+    return config->crl_list;
 }
 
 char *
 ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
 { if ( cipher_list )
-  { if ( config->pl_ssl_cipher_list )
-      free(config->pl_ssl_cipher_list);
-    config->pl_ssl_cipher_list = ssl_strdup(cipher_list);
+  { if ( config->cipher_list )
+      free(config->cipher_list);
+    config->cipher_list = ssl_strdup(cipher_list);
   }
 
-  return config->pl_ssl_cipher_list;
+  return config->cipher_list;
 }
 
 char *
 ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve)
 { if ( ecdh_curve )
-  { if ( config->pl_ssl_ecdh_curve )
-      free(config->pl_ssl_ecdh_curve);
-    config->pl_ssl_ecdh_curve = ssl_strdup(ecdh_curve);
+  { if ( config->ecdh_curve )
+      free(config->ecdh_curve);
+    config->ecdh_curve = ssl_strdup(ecdh_curve);
   }
 
-  return config->pl_ssl_ecdh_curve;
+  return config->ecdh_curve;
 }
 
 char *
@@ -1713,10 +1713,10 @@ ssl_set_password(PL_SSL *config, const char *password)
  */
 {
     if (password) {
-        if (config->pl_ssl_password) free(config->pl_ssl_password);
-        config->pl_ssl_password = ssl_strdup(password);
+        if (config->password) free(config->password);
+        config->password = ssl_strdup(password);
     }
-    return config->pl_ssl_password;
+    return config->password;
 }
 
 char *
@@ -1726,10 +1726,10 @@ ssl_set_host(PL_SSL *config, const char *host)
  */
 {
     if (host) {
-        if (config->pl_ssl_host) free(config->pl_ssl_host);
-        config->pl_ssl_host = ssl_strdup(host);
+        if (config->host) free(config->host);
+        config->host = ssl_strdup(host);
     }
-    return config->pl_ssl_host;
+    return config->host;
 }
 
 
@@ -1762,7 +1762,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
        and then proceed to the next error (if there is one). This means that behaviour will be consistent after
        upgrading to OpenSSL 1.0.2
     */
-    if ( config->hostname_check_status == 0 && config->pl_ssl_role == PL_SSL_CLIENT ) /* Not yet checked, and is a client - do not check for server */
+    if ( config->hostname_check_status == 0 && config->role == PL_SSL_CLIENT ) /* Not yet checked, and is a client - do not check for server */
     {
       /* This is a vastly simplified version. All we do is:
          1) For each alt subject name: If it is the same length as the hostname and strcmp() matches, then PASS
@@ -1784,23 +1784,23 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 
       /* First, set status to 1 (invalid) */
       config->hostname_check_status = 1;
-      if ( config->pl_ssl_host != NULL)
+      if ( config->host != NULL)
       { if (alt_names != NULL)
         { alt_names_count = sk_GENERAL_NAME_num(alt_names);
           for (i = 0; i < alt_names_count && config->hostname_check_status != 2; i++)
           { const GENERAL_NAME *name = sk_GENERAL_NAME_value(alt_names, i);
             /* We are only interested in DNS names. We may also want to do IP addresses in future, by extending
-               the type of config->pl_ssl_host
+               the type of config->host
             */
             if (name->type == GEN_DNS)
             { const char* hostname = (const char*)ASN1_STRING_get0_data(name->d.dNSName);
               size_t hostlen = ASN1_STRING_length(name->d.dNSName);
-              if (hostlen == strlen(config->pl_ssl_host) &&
-                  strcmp(config->pl_ssl_host, hostname) == 0)
+              if (hostlen == strlen(config->host) &&
+                  strcmp(config->host, hostname) == 0)
               { config->hostname_check_status = 2;
                 ssl_deb(3, "Host that matches found in SAN %d: %s\n", i, ASN1_STRING_get0_data(name->d.dNSName));
               } else if (hostlen > 2 && hostname[0] == '*' && hostname[1] == '.' && strlen(hostname) == hostlen)
-              { char* subdomain = strchr(config->pl_ssl_host, '.');
+              { char* subdomain = strchr(config->host, '.');
                 if (subdomain != NULL && strcmp(&hostname[1], subdomain) == 0)
                 { config->hostname_check_status = 2;
                   ssl_deb(3, "Host that matches with wildcard found in SAN %d: %s\n", i, hostname);
@@ -1825,13 +1825,13 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
             if (common_name_entry != NULL)
             { ASN1_STRING *common_name_asn1 = X509_NAME_ENTRY_get_data(common_name_entry);
               if (common_name_asn1 != NULL)
-              { if (ASN1_STRING_length(common_name_asn1) == strlen(config->pl_ssl_host) &&
-                    strcmp(config->pl_ssl_host, (const char*)ASN1_STRING_get0_data(common_name_asn1)) == 0)
+              { if (ASN1_STRING_length(common_name_asn1) == strlen(config->host) &&
+                    strcmp(config->host, (const char*)ASN1_STRING_get0_data(common_name_asn1)) == 0)
                 { config->hostname_check_status = 2;
                   ssl_deb(3, "Hostname in SN matches: %s\n", ASN1_STRING_get0_data(common_name_asn1));
                 }
                 else
-                  ssl_deb(3, "Hostname in SN does not match: %s vs %s\n", ASN1_STRING_get0_data(common_name_asn1), config->pl_ssl_host);
+                  ssl_deb(3, "Hostname in SN does not match: %s vs %s\n", ASN1_STRING_get0_data(common_name_asn1), config->host);
               }
             }
           }
@@ -1839,7 +1839,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
       }
       if ( config->hostname_check_status == 1 )
       { ssl_deb(3, "Hostname could not be verified!\n");
-        if ( config->pl_ssl_cb_cert_verify_pred != NULL )
+        if ( config->cb_cert_verify_pred != NULL )
         { X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
           preverify_ok = (pl_cert_verify_hook(config, cert, ctx, "hostname_mismatch", 0) != 0);
         }
@@ -1850,7 +1850,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
     }
 #endif
 
-    if ( !preverify_ok || config->pl_ssl_cb_cert_verify_pred != NULL ) {
+    if ( !preverify_ok || config->cb_cert_verify_pred != NULL ) {
         X509 *cert = NULL;
         const char *error;
         int err;
@@ -1929,7 +1929,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
           }
         }
 
-        if (config->pl_ssl_cb_cert_verify_pred) {
+        if (config->cb_cert_verify_pred) {
           preverify_ok = (pl_cert_verify_hook(config, cert, ctx, error, error_unknown) != 0);
         } else {
             char  subject[256];
@@ -1967,17 +1967,17 @@ ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
     char   *passwd = NULL;
     int     len    = 0;
 
-    if (config->pl_ssl_cb_pem_passwd_pred) {
+    if (config->cb_pem_passwd_pred) {
         /*
          * Callback installed
          */
         passwd = pl_pem_passwd_hook(config, buf, size);
     } else
-    if (config->pl_ssl_password) {
+    if (config->password) {
         /*
          * Password defined
          */
-        passwd = config->pl_ssl_password;
+        passwd = config->password;
     }
 
     if (passwd) {
@@ -2004,11 +2004,11 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
     new_config = pl_sni_hook(config, servername);
 
   if ( new_config == NULL &&
-       config->pl_ssl_certf == NULL &&
-       config->pl_ssl_certificate == NULL )
+       config->certificate_file == NULL &&
+       config->certificate == NULL )
     return SSL_TLSEXT_ERR_NOACK;
 
-  SSL_set_SSL_CTX(s, new_config ? new_config->pl_ssl_ctx : config->pl_ssl_ctx );
+  SSL_set_SSL_CTX(s, new_config ? new_config->ctx : config->ctx );
 
   return SSL_TLSEXT_ERR_OK;
 }
@@ -2023,7 +2023,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
 {
     int ret = 0;
     if (instance) {
-        if ( (instance->config->pl_ssl_role != PL_SSL_SERVER) ||
+        if ( (instance->config->role != PL_SSL_SERVER) ||
              instance->config->close_notify ) {
             /*
              * Send SSL/TLS close_notify, if no fatal alert has occurred.
@@ -2075,10 +2075,10 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
 X509 *
 ssl_peer_certificate(PL_SSL_INSTANCE *instance)
-{ if ( !instance->config->pl_ssl_peer_cert )
-    instance->config->pl_ssl_peer_cert = SSL_get_peer_certificate(instance->ssl);
+{ if ( !instance->config->peer_cert )
+    instance->config->peer_cert = SSL_get_peer_certificate(instance->ssl);
 
-  return instance->config->pl_ssl_peer_cert;
+  return instance->config->peer_cert;
 }
 
 
@@ -2123,10 +2123,10 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
             return NULL;
         }
         assert(config->magic == SSL_CONFIG_MAGIC);
-        config->pl_ssl_ctx  = ssl_ctx;
-        config->pl_ssl_role = role;
-        config->pl_ssl_cert_required = (role == PL_SSL_SERVER);
-        config->pl_ssl_peer_cert_required = (role != PL_SSL_SERVER);
+        config->ctx  = ssl_ctx;
+        config->role = role;
+        config->cert_required = (role == PL_SSL_SERVER);
+        config->peer_cert_required = (role != PL_SSL_SERVER);
 
         /*
          * Set SSL_{read,write} behaviour when a renegotiation takes place
@@ -2315,25 +2315,25 @@ ssl_init_verify_locations(PL_SSL *config)
         while (index < sk_X509_num(certs))
         { X509_STORE_add_cert(store, sk_X509_value(certs, index++));
         }
-        SSL_CTX_set_cert_store(config->pl_ssl_ctx, store);
+        SSL_CTX_set_cert_store(config->ctx, store);
       }
     }
     ssl_deb(1, "System certificate authority(s) installed\n");
-  } else if ( config->pl_ssl_cacert )
-  { SSL_CTX_load_verify_locations(config->pl_ssl_ctx,
-                                  config->pl_ssl_cacert,
+  } else if ( config->cacert )
+  { SSL_CTX_load_verify_locations(config->ctx,
+                                  config->cacert,
                                   NULL);
     ssl_deb(1, "certificate authority(s) installed\n");
   }
-  if ( config->pl_ssl_crl_list )
-  { X509_STORE *store = SSL_CTX_get_cert_store(config->pl_ssl_ctx);
+  if ( config->crl_list )
+  { X509_STORE *store = SSL_CTX_get_cert_store(config->ctx);
     int i = 0;
-    while (i < sk_X509_CRL_num(config->pl_ssl_crl_list))
-    { X509_STORE_add_crl(store, sk_X509_CRL_value(config->pl_ssl_crl_list, i));
+    while (i < sk_X509_CRL_num(config->crl_list))
+    { X509_STORE_add_crl(store, sk_X509_CRL_value(config->crl_list, i));
     /*
       Sdprintf("Added a CRL...\n");
       BIO * bio = BIO_new_fp(stdout, BIO_NOCLOSE);
-      X509_CRL_print(bio, sk_X509_CRL_value(config->pl_ssl_crl_list, i));
+      X509_CRL_print(bio, sk_X509_CRL_value(config->crl_list, i));
       BIO_free(bio);
     */
       i++;
@@ -2432,31 +2432,31 @@ ssl_config(PL_SSL *config, term_t options)
 
   ssl_init_verify_locations(config);
 
-  SSL_CTX_set_default_passwd_cb_userdata(config->pl_ssl_ctx, config);
-  SSL_CTX_set_default_passwd_cb(config->pl_ssl_ctx, ssl_cb_pem_passwd);
+  SSL_CTX_set_default_passwd_cb_userdata(config->ctx, config);
+  SSL_CTX_set_default_passwd_cb(config->ctx, ssl_cb_pem_passwd);
   ssl_deb(1, "password handler installed\n");
 
-  if ( config->pl_ssl_cert_required ||
-       ( ( config->pl_ssl_certf || config->pl_ssl_certificate ) &&
-         ( config->pl_ssl_keyf || config->pl_ssl_key ) ) )
-  { if ( config->pl_ssl_certf       == NULL &&
-         config->pl_ssl_certificate == NULL &&
-         config->pl_ssl_cb_sni_pred == NULL )
+  if ( config->cert_required ||
+       ( ( config->certificate_file || config->certificate ) &&
+         ( config->key_file || config->key ) ) )
+  { if ( config->certificate_file == NULL &&
+         config->certificate == NULL &&
+         config->cb_sni_pred == NULL )
       return PL_existence_error("certificate", options);
-    if ( config->pl_ssl_keyf        == NULL &&
-         config->pl_ssl_key         == NULL &&
-         config->pl_ssl_cb_sni_pred == NULL )
+    if ( config->key_file        == NULL &&
+         config->key         == NULL &&
+         config->cb_sni_pred == NULL )
       return PL_existence_error("key_file", options);
 
-    if ( config->pl_ssl_certf &&
-         SSL_CTX_use_certificate_chain_file(config->pl_ssl_ctx,
-                                            config->pl_ssl_certf) <= 0 )
+    if ( config->certificate_file &&
+         SSL_CTX_use_certificate_chain_file(config->ctx,
+                                            config->certificate_file) <= 0 )
       return raise_ssl_error(ERR_get_error());
 
-    if ( config->pl_ssl_certificate )
+    if ( config->certificate )
     { X509* certX509;
 
-      BIO* bio = BIO_new_mem_buf(config->pl_ssl_certificate, -1);
+      BIO* bio = BIO_new_mem_buf(config->certificate, -1);
 
       if ( !bio )
         return PL_resource_error("memory");
@@ -2465,13 +2465,13 @@ ssl_config(PL_SSL *config, term_t options)
       if ( !certX509 )
         return raise_ssl_error(ERR_get_error());
 
-      config->pl_ssl_certificate_X509 = certX509;
+      config->certificate_X509 = certX509;
 
-      if ( SSL_CTX_use_certificate(config->pl_ssl_ctx, certX509) <= 0 )
+      if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
         return raise_ssl_error(ERR_get_error());
 
       while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
-      { if ( SSL_CTX_add_extra_chain_cert(config->pl_ssl_ctx, certX509) <= 0 )
+      { if ( SSL_CTX_add_extra_chain_cert(config->ctx, certX509) <= 0 )
           return raise_ssl_error(ERR_get_error());
       }
       ERR_clear_error(); /* clear error from no further certificate */
@@ -2479,14 +2479,14 @@ ssl_config(PL_SSL *config, term_t options)
       BIO_free(bio);
     }
 
-    if ( config->pl_ssl_keyf &&
-         SSL_CTX_use_PrivateKey_file(config->pl_ssl_ctx,
-                                     config->pl_ssl_keyf,
+    if ( config->key_file &&
+         SSL_CTX_use_PrivateKey_file(config->ctx,
+                                     config->key_file,
                                      SSL_FILETYPE_PEM) <= 0 )
       return raise_ssl_error(ERR_get_error());
 
-    if ( config->pl_ssl_key )
-    { char *key = config->pl_ssl_key;
+    if ( config->key )
+    { char *key = config->key;
       EVP_PKEY *pkey;
       int r;
 
@@ -2501,14 +2501,14 @@ ssl_config(PL_SSL *config, term_t options)
       if ( !pkey )
         return raise_ssl_error(ERR_get_error());
 
-      r = SSL_CTX_use_PrivateKey(config->pl_ssl_ctx, pkey);
+      r = SSL_CTX_use_PrivateKey(config->ctx, pkey);
       EVP_PKEY_free(pkey);
 
       if ( r <= 0 )
         return raise_ssl_error(ERR_get_error());
     }
 
-    if ( SSL_CTX_check_private_key(config->pl_ssl_ctx) <= 0 )
+    if ( SSL_CTX_check_private_key(config->ctx) <= 0 )
     { ssl_deb(1, "Private key does not match certificate public key\n");
       return raise_ssl_error(ERR_get_error());
     }
@@ -2516,38 +2516,38 @@ ssl_config(PL_SSL *config, term_t options)
   }
 
   if ( !dh_2048 ) dh_2048 = get_dh2048();
-  SSL_CTX_set_tmp_dh(config->pl_ssl_ctx, dh_2048);
+  SSL_CTX_set_tmp_dh(config->ctx, dh_2048);
 
 #ifndef OPENSSL_NO_EC
-  if (config->pl_ssl_ecdh_curve)
-    curve = config->pl_ssl_ecdh_curve;
+  if (config->ecdh_curve)
+    curve = config->ecdh_curve;
 
   if (curve)
   { nid = OBJ_sn2nid(curve);
     if ( !(ecdh = EC_KEY_new_by_curve_name(nid)) )
       return raise_ssl_error(ERR_get_error());
-    if ( !SSL_CTX_set_tmp_ecdh(config->pl_ssl_ctx, ecdh) )
+    if ( !SSL_CTX_set_tmp_ecdh(config->ctx, ecdh) )
       return raise_ssl_error(ERR_get_error());
     EC_KEY_free(ecdh);          /* Safe because of reference counts */
   }
 #endif
 
-  if ( config->pl_ssl_cipher_list &&
-       !SSL_CTX_set_cipher_list(config->pl_ssl_ctx, config->pl_ssl_cipher_list))
+  if ( config->cipher_list &&
+       !SSL_CTX_set_cipher_list(config->ctx, config->cipher_list))
     return raise_ssl_error(ERR_get_error());
 
-  (void) SSL_CTX_set_verify(config->pl_ssl_ctx,
-                            config->pl_ssl_peer_cert_required ?
+  (void) SSL_CTX_set_verify(config->ctx,
+                            config->peer_cert_required ?
                                 SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT :
                                 SSL_VERIFY_NONE,
                             ssl_cb_cert_verify);
   ssl_deb(1, "installed certificate verification handler\n");
 
 #ifndef OPENSSL_NO_TLSEXT
-  if ( config->pl_ssl_role == PL_SSL_SERVER &&
-       config->pl_ssl_cb_sni_pred ) {
-    SSL_CTX_set_tlsext_servername_callback(config->pl_ssl_ctx, ssl_cb_sni);
-    SSL_CTX_set_tlsext_servername_arg(config->pl_ssl_ctx, config);
+  if ( config->role == PL_SSL_SERVER &&
+       config->cb_sni_pred ) {
+    SSL_CTX_set_tlsext_servername_callback(config->ctx, ssl_cb_sni);
+    SSL_CTX_set_tlsext_servername_arg(config->ctx, config);
     ssl_deb(1, "installed SNI callback\n");
   }
 #endif
@@ -2654,22 +2654,22 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   BIO_set_ex_data(rbio, 0, sread);
   BIO_set_ex_data(wbio, 0, swrite);
 
-  if ( config->pl_ssl_crl_required )
-  { X509_STORE_set_flags(SSL_CTX_get_cert_store(config->pl_ssl_ctx),
+  if ( config->crl_required )
+  { X509_STORE_set_flags(SSL_CTX_get_cert_store(config->ctx),
                          X509_V_FLAG_CRL_CHECK|X509_V_FLAG_CRL_CHECK_ALL);
   }
 
 
-  if ( !(instance->ssl = SSL_new(config->pl_ssl_ctx)) )
+  if ( !(instance->ssl = SSL_new(config->ctx)) )
   { free(instance);
     return raise_ssl_error(ERR_get_error());
   }
 
-  if ( config->pl_ssl_role == PL_SSL_CLIENT )
+  if ( config->role == PL_SSL_CLIENT )
   {
 #ifndef OPENSSL_NO_TLSEXT
-    if ( config->pl_ssl_host )
-      SSL_set_tlsext_host_name(instance->ssl, config->pl_ssl_host);
+    if ( config->host )
+      SSL_set_tlsext_host_name(instance->ssl, config->host);
 #endif
 #ifdef HAVE_X509_CHECK_HOST
 #if defined(HAVE_X509_VERIFY_PARAM_ID) || OPENSSL_VERSION_NUMBER >= 0x10100000L
@@ -2682,7 +2682,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
                                     X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
  */
     X509_VERIFY_PARAM_set_hostflags(param, 0);
-    X509_VERIFY_PARAM_set1_host(param, config->pl_ssl_host, 0);
+    X509_VERIFY_PARAM_set1_host(param, config->host, 0);
 #endif
 #endif
   }
@@ -2698,8 +2698,8 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   { int ssl_ret;
 
     ssl_deb(1, "Negotiating %s ...\n",
-            config->pl_ssl_role == PL_SSL_SERVER ? "server" : "client");
-    ssl_ret = (config->pl_ssl_role == PL_SSL_SERVER ?
+            config->role == PL_SSL_SERVER ? "server" : "client");
+    ssl_ret = (config->role == PL_SSL_SERVER ?
                  SSL_accept(instance->ssl) :
                  SSL_connect(instance->ssl));
 
@@ -2897,21 +2897,21 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
-      conf->pl_ssl_cert_required = val;
+      conf->cert_required = val;
     } else if ( name == ATOM_peer_cert && arity == 1 )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
-      conf->pl_ssl_peer_cert_required = val;
+      conf->peer_cert_required = val;
     } else if ( name == ATOM_require_crl && arity == 1 )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
-      conf->pl_ssl_crl_required = val;
+      conf->crl_required = val;
     } else if ( name == ATOM_crl && arity == 1 )
     { STACK_OF(X509_CRL) *crls = sk_X509_CRL_new_null();
       term_t list_head = PL_new_term_ref();
@@ -2955,7 +2955,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      ssl_set_certf(conf, file);
+      ssl_set_certificate_file(conf, file);
     } else if ( name == ATOM_certificate && arity == 1 )
     { char *s;
 
@@ -2983,7 +2983,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_predicate_arg(1, module, head, 2, &hook) )
 	return FALSE;
 
-      conf->pl_ssl_cb_pem_passwd_pred = hook;
+      conf->cb_pem_passwd_pred = hook;
 
     } else if ( name == ATOM_cert_verify_hook && arity == 1 )
     { predicate_t hook;
@@ -2991,7 +2991,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_predicate_arg(1, module, head, 5, &hook) )
 	return FALSE;
 
-      conf->pl_ssl_cb_cert_verify_pred = hook;
+      conf->cb_cert_verify_pred = hook;
     } else if ( name == ATOM_close_parent && arity == 1 )
     { int val;
 
@@ -3028,7 +3028,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 #endif
       }
 
-      SSL_CTX_set_options(conf->pl_ssl_ctx, options);
+      SSL_CTX_set_options(conf->ctx, options);
     } else if ( name == ATOM_min_protocol_version && arity == 1 )
     { term_t val = PL_new_term_ref();
       int version;
@@ -3039,7 +3039,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
         return FALSE;
 
 #ifdef SSL_CTX_set_min_proto_version
-      SSL_CTX_set_min_proto_version(conf->pl_ssl_ctx, version);
+      SSL_CTX_set_min_proto_version(conf->ctx, version);
 #endif
     } else if ( name == ATOM_max_protocol_version && arity == 1 )
     { term_t val = PL_new_term_ref();
@@ -3051,7 +3051,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
         return FALSE;
 
 #ifdef SSL_CTX_set_max_proto_version
-      return SSL_CTX_set_max_proto_version(conf->pl_ssl_ctx, version);
+      return SSL_CTX_set_max_proto_version(conf->ctx, version);
 #endif
     } else if ( name == ATOM_sni_hook && arity == 1 && r == PL_SSL_SERVER)
     { predicate_t hook;
@@ -3059,7 +3059,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_predicate_arg(1, module, head, 3, &hook) )
         return FALSE;
 
-      conf->pl_ssl_cb_sni_pred = hook;
+      conf->cb_sni_pred = hook;
     } else if ( name == ATOM_close_notify && arity == 1 )
     { int val;
 
