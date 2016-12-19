@@ -46,17 +46,15 @@
             rsa_sign/4,                 % +Key, +Data, -Signature, +Options
             rsa_verify/4                % +Key, +Data, -Signature, +Options
           ]).
-:- use_module(library(error)).
 :- use_module(library(option)).
-:- use_module(library(debug)).
 
 :- use_foreign_library(foreign(crypto4pl)).
 
 
 /** <module> Cryptography and authentication library
 
-This library provides bindings to functionality of OpenSSL that is
-related to cryptography and authentication, not necessarily involving
+This library provides bindings  to  functionality   of  OpenSSL  that is
+related to cryptography and authentication,   not  necessarily involving
 connections, sockets or streams.
 
 @author Matt Lilley
@@ -169,15 +167,20 @@ rsa_verify(Key, Data, Signature, Options) :-
 %!              +IV,
 %!              -PlainText,
 %!              +Options).
-%   Decrypt the given CipherText, using the symmetric algorithm Algorithm, key Key,
-%   and iv IV, to give PlainText. CipherText, Key and IV should all be strings, and
-%   PlainText is created as a string as well. Algorithm should be an algorithm which
-%   your copy of OpenSSL knows about. Examples are:
+%
+%   Decrypt  the  given  CipherText,  using    the  symmetric  algorithm
+%   Algorithm, key Key, and iv IV,   to  give PlainText. CipherText, Key
+%   and IV should all be strings, and   PlainText is created as a string
+%   as well. Algorithm should be an algorithm which your copy of OpenSSL
+%   knows about. Examples are:
+%
 %       * aes-128-cbc
 %       * aes-256-cbc
 %       * des3
-%   If the IV is not needed for your decryption algorithm (such as aes-128-ecb) then
-%   any string can be provided as it will be ignored by the underlying implementation
+%
+%   If the IV is not  needed  for   your  decryption  algorithm (such as
+%   aes-128-ecb) then any string can be provided   as it will be ignored
+%   by the underlying implementation
 %
 %   Options:
 %
@@ -186,16 +189,21 @@ rsa_verify(Key, Data, Signature, Options) :-
 %     are `utf8` and `octet`.
 %
 %     - padding(+PaddingScheme)
-%     Padding scheme to use.  Default is `block`.  You can disable padding by supplying
+%     Padding scheme to use.  Default is `block`.  You can disable padding
+%     by supplying
 %     `none` here.
 %
 %   Example of aes-128-cbc encryption:
-%   ?- evp_encrypt("this is some input", 'aes-128-cbc', "sixteenbyteofkey",
-%                  "sixteenbytesofiv", CipherText, []),
-%      evp_decrypt(CipherText, 'aes-128-cbc', "sixteenbyteofkey", "sixteenbytesofiv",
-%                  RecoveredText, []).
-%   CipherText = <binary string>
-%   RecoveredText = "this is some input".
+%
+%     ```
+%     ?- evp_encrypt("this is some input", 'aes-128-cbc', "sixteenbyteofkey",
+%                    "sixteenbytesofiv", CipherText, []),
+%        evp_decrypt(CipherText, 'aes-128-cbc',
+%                    "sixteenbyteofkey", "sixteenbytesofiv",
+%                    RecoveredText, []).
+%     CipherText = <binary string>
+%     RecoveredText = "this is some input".
+%     ```
 
 %!  evp_encrypt(+PlainText,
 %!              +Algorithm,
@@ -203,8 +211,10 @@ rsa_verify(Key, Data, Signature, Options) :-
 %!              +IV,
 %!              -CipherTExt,
 %!              +Options).
-%   Encrypt the given PlainText, using the symmetric algorithm Algorithm, key Key,
-%   and iv IV, to give CipherText. See evp_decrypt/6.
+%
+%   Encrypt  the  given  PlainText,  using    the   symmetric  algorithm
+%   Algorithm,  key  Key,  and  iv   IV,    to   give   CipherText.  See
+%   evp_decrypt/6.
 
 
                  /*******************************
