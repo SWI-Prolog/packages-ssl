@@ -47,6 +47,7 @@
             ssl_accept/3,               % +Config, -Socket, -Peer
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
+            ssl_add_certificate_key/3,  % +Config, +String, +String
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
                                         %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,     % +Stream, -Certificate
@@ -287,6 +288,23 @@ easily be used.
 ssl_context(Role, SSL, Module:Options) :-
     select_option(ssl_method(Method), Options, O1, sslv23),
     '_ssl_context'(Role, SSL, Module:O1, Method).
+
+%!  ssl_add_certificate_key(+SSL, +Certificate, +Key)
+%
+%   Add an additional certificate/key pair to the SSL context.
+%   Certificate and Key are either strings or atoms that hold the
+%   PEM-encoded certificate plus certificate chain and private key,
+%   respectively. Using strings is preferred for security reasons.
+%
+%   This predicate allows dual-stack RSA and ECDSA servers (for
+%   example), and is an alternative for using the
+%   `certificate_key_pairs/1` option. As of OpenSSL 1.0.2, multiple
+%   certificate types with completely independent certificate chains
+%   are supported. If a certificate of the same type is added
+%   repeatedly to a context, the result is undefined. In future
+%   versions, this predicate may allow updating the certificate of a
+%   running server. Currently, up to 12 additional certificates
+%   are admissible. This limit may be removed in the future.
 
 %!  ssl_negotiate(+SSL,
 %!                +PlainRead, +PlainWrite,

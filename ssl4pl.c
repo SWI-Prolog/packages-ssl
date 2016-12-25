@@ -148,6 +148,7 @@ typedef enum
 static STACK_OF(X509) *system_root_store = NULL;
 static int system_root_store_fetched = FALSE;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t cert_key_pairs_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * Index of our config data in the SSL data
@@ -2394,6 +2395,64 @@ DH *get_dh2048()
         return dh;
         }
 
+
+#ifndef SSL_CTX_add0_chain_cert
+#define SSL_CTX_add0_chain_cert(CTX, C) SSL_CTX_add_extra_chain_cert(CTX, C)
+#endif
+
+int
+ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
+{
+  X509 *certX509;
+
+  BIO *bio = BIO_new_mem_buf(certificate, -1);
+
+  if ( !bio )
+    return PL_resource_error("memory");
+
+  certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+  if ( !certX509 )
+    return raise_ssl_error(ERR_get_error());
+
+  if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
+    return raise_ssl_error(ERR_get_error());
+
+  while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
+  { if ( SSL_CTX_add0_chain_cert(config->ctx, certX509) <= 0 )
+      return raise_ssl_error(ERR_get_error());
+  }
+  ERR_clear_error(); /* clear error from "no further certificate" */
+
+  BIO_free(bio);
+
+  *ret = certX509;
+  return TRUE;
+}
+
+int
+ssl_use_key(PL_SSL *config, char *key)
+{
+  BIO* bio = BIO_new_mem_buf(key, -1);
+  EVP_PKEY *pkey;
+  int r;
+
+  if ( !bio )
+    return PL_resource_error("memory");
+
+  pkey = PEM_read_bio_PrivateKey(bio, NULL, ssl_cb_pem_passwd, config);
+  BIO_free(bio);
+
+  if ( !pkey )
+    return raise_ssl_error(ERR_get_error());
+
+  r = SSL_CTX_use_PrivateKey(config->ctx, pkey);
+  EVP_PKEY_free(pkey);
+
+  if ( r <= 0 )
+    return raise_ssl_error(ERR_get_error());
+  return TRUE;
+}
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Certificates and keys can be specified as files or via
    certificate_key_pairs/1.
@@ -2433,55 +2492,11 @@ ssl_use_certificates(PL_SSL *config, term_t options)
 
 
   for (cert_idx = 0; cert_idx < config->num_cert_key_pairs; cert_idx++)
-  { X509* certX509;
-    char *certificate = config->cert_key_pairs[cert_idx].certificate;
-    char *key         = config->cert_key_pairs[cert_idx].key;
-    EVP_PKEY *pkey;
-    int r;
-
-    BIO* bio = BIO_new_mem_buf(certificate, -1);
-
-    if ( !bio )
-      return PL_resource_error("memory");
-
-    certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-    if ( !certX509 )
-      return raise_ssl_error(ERR_get_error());
-
-    config->cert_key_pairs[cert_idx].certificate_X509 = certX509;
-
-    if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
-      return raise_ssl_error(ERR_get_error());
-
-    while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
-    {
-#ifdef SSL_CTX_add0_chain_cert
-      if ( SSL_CTX_add0_chain_cert(config->ctx, certX509) <= 0 )
-#else
-      if ( SSL_CTX_add_extra_chain_cert(config->ctx, certX509) <= 0 )
-#endif
-        return raise_ssl_error(ERR_get_error());
-    }
-    ERR_clear_error(); /* clear error from no further certificate */
-
-    BIO_free(bio);
-
-    bio = BIO_new_mem_buf(key, -1);
-
-    if ( !bio )
-      return PL_resource_error("memory");
-
-    pkey = PEM_read_bio_PrivateKey(bio, NULL, ssl_cb_pem_passwd, config);
-    BIO_free(bio);
-
-    if ( !pkey )
-      return raise_ssl_error(ERR_get_error());
-
-    r = SSL_CTX_use_PrivateKey(config->ctx, pkey);
-    EVP_PKEY_free(pkey);
-
-    if ( r <= 0 )
-      return raise_ssl_error(ERR_get_error());
+  { X509 *cert_x509;
+    if ( !ssl_use_certificate(config, config->cert_key_pairs[cert_idx].certificate, &cert_x509) ||
+         !ssl_use_key(config, config->cert_key_pairs[cert_idx].key) )
+      return FALSE;
+    config->cert_key_pairs[cert_idx].certificate_X509 = cert_x509;
   }
   return TRUE;
 }
@@ -2520,10 +2535,9 @@ ssl_config(PL_SSL *config, term_t options)
   ssl_deb(1, "password handler installed\n");
 
   if ( config->cert_required ||
-      ( config->certificate_file && config->key_file ) ||
-      ( config->num_cert_key_pairs > 0 ) )
-  {
-    if ( !ssl_use_certificates(config, options) )
+       ( config->certificate_file && config->key_file ) ||
+       ( config->num_cert_key_pairs > 0 ) )
+  { if ( !ssl_use_certificates(config, options) )
       return FALSE;
     ssl_deb(1, "certificates installed successfully\n");
   }
@@ -3272,6 +3286,37 @@ pl_ssl_negotiate(term_t config,
 }
 
 
+static foreign_t
+pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
+{ PL_SSL *conf;
+  char *cert, *key;
+  int idx;
+  foreign_t r = FALSE;
+  X509 *certX509;
+
+  if ( !get_conf(config, &conf) )
+    return FALSE;
+
+  pthread_mutex_lock(&cert_key_pairs_lock);
+
+  idx = conf->num_cert_key_pairs;
+  if ( idx < SSL_MAX_CERT_KEY_PAIRS &&
+       PL_get_chars(cert_arg, &cert, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) &&
+       PL_get_chars(key_arg, &key, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) &&
+       ssl_use_certificate(conf, cert, &certX509) &&
+       ssl_use_key(conf, key) )
+  { conf->cert_key_pairs[idx].certificate = ssl_strdup(cert);
+    conf->cert_key_pairs[idx].key = ssl_strdup(key);
+    conf->cert_key_pairs[idx].certificate_X509 = certX509;
+
+    conf->num_cert_key_pairs++;
+    r = TRUE;
+  }
+
+  pthread_mutex_unlock(&cert_key_pairs_lock);
+  return r;
+}
+
 
 static foreign_t
 pl_ssl_debug(term_t level)
@@ -3513,6 +3558,8 @@ install_ssl4pl(void)
   PL_register_foreign("ssl_put_socket",	2, pl_ssl_put_socket, 0);
   PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
+  PL_register_foreign("ssl_add_certificate_key",
+					3, pl_ssl_add_certificate_key, 0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
   PL_register_foreign("ssl_peer_certificate",
