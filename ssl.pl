@@ -354,6 +354,8 @@ ssl_context(Role, SSL, Module:Options) :-
 %
 %     * ssl_version(Version)
 %     The negotiated version of the session as an integer.
+%     * cipher(Cipher)
+%     The negotiated cipher for this connection.
 %     * session_key(Key)
 %     The key material used in SSLv2 connections (if present).
 %     * master_key(Key)
