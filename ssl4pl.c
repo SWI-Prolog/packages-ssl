@@ -57,8 +57,6 @@
 #define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
 #endif
 
-#define SSL_MAX_CERT_KEY_PAIRS 12
-
 typedef int BOOL;
 #ifndef TRUE
 #define TRUE 1
@@ -77,7 +75,7 @@ static atom_t ATOM_cacert_file;
 static atom_t ATOM_require_crl;
 static atom_t ATOM_crl;
 static atom_t ATOM_certificate_file;
-static atom_t ATOM_certificate_key_pairs;
+static atom_t ATOM_certificate;
 static atom_t ATOM_key_file;
 static atom_t ATOM_pem_password_hook;
 static atom_t ATOM_cert_verify_hook;
@@ -88,6 +86,7 @@ static atom_t ATOM_min_protocol_version;
 static atom_t ATOM_max_protocol_version;
 static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
+static atom_t ATOM_key;
 static atom_t ATOM_root_certificates;
 static atom_t ATOM_sni_hook;
 
@@ -155,12 +154,6 @@ static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ssl_idx;
 static int ctx_idx;
 
-typedef struct pl_cert_key_pair {
-    X509                *certificate_X509;
-    char                *key;
-    char                *certificate;
-} PL_CERT_KEY_PAIR;
-
 
 typedef struct pl_ssl {
     long                 magic;
@@ -191,12 +184,11 @@ typedef struct pl_ssl {
      */
     int                  use_system_cacert;
     char                *cacert;
-
     char                *certificate_file;
+    char                *certificate;
+    X509                *certificate_X509;
     char                *key_file;
-    PL_CERT_KEY_PAIR     cert_key_pairs[SSL_MAX_CERT_KEY_PAIRS];
-    int                  num_cert_key_pairs;
-
+    char                *key;
     char                *cipher_list;
     char                *ecdh_curve;
     STACK_OF(X509_CRL)  *crl_list;
@@ -1467,7 +1459,6 @@ ssl_new(void)
  */
 {
     PL_SSL *new = NULL;
-    int i = 0;
 
     if ((new = malloc(sizeof(*new))) != NULL) {
         new->role                = PL_SSL_NONE;
@@ -1488,14 +1479,10 @@ ssl_new(void)
         new->cacert              = NULL;
         new->cert_required       = FALSE;
         new->certificate_file    = NULL;
-        new->num_cert_key_pairs  = 0;
-        for (i = 0; i < SSL_MAX_CERT_KEY_PAIRS; i++)
-        { new->cert_key_pairs[i].certificate_X509 = NULL;
-          new->cert_key_pairs[i].key              = NULL;
-          new->cert_key_pairs[i].certificate      = NULL;
-        }
-
+        new->certificate         = NULL;
+        new->certificate_X509    = NULL;
         new->key_file            = NULL;
+        new->key                 = NULL;
         new->cipher_list         = NULL;
         new->ecdh_curve          = NULL;
         new->crl_list            = NULL;
@@ -1520,23 +1507,20 @@ ssl_new(void)
 static void
 ssl_free(PL_SSL *config)
 { if ( config )
-  { int i;
-    assert(config->magic == SSL_CONFIG_MAGIC);
+  { assert(config->magic == SSL_CONFIG_MAGIC);
     config->magic = 0;
     free(config->host);
     free(config->cacert);
     free(config->certificate_file);
+    free(config->certificate);
     free(config->key_file);
+    free(config->key);
     free(config->cipher_list);
     free(config->ecdh_curve);
     if ( config->crl_list )
       sk_X509_CRL_pop_free(config->crl_list, X509_CRL_free);
-    for (i = 0; i < config->num_cert_key_pairs; i++)
-    { if ( config->cert_key_pairs[i].certificate_X509 )
-        X509_free(config->cert_key_pairs[i].certificate_X509);
-      free(config->cert_key_pairs[i].certificate);
-      free(config->cert_key_pairs[i].key);
-    }
+    if ( config->certificate_X509 )
+      X509_free(config->certificate_X509);
     free(config->password);
     if ( config->peer_cert )
       X509_free(config->peer_cert);
@@ -1647,6 +1631,19 @@ ssl_set_certificate_file(PL_SSL *config, const char *certificate_file)
 }
 
 char *
+ssl_set_certificate(PL_SSL *config, const char *cert)
+/*
+ * Store certificate in config storage
+ */
+{
+    if (cert) {
+        if (config->certificate) free(config->certificate);
+        config->certificate = ssl_strdup(cert);
+    }
+    return config->certificate;
+}
+
+char *
 ssl_set_keyf(PL_SSL *config, const char *keyf)
 /*
  * Store private key location in config storage
@@ -1657,6 +1654,19 @@ ssl_set_keyf(PL_SSL *config, const char *keyf)
         config->key_file = ssl_strdup(keyf);
     }
     return config->key_file;
+}
+
+char *
+ssl_set_key(PL_SSL *config, const char *key)
+/*
+ * Store private key in config storage
+ */
+{
+    if (key) {
+        if (config->key) free(config->key);
+        config->key = ssl_strdup(key);
+    }
+    return config->key;
 }
 
 STACK_OF(X509_CRL) *
@@ -1995,7 +2005,7 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
 
   if ( new_config == NULL &&
        config->certificate_file == NULL &&
-       config->num_cert_key_pairs == 0 )
+       config->certificate == NULL )
     return SSL_TLSEXT_ERR_NOACK;
 
   SSL_set_SSL_CTX(s, new_config ? new_config->ctx : config->ctx );
@@ -2394,99 +2404,6 @@ DH *get_dh2048()
         return dh;
         }
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Certificates and keys can be specified as files or via
-   certificate_key_pairs/1.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-int
-ssl_use_certificates(PL_SSL *config, term_t options)
-{
-  int cert_idx;
-
-  if ( !config->certificate_file &&
-       ( config->num_cert_key_pairs == 0 ) &&
-       !config->cb_sni_pred )
-    return PL_existence_error("certificate", options);
-
-  if ( !config->key_file &&
-       ( config->num_cert_key_pairs == 0 ) &&
-       !config->cb_sni_pred )
-    return PL_existence_error("key", options);
-
-  if ( config->certificate_file &&
-       SSL_CTX_use_certificate_chain_file(config->ctx,
-                                          config->certificate_file) <= 0 )
-    return raise_ssl_error(ERR_get_error());
-
-  if ( config->key_file &&
-       SSL_CTX_use_PrivateKey_file(config->ctx,
-                                   config->key_file,
-                                   SSL_FILETYPE_PEM) <= 0 )
-    return raise_ssl_error(ERR_get_error());
-
-  if ( ( config->key_file || config->certificate_file ) &&
-       ( SSL_CTX_check_private_key(config->ctx) <= 0 ) )
-  { ssl_deb(1, "Private key does not match certificate public key\n");
-    return raise_ssl_error(ERR_get_error());
-  }
-
-
-  for (cert_idx = 0; cert_idx < config->num_cert_key_pairs; cert_idx++)
-  { X509* certX509;
-    char *certificate = config->cert_key_pairs[cert_idx].certificate;
-    char *key         = config->cert_key_pairs[cert_idx].key;
-    EVP_PKEY *pkey;
-    int r;
-
-    BIO* bio = BIO_new_mem_buf(certificate, -1);
-
-    if ( !bio )
-      return PL_resource_error("memory");
-
-    certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-    if ( !certX509 )
-      return raise_ssl_error(ERR_get_error());
-
-    config->cert_key_pairs[cert_idx].certificate_X509 = certX509;
-
-    if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
-      return raise_ssl_error(ERR_get_error());
-
-    while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
-    {
-#ifdef SSL_CTX_add0_chain_cert
-      if ( SSL_CTX_add0_chain_cert(config->ctx, certX509) <= 0 )
-#else
-      if ( SSL_CTX_add_extra_chain_cert(config->ctx, certX509) <= 0 )
-#endif
-        return raise_ssl_error(ERR_get_error());
-    }
-    ERR_clear_error(); /* clear error from no further certificate */
-
-    BIO_free(bio);
-
-    bio = BIO_new_mem_buf(key, -1);
-
-    if ( !bio )
-      return PL_resource_error("memory");
-
-    pkey = PEM_read_bio_PrivateKey(bio, NULL, ssl_cb_pem_passwd, config);
-    BIO_free(bio);
-
-    if ( !pkey )
-      return raise_ssl_error(ERR_get_error());
-
-    r = SSL_CTX_use_PrivateKey(config->ctx, pkey);
-    EVP_PKEY_free(pkey);
-
-    if ( r <= 0 )
-      return raise_ssl_error(ERR_get_error());
-  }
-  return TRUE;
-}
-
-
 int
 ssl_config(PL_SSL *config, term_t options)
 /*
@@ -2520,12 +2437,82 @@ ssl_config(PL_SSL *config, term_t options)
   ssl_deb(1, "password handler installed\n");
 
   if ( config->cert_required ||
-      ( config->certificate_file && config->key_file ) ||
-      ( config->num_cert_key_pairs > 0 ) )
-  {
-    if ( !ssl_use_certificates(config, options) )
-      return FALSE;
-    ssl_deb(1, "certificates installed successfully\n");
+       ( ( config->certificate_file || config->certificate ) &&
+         ( config->key_file || config->key ) ) )
+  { if ( config->certificate_file == NULL &&
+         config->certificate == NULL &&
+         config->cb_sni_pred == NULL )
+      return PL_existence_error("certificate", options);
+    if ( config->key_file        == NULL &&
+         config->key         == NULL &&
+         config->cb_sni_pred == NULL )
+      return PL_existence_error("key_file", options);
+
+    if ( config->certificate_file &&
+         SSL_CTX_use_certificate_chain_file(config->ctx,
+                                            config->certificate_file) <= 0 )
+      return raise_ssl_error(ERR_get_error());
+
+    if ( config->certificate )
+    { X509* certX509;
+
+      BIO* bio = BIO_new_mem_buf(config->certificate, -1);
+
+      if ( !bio )
+        return PL_resource_error("memory");
+
+      certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+      if ( !certX509 )
+        return raise_ssl_error(ERR_get_error());
+
+      config->certificate_X509 = certX509;
+
+      if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
+        return raise_ssl_error(ERR_get_error());
+
+      while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
+      { if ( SSL_CTX_add_extra_chain_cert(config->ctx, certX509) <= 0 )
+          return raise_ssl_error(ERR_get_error());
+      }
+      ERR_clear_error(); /* clear error from no further certificate */
+
+      BIO_free(bio);
+    }
+
+    if ( config->key_file &&
+         SSL_CTX_use_PrivateKey_file(config->ctx,
+                                     config->key_file,
+                                     SSL_FILETYPE_PEM) <= 0 )
+      return raise_ssl_error(ERR_get_error());
+
+    if ( config->key )
+    { char *key = config->key;
+      EVP_PKEY *pkey;
+      int r;
+
+      BIO* bio = BIO_new_mem_buf(key, -1);
+
+      if ( !bio )
+        return PL_resource_error("memory");
+
+      pkey = PEM_read_bio_PrivateKey(bio, NULL, ssl_cb_pem_passwd, config);
+      BIO_free(bio);
+
+      if ( !pkey )
+        return raise_ssl_error(ERR_get_error());
+
+      r = SSL_CTX_use_PrivateKey(config->ctx, pkey);
+      EVP_PKEY_free(pkey);
+
+      if ( r <= 0 )
+        return raise_ssl_error(ERR_get_error());
+    }
+
+    if ( SSL_CTX_check_private_key(config->ctx) <= 0 )
+    { ssl_deb(1, "Private key does not match certificate public key\n");
+      return raise_ssl_error(ERR_get_error());
+    }
+    ssl_deb(1, "certificate installed successfully\n");
   }
 
   if ( !dh_2048 ) dh_2048 = get_dh2048();
@@ -2969,36 +2956,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_certificate_file(conf, file);
-    } else if ( name == ATOM_certificate_key_pairs && arity == 1 )
-    { term_t cert_head = PL_new_term_ref();
-      term_t cert_tail = PL_new_term_ref();
-      _PL_get_arg(1, head, cert_tail);
-      while( PL_get_list(cert_tail, cert_head, cert_tail) )
-      { atom_t name;
-        char *certificate, *key;
-        int idx = conf->num_cert_key_pairs;
+    } else if ( name == ATOM_certificate && arity == 1 )
+    { char *s;
 
-        if ( idx >= SSL_MAX_CERT_KEY_PAIRS )
-          return PL_domain_error("fewer_certificates", options);
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
 
-        ssl_deb(4, "loading certificate/key pair with index %d\n", idx);
-
-        if ( !PL_get_name_arity(cert_head, &name, &arity) ||
-             name != ATOM_minus ||
-             arity != 2 )
-          return PL_type_error("pair", cert_head);
-
-        if ( !get_char_arg(1, cert_head, &certificate) )
-          return FALSE;
-        if ( !get_char_arg(2, cert_head, &key) )
-          return FALSE;
-
-        conf->cert_key_pairs[idx].certificate = ssl_strdup(certificate);
-        conf->cert_key_pairs[idx].key         = ssl_strdup(key);
-        conf->num_cert_key_pairs++;
-      }
-      if ( !PL_get_nil_ex(cert_tail) )
-        return FALSE;
+      ssl_set_certificate(conf, s);
     } else if ( name == ATOM_key_file && arity == 1 )
     { char *file;
 
@@ -3006,6 +2970,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_keyf(conf, file);
+    } else if ( name == ATOM_key && arity == 1 )
+    { char *s;
+
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
+
+      ssl_set_key(conf, s);
     } else if ( name == ATOM_pem_password_hook && arity == 1 )
     { predicate_t hook;
 
@@ -3453,8 +3424,9 @@ install_ssl4pl(void)
   MKATOM(peer_cert);
   MKATOM(cacert_file);
   MKATOM(certificate_file);
-  MKATOM(certificate_key_pairs);
+  MKATOM(certificate);
   MKATOM(key_file);
+  MKATOM(key);
   MKATOM(pem_password_hook);
   MKATOM(cert_verify_hook);
   MKATOM(close_parent);

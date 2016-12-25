@@ -70,7 +70,6 @@
                        port(integer),
                        certificate_file(atom),
                        key_file(atom),
-                       certificate_key_pairs(any),
                        password(any),
                        cipher_list(any),
                        ecdh_curve(any),
@@ -127,30 +126,25 @@ easily be used.
 %     certificate verification may fail when negotiating a
 %     secure connection.
 %     * certificate_file(+FileName)
-%     Specify where the certificate file can be found. This can be
-%     the same as the key_file(+FileName) option.  A certificate
+%     Specify where the certificate file can be found. This can
+%     be the same as the key_file(+FileName) option.  A certificate
 %     file is obligatory for a server and may be provided for a
 %     client if the server demands the client to identify itself
-%     with a client certificate using the peer_cert(true)
-%     option. If a certificate is provided, it is necessary to
-%     also provide a matching _private key_ via the key_file/1
-%     option. To configure multiple certificates, use the option
-%     certificate_key_pairs/1 instead.
+%     with a client certificate using the peer_cert(true) option. If
+%     a certificate is provided, it is necessary to also provide a
+%     matching _private key_ via the key_file/1 or key/1 options.
+%     * certificate(+String)
+%     Alternative method for specifying the certificate. The argument
+%     is a string (or an atom) that holds the PEM-encoded certificate,
+%     and possibly further certificates of the chain.
 %     * key_file(+FileName)
 %     Specify where the private key that matches the certificate can
 %     be found.  If the key is encrypted with a password, this must
 %     be supplied using the password(+Text) or
 %     =|pem_password_hook(:PredicateName)|= option.
-%     * certificate_key_pairs(+Pairs)
-%     Alternative method for specifying certificates and keys. The
-%     argument is a list of _pairs_ of the form Certificate-Key,
-%     where each component is a string or an atom that holds,
-%     respectively, the PEM-encoded certificate and key. To each
-%     certificate, further certificates of the chain can be
-%     appended. Multiple types of certificates can be present at
-%     the same time to enable different ciphers. Using multiple
-%     certificate types with completely independent certificate
-%     chains requires OpenSSL 1.0.2 or greater.
+%     * key(+String)
+%     Alternative method for specifying the private key. The argument
+%     is a string (or an atom) that holds the PEM-encoded key.
 %     * password(+Text)
 %     Specify the password the private key is protected with (if
 %     any). If you do not want to store the password you can also
