@@ -3370,7 +3370,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   PL_release_stream(stream);
 
   if ( !(ssl = instance->ssl) ||
-       !(session = SSL_get_session(ssl)) )
+       !(session = SSL_get1_session(ssl)) )
     return PL_existence_error("ssl_session", stream_t);
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -3381,40 +3381,42 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 #ifndef OPENSSL_NO_SSL2
   if ( !add_key_string(list_t, FUNCTOR_session_key1,
 		       session->key_arg_length, session->key_arg) )
-    return FALSE;
+    goto err;
 #endif
 #else
   version = SSL_SESSION_get_protocol_version(session);
   if ( (master_key = PL_malloc(SSL_MAX_MASTER_KEY_LENGTH)) == NULL )
+  { SSL_SESSION_free(session);
     return PL_resource_error("memory");
+  }
   master_key_length = SSL_SESSION_get_master_key(session, master_key, SSL_MAX_MASTER_KEY_LENGTH);
 #endif
 
   if ( !PL_unify_list_ex(list_t, node_t, list_t) )
-    return FALSE;
+    goto err;
   if ( !PL_unify_term(node_t,
 		      PL_FUNCTOR, FUNCTOR_version1,
 		      PL_INTEGER, version))
-    return FALSE;
+    goto err;
 
 
   if ( !add_key_string(list_t, FUNCTOR_master_key1,
 		       master_key_length, master_key) )
-    return FALSE;
+    goto err;
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
   if ( !add_key_string(list_t, FUNCTOR_session_id1,
 		       session->session_id_length, session->session_id) )
-    return FALSE;
+    goto err;
 
   if ( ssl->s3 != NULL ) /* If the connection is SSLv2?! */
   { if ( !add_key_string(list_t, FUNCTOR_client_random1,
 			 SSL3_RANDOM_SIZE, ssl->s3->client_random) )
-      return FALSE;
+      goto err;
 
     if ( !add_key_string(list_t, FUNCTOR_server_random1,
 			 SSL3_RANDOM_SIZE, ssl->s3->server_random) )
-      return FALSE;
+      goto err;
   }
 #else
   /* Note: session_id has no correspondence in OpenSSL >= 1.1.0 */
@@ -3424,18 +3426,23 @@ pl_ssl_session(term_t stream_t, term_t session_t)
     SSL_get_client_random(ssl, random, SSL3_RANDOM_SIZE);
     if ( !add_key_string(list_t, FUNCTOR_client_random1,
                          SSL3_RANDOM_SIZE, random) )
-      return FALSE;
+      goto err;
 
     SSL_get_server_random(ssl, random, SSL3_RANDOM_SIZE);
     if ( !add_key_string(list_t, FUNCTOR_server_random1,
 			 SSL3_RANDOM_SIZE, random) )
-      return FALSE;
+      goto err;
   }
 
   PL_free(master_key);
 #endif
 
+  SSL_SESSION_free(session);
   return PL_unify_nil_ex(list_t);
+
+err:
+  SSL_SESSION_free(session);
+  return FALSE;
 }
 
 
