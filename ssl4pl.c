@@ -2417,6 +2417,11 @@ ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
   if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
     return raise_ssl_error(ERR_get_error());
 
+#ifdef SSL_CTX_clear_chain_certs
+  if ( SSL_CTX_clear_chain_certs(config->ctx) <= 0 )
+    return raise_ssl_error(ERR_get_error());
+#endif
+
   while ( (certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL)) != NULL )
   { if ( SSL_CTX_add0_chain_cert(config->ctx, certX509) <= 0 )
       return raise_ssl_error(ERR_get_error());
