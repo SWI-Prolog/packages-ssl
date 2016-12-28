@@ -196,7 +196,7 @@ test(cert_mismatch, Msg == 'key values mismatch') :-
 
 % missing certificate (key specified, with and without sni)
 
-test(missing_cert, Msg == existence_error) :-
+test(missing_cert, Msg == 'no certificate assigned') :-
     options_errmsg([key_file('etc/server/server-key.pem'),
                     password(apenoot1)], Msg).
 test(missing_cert, Msg == 'no certificate assigned') :-
@@ -206,7 +206,7 @@ test(missing_cert, Msg == 'no certificate assigned') :-
 
 % missing key (certificate specified, with and without sni)
 
-test(missing_key, Msg == existence_error) :-
+test(missing_key, Msg == 'no private key assigned') :-
     options_errmsg([certificate_file('etc/server/server-cert.pem')], Msg).
 test(missing_key, Msg == 'no private key assigned') :-
     options_errmsg([certificate_file('etc/server/server-cert.pem'),

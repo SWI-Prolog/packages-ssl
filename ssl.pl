@@ -311,7 +311,7 @@ ssl_context(Role, SSL, Module:Options) :-
 %   specified when using the HTTP Unix daemon are fully handled.
 
 ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
-    ssl_context(server, SSL, [sni_hook(none)]),
+    ssl_context(server, SSL, []),
     '_ssl_init_from_context'(SSL0, SSL),
     '_ssl_add_certificate_key'(SSL, Cert, Key).
 

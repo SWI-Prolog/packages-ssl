@@ -2463,16 +2463,6 @@ ssl_use_certificates(PL_SSL *config, term_t options)
 {
   int cert_idx;
 
-  if ( !config->certificate_file &&
-       ( config->num_cert_key_pairs == 0 ) &&
-       !config->cb_sni_pred )
-    return PL_existence_error("certificate", options);
-
-  if ( !config->key_file &&
-       ( config->num_cert_key_pairs == 0 ) &&
-       !config->cb_sni_pred )
-    return PL_existence_error("key", options);
-
   if ( config->certificate_file &&
        SSL_CTX_use_certificate_chain_file(config->ctx,
                                           config->certificate_file) <= 0 )

@@ -309,7 +309,7 @@ HTTPS~server:
   started by using the command line argument~\const{--https}.
 \end{itemize}
 
-At least two items must be specified as, respectively, options or
+Two items are typically specified as, respectively, options or
 additional command~line arguments:
 
 \begin{itemize}
