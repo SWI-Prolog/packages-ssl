@@ -149,7 +149,6 @@ typedef enum
 static STACK_OF(X509) *system_root_store = NULL;
 static int system_root_store_fetched = FALSE;
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t cert_key_pairs_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * Index of our config data in the SSL data
@@ -3286,19 +3285,90 @@ pl_ssl_negotiate(term_t config,
   return TRUE;
 }
 
+static foreign_t
+pl_ssl_init_from_context(term_t term_old, term_t term_new)
+{
+  PL_SSL *old, *new;
+  int idx;
+
+  if ( !get_conf(term_old, &old) ||
+       !get_conf(term_new, &new) )
+    return FALSE;
+
+  new->role                = old->role;
+
+  new->password            = ssl_strdup(old->password);
+  new->cb_cert_verify_pred = old->cb_cert_verify_pred;
+  new->cb_pem_passwd_pred  = old->cb_pem_passwd_pred;
+  new->cb_sni_pred         = old->cb_sni_pred;
+
+  new->close_parent        = old->close_parent;
+  new->close_notify        = old->close_notify;
+  new->host                = ssl_strdup(old->host);
+  new->use_system_cacert   = old->use_system_cacert;
+  new->cacert              = ssl_strdup(old->cacert);
+  new->certificate_file    = ssl_strdup(old->certificate_file);
+  new->key_file            = ssl_strdup(old->key_file);
+
+  ssl_init_verify_locations(new);
+
+  if ( new->certificate_file &&
+       SSL_CTX_use_certificate_chain_file(new->ctx,
+                                          new->certificate_file) <= 0 )
+    return raise_ssl_error(ERR_get_error());
+
+  if ( new->key_file &&
+       SSL_CTX_use_PrivateKey_file(new->ctx, new->key_file,
+                                   SSL_FILETYPE_PEM) <= 0 )
+    return raise_ssl_error(ERR_get_error());
+
+  for (idx = 0; idx < old->num_cert_key_pairs; idx++)
+  { X509 *cert_x509;
+    new->cert_key_pairs[idx].certificate = strdup(old->cert_key_pairs[idx].certificate);
+    new->cert_key_pairs[idx].key = strdup(old->cert_key_pairs[idx].key);
+
+    if ( !ssl_use_certificate(new, new->cert_key_pairs[idx].certificate, &cert_x509) ||
+         !ssl_use_key(new, new->cert_key_pairs[idx].key) )
+      return FALSE;
+    new->cert_key_pairs[idx].certificate_X509 = cert_x509;
+    new->num_cert_key_pairs++;
+  }
+
+  new->peer_cert_required    = old->peer_cert_required;
+
+  (void) SSL_CTX_set_verify(new->ctx,
+                            new->peer_cert_required ?
+                            SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT :
+                            SSL_VERIFY_NONE,
+                            ssl_cb_cert_verify);
+
+  new->cert_required         = old->cert_required;
+  new->crl_required          = old->crl_required;
+#ifndef HAVE_X509_CHECK_HOST
+  new->hostname_check_status = old->hostname_check_status;
+#endif
+
+  if (old->cipher_list)
+  { new->cipher_list = strdup(old->cipher_list);
+    if (!SSL_CTX_set_cipher_list(new->ctx, new->cipher_list))
+      return raise_ssl_error(ERR_get_error());
+  }
+
+  /* TODO: transfer remaining settings (CRL, protocol version etc.) */
+
+  return TRUE;
+}
+
 
 static foreign_t
 pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
 { PL_SSL *conf;
   char *cert, *key;
   int idx;
-  foreign_t r = FALSE;
   X509 *certX509;
 
   if ( !get_conf(config, &conf) )
     return FALSE;
-
-  pthread_mutex_lock(&cert_key_pairs_lock);
 
   idx = conf->num_cert_key_pairs;
   if ( idx < SSL_MAX_CERT_KEY_PAIRS &&
@@ -3311,11 +3381,10 @@ pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
     conf->cert_key_pairs[idx].certificate_X509 = certX509;
 
     conf->num_cert_key_pairs++;
-    r = TRUE;
+    return TRUE;
   }
 
-  pthread_mutex_unlock(&cert_key_pairs_lock);
-  return r;
+  return FALSE;
 }
 
 
@@ -3570,10 +3639,12 @@ install_ssl4pl(void)
 
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
   PL_register_foreign("_ssl_exit",	1, pl_ssl_exit,	      0);
+  PL_register_foreign("_ssl_init_from_context",
+					2, pl_ssl_init_from_context, 0);
   PL_register_foreign("ssl_put_socket",	2, pl_ssl_put_socket, 0);
   PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
-  PL_register_foreign("ssl_add_certificate_key",
+  PL_register_foreign("_ssl_add_certificate_key",
 					3, pl_ssl_add_certificate_key, 0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);

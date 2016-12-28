@@ -47,7 +47,7 @@
             ssl_accept/3,               % +Config, -Socket, -Peer
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
-            ssl_add_certificate_key/3,  % +Config, +String, +String
+            ssl_add_certificate_key/4,  % +Config, +Cert, +Key, -Config
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
                                         %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,     % +Stream, -Certificate
@@ -289,9 +289,9 @@ ssl_context(Role, SSL, Module:Options) :-
     select_option(ssl_method(Method), Options, O1, sslv23),
     '_ssl_context'(Role, SSL, Module:O1, Method).
 
-%!  ssl_add_certificate_key(+SSL, +Certificate, +Key)
+%!  ssl_add_certificate_key(+SSL0, +Certificate, +Key, -SSL)
 %
-%   Add an additional certificate/key pair to the SSL context.
+%   Add an additional certificate/key pair to SSL0, yielding SSL.
 %   Certificate and Key are either strings or atoms that hold the
 %   PEM-encoded certificate plus certificate chain and private key,
 %   respectively. Using strings is preferred for security reasons.
@@ -305,6 +305,15 @@ ssl_context(Role, SSL, Module:Options) :-
 %   versions, this predicate may allow updating the certificate of a
 %   running server. Currently, up to 12 additional certificates
 %   are admissible. This limit may be removed in the future.
+%
+%   @tbd Some configuration properties of SSL0 are currently not yet
+%   retained in SSL. However, all configuration options that can be
+%   specified when using the HTTP Unix daemon are fully handled.
+
+ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
+    ssl_context(server, SSL, [sni_hook(none)]),
+    '_ssl_init_from_context'(SSL0, SSL),
+    '_ssl_add_certificate_key'(SSL, Cert, Key).
 
 %!  ssl_negotiate(+SSL,
 %!                +PlainRead, +PlainWrite,
