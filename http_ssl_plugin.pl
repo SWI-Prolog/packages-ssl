@@ -58,7 +58,9 @@ SWI-Prolog installation directory.
     thread_httpd:open_client_hook/6,
     http:http_protocol_hook/5,
     http:open_options/2,
-    http:http_connection_over_proxy/6.
+    http:http_connection_over_proxy/6,
+    http:ssl_server_create_hook/3,
+    http:ssl_server_open_client_hook/3.
 
 
                  /*******************************
@@ -78,10 +80,14 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
     !,
     make_socket(Port, Socket, Options0),
     ssl_context(server,
-                SSL,
+                SSL0,
                 M:[ close_parent(true)
                   | SSLOptions
                   ]),
+    (   http:ssl_server_create_hook(SSL0, SSL, Options0)
+    ->  true
+    ;   SSL = SSL0
+    ),
     atom_concat('httpsd', Port, Queue),
     Options = [ queue(Queue),
                 tcp_socket(Socket),
@@ -113,10 +119,35 @@ thread_httpd:accept_hook(Goal, Options) :-
     http_enough_workers(Queue, accept, Peer),
     thread_send_message(Queue, ssl_client(SSL, Client, Goal, Peer)).
 
-thread_httpd:open_client_hook(ssl_client(SSL, Client, Goal, Peer),
+%!  http:ssl_server_create_hook(+SSL0, -SSL, +Options) is semidet.
+%
+%   Extensible predicate that is called once after creating an HTTPS
+%   server. If this predicate succeeds, SSL is the context that is
+%   used for negotiating new connections.  Otherwise, SSL0 is used,
+%   which is the context that was created with the given options.
+%
+%   @see ssl_context/3 for creating an SSL context
+
+
+%!  http:ssl_server_open_client_hook(+SSL0, -SSL, +Options) is semidet.
+%
+%   Extensible predicate that is called before each connection that
+%   the server negotiates with a client. If this predicate succeeds,
+%   SSL is the context that is used for the new connection.
+%   Otherwise, SSL0 is used, which is the context that was created
+%   when launching the server.
+%
+%   @see ssl_context/3 for creating an SSL context
+
+
+thread_httpd:open_client_hook(ssl_client(SSL0, Client, Goal, Peer),
                               Goal, In, Out,
                               [peer(Peer), protocol(https)],
                               Options) :-
+    (   http:ssl_server_open_client_hook(SSL0, SSL, Options)
+    ->  true
+    ;   SSL = SSL0
+    ),
     option(timeout(TMO), Options, 60),
     tcp_open_socket(Client, Read, Write),
     set_stream(Read, timeout(TMO)),

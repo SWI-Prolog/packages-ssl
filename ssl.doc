@@ -323,7 +323,7 @@ additional command~line arguments:
   \const{--password} command line options.
 \end{itemize}
 
-Below is an example that uses the self-signed demo certificates
+Here is an example that uses the self-signed demo certificates
 distributed with the SSL package. As is typical for publicly
 accessible HTTPS~servers, this version does \textit{not} require a
 certificate from the~client:
@@ -342,6 +342,27 @@ https_server(Port, Options) :-
                     | Options
                     ]).
 \end{code}
+
+There are two \jargon{hooks} that let you extend HTTPS servers with
+custom definitions:
+
+\begin{itemize}
+\item \texttt{http:ssl_server_create_hook(+SSL0, -SSL, +Options)}:
+  This extensible predicate is called exactly \textit{once}, after
+  creating an HTTPS~server with Options. If this predicate succeeds,
+  \texttt{SSL} is the~context that is used for negotiating all new
+  connections.  Otherwise, \texttt{SSL0} is used, which is the context
+  that was created with the given options.
+\item \texttt{http:ssl_server_open_client_hook(+SSL0, -SSL,
+  +Options)}: This predicate is called before \textit{each} connection
+  that the server negotiates with a client. If this predicate
+  succeeds, \texttt{SSL} is the context that is used for the
+  new~connection.  Otherwise, \texttt{SSL0} is~used, which is the
+  context that was created when launching the~server.
+\end{itemize}
+
+Important use cases of these hooks are running dual-stack RSA/ECDSA
+servers, and updating certificates while the server keeps running.
 
 The example file \file{https.pl} also provides a server that
 \textit{does} require the client to show its certificate. This
