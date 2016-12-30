@@ -48,6 +48,7 @@
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
             ssl_add_certificate_key/4,  % +Config, +Cert, +Key, -Config
+            ssl_set_sni_hook/3,         % +Config, +Pred, -Config
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
                                         %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,     % +Stream, -Certificate
@@ -64,7 +65,8 @@
 
 :- meta_predicate
     ssl_init(-, +, :),
-    ssl_context(+, -, :).
+    ssl_context(+, -, :),
+    ssl_set_sni_hook(+, 3, -).
 
 :- predicate_options(ssl_context/3, 3,
                      [ host(atom),
@@ -264,8 +266,9 @@ easily be used.
 %     client connects, different options (certificates etc.) can
 %     be used for the server. This TLS extension allows you to host
 %     different domains using the same IP address and physical
-%     machine. When a TLS connection is negotiated, the hook is
-%     called as follows:
+%     machine. When a TLS connection is negotiated with a client
+%     that has provided a host name via SNI, the hook is called as
+%     follows:
 %
 %     ==
 %     call(PredicateName, +SSL0, +HostName, -SSL)
@@ -311,9 +314,26 @@ ssl_context(Role, SSL, Module:Options) :-
 %   specified when using the HTTP Unix daemon are fully handled.
 
 ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
-    ssl_context(server, SSL, []),
-    '_ssl_init_from_context'(SSL0, SSL),
+    ssl_copy_context(SSL0, SSL),
     '_ssl_add_certificate_key'(SSL, Cert, Key).
+
+ssl_copy_context(SSL0, SSL) :-
+    ssl_context(server, SSL, []),
+    '_ssl_init_from_context'(SSL0, SSL).
+
+%!  ssl_set_sni_hook(+SSL0, +Pred, -SSL)
+%
+%   SSL is the same as SSL0, except  that the SNI hook of SSL is Pred.
+%   See  the   sni_hook(+Pred)  option   of  ssl_context/3   for  more
+%   information about this hook.
+%
+%   @tbd Some configuration  properties of SSL0 are  currently not yet
+%   retained in  SSL. However, all  configuration options that  can be
+%   specified when using the HTTP Unix daemon are fully handled.
+
+ssl_set_sni_hook(SSL0, Pred, SSL) :-
+    ssl_copy_context(SSL0, SSL),
+    '_ssl_set_sni_hook'(SSL, Pred).
 
 %!  ssl_negotiate(+SSL,
 %!                +PlainRead, +PlainWrite,

@@ -2501,6 +2501,19 @@ ssl_use_certificates(PL_SSL *config, term_t options)
   return TRUE;
 }
 
+void
+ssl_init_sni(PL_SSL *config)
+{
+#ifndef OPENSSL_NO_TLSEXT
+  if ( config->role == PL_SSL_SERVER &&
+       config->cb_sni_pred ) {
+    SSL_CTX_set_tlsext_servername_callback(config->ctx, ssl_cb_sni);
+    SSL_CTX_set_tlsext_servername_arg(config->ctx, config);
+    ssl_deb(1, "installed SNI callback\n");
+  }
+#endif
+}
+
 
 int
 ssl_config(PL_SSL *config, term_t options)
@@ -2570,14 +2583,7 @@ ssl_config(PL_SSL *config, term_t options)
                             ssl_cb_cert_verify);
   ssl_deb(1, "installed certificate verification handler\n");
 
-#ifndef OPENSSL_NO_TLSEXT
-  if ( config->role == PL_SSL_SERVER &&
-       config->cb_sni_pred ) {
-    SSL_CTX_set_tlsext_servername_callback(config->ctx, ssl_cb_sni);
-    SSL_CTX_set_tlsext_servername_arg(config->ctx, config);
-    ssl_deb(1, "installed SNI callback\n");
-  }
-#endif
+  ssl_init_sni(config);
 
   return TRUE;
 }
@@ -3354,6 +3360,8 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
       return raise_ssl_error(ERR_get_error());
   }
 
+  ssl_init_sni(new);
+
   /* TODO: transfer remaining settings (CRL, protocol version etc.) */
 
   return TRUE;
@@ -3387,6 +3395,25 @@ pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
   return FALSE;
 }
 
+static foreign_t
+pl_ssl_set_sni_hook(term_t config, term_t t)
+{ PL_SSL *conf;
+  module_t m = NULL;
+  term_t t2 = PL_new_term_ref();
+  atom_t name;
+
+  if ( !get_conf(config, &conf) )
+    return FALSE;
+
+  if ( !PL_strip_module(t, &m, t2) ||
+       !PL_get_atom_ex(t2, &name) )
+    return FALSE;
+
+  conf->cb_sni_pred = PL_pred(PL_new_functor(name, 3), m);
+  ssl_init_sni(conf);
+
+  return TRUE;
+}
 
 static foreign_t
 pl_ssl_debug(term_t level)
@@ -3646,6 +3673,8 @@ install_ssl4pl(void)
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
   PL_register_foreign("_ssl_add_certificate_key",
 					3, pl_ssl_add_certificate_key, 0);
+  PL_register_foreign("_ssl_set_sni_hook",
+					2, pl_ssl_set_sni_hook, 0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
   PL_register_foreign("ssl_peer_certificate",
