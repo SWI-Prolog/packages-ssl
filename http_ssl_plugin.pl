@@ -121,21 +121,21 @@ thread_httpd:accept_hook(Goal, Options) :-
 
 %!  http:ssl_server_create_hook(+SSL0, -SSL, +Options) is semidet.
 %
-%   Extensible predicate that is called once after creating an HTTPS
-%   server. If this predicate succeeds, SSL is the context that is
-%   used for negotiating new connections.  Otherwise, SSL0 is used,
-%   which is the context that was created with the given options.
+%   Extensible predicate that is called  once   after  creating an HTTPS
+%   server. If this predicate succeeds, SSL is  the context that is used
+%   for negotiating new connections. Otherwise, SSL0   is used, which is
+%   the context that was created with the given options.
 %
 %   @see ssl_context/3 for creating an SSL context
 
 
 %!  http:ssl_server_open_client_hook(+SSL0, -SSL, +Options) is semidet.
 %
-%   Extensible predicate that is called before each connection that
-%   the server negotiates with a client. If this predicate succeeds,
-%   SSL is the context that is used for the new connection.
-%   Otherwise, SSL0 is used, which is the context that was created
-%   when launching the server.
+%   Extensible predicate that is called before  each connection that the
+%   server negotiates with a client. If  this predicate succeeds, SSL is
+%   the context that is used for the  new connection. Otherwise, SSL0 is
+%   used, which is the  context  that   was  created  when launching the
+%   server.
 %
 %   @see ssl_context/3 for creating an SSL context
 
