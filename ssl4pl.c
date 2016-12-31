@@ -1421,6 +1421,11 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
 
   if ( code == SSL_ERROR_SYSCALL )
   { instance->fatal_alert = TRUE;
+
+    if ( Sferror(instance->dread) ||
+	 Sferror(instance->dwrite) )
+      return SSL_PL_ERROR;
+
     if ( role == STAT_READ && BIO_eof(SSL_get_rbio(instance->ssl)) )
     { if ( !instance->config->close_notify )
         return SSL_PL_OK;
