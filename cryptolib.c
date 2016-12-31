@@ -181,34 +181,11 @@ ssl_deb(int level, char *fmt, ...)
  * Read function.
  */
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-lift_timeout() lifts the timeout error to  the   SSL  stream.  It is not
-clear to me why this is needed as the  public error API now walks up the
-filter chain to find the error status.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-static void
-lift_timeout(IOSTREAM *stream)
-{ if ( (stream->flags & SIO_TIMEOUT) )
-  { IOSTREAM *ssl_stream = stream->upstream;
-
-    if ( ssl_stream )
-    { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
-      Sclearerr(stream);
-    }
-  }
-}
-
-
 int
 bio_read(BIO* bio, char* buf, int len)
 { IOSTREAM *stream = BIO_get_ex_data(bio, 0);
-  int rc;
 
-  rc = (int)Sread_pending(stream, buf, len, SIO_RP_BLOCK);
-  lift_timeout(stream);
-
-  return rc;
+  return (int)Sread_pending(stream, buf, len, SIO_RP_BLOCK);
 }
 
 /*
@@ -245,7 +222,6 @@ bio_write(BIO* bio, const char* buf, int len)
 
   r = (int)Sfwrite(buf, sizeof(char), len, stream);
   Sflush(stream);
-  lift_timeout(stream);
 
   return r;
 }
