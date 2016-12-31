@@ -1422,8 +1422,8 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
   if ( code == SSL_ERROR_SYSCALL )
   { instance->fatal_alert = TRUE;
 
-    if ( Sferror(instance->dread) ||
-	 Sferror(instance->dwrite) )
+    if ( (role == STAT_READ  && Sferror(instance->dread)) ||
+	 (role == STAT_WRITE && Sferror(instance->dwrite)) )
       return SSL_PL_ERROR;
 
     if ( role == STAT_READ && BIO_eof(SSL_get_rbio(instance->ssl)) )
