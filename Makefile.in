@@ -15,6 +15,7 @@ DOC=ssl
 include ../Makefile.defs
 
 CFLAGS+= -I. -DSERVER_CERT_REQUIRED=TRUE -DCLIENT_CERT_REQUIRED=TRUE
+# COFLAGS=-gdwarf-2 -g3
 
 LIBS=@LIBS@
 
