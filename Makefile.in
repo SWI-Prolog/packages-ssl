@@ -104,9 +104,11 @@ xmlenc.tex:	xmlenc.pl
 # Check
 ################################################################
 
-check::
-		(cd tests && ./mkcerts.sh >& /dev/null)
+check::		tests/test_certs
 		$(PL) -q -f test_ssl.pl -F none -g test_ssl,halt -t 'halt(1)'
+
+tests/test_certs:
+		(cd tests && ./mkcerts.sh >& /dev/null)
 
 ################################################################
 # Clean
@@ -121,3 +123,4 @@ distclean:	clean
 		rm -f $(DOC).aux $(DOC).log $(DOC).out $(DOC).toc
 		rm -rf html
 		rm -rf autom4te.cache
+		rm -rf test/test_certs tests/*.csr tests/11-*.der
