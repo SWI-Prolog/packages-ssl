@@ -48,7 +48,7 @@
             ssl_open/3,                 % +Config, -Read, -Write
             ssl_open/4,                 % +Config, +Socket, -Read, -Write
             ssl_add_certificate_key/4,  % +Config, +Cert, +Key, -Config
-            ssl_set_sni_hook/3,         % +Config, +Pred, -Config
+            ssl_set_sni_hook/3,         % +Config, +Goal, -Config
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
                                         %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,     % +Stream, -Certificate
@@ -143,7 +143,7 @@ easily be used.
 %     Specify where the private key that matches the certificate can
 %     be found.  If the key is encrypted with a password, this must
 %     be supplied using the password(+Text) or
-%     =|pem_password_hook(:PredicateName)|= option.
+%     =|pem_password_hook(:Goal)|= option.
 %     * certificate_key_pairs(+Pairs)
 %     Alternative method for specifying certificates and keys. The
 %     argument is a list of _pairs_ of the form Certificate-Key,
@@ -161,12 +161,11 @@ easily be used.
 %     (see next option).  Text is either an atom or string.  Using
 %     a string is preferred as strings are volatile and local
 %     resources.
-%     * pem_password_hook(:PredicateName)
+%     * pem_password_hook(:Goal)
 %     In case a password is required to access the private key the
-%     supplied predicate will be called to fetch it. The predicate
-%     is called as call(+PredicateName, +SSL, -Password) and
-%     typically unifies `Password` with a _string_ containing the
-%     password.
+%     supplied predicate will be called to fetch it. The hook is
+%     called as call(Goal, +SSL, -Password) and typically unifies
+%     `Password` with a _string_ containing the password.
 %     * require_crl(+Boolean)
 %     If true (default is false), then all certificates will be
 %     considered invalid unless they can be verified as not being
@@ -191,12 +190,12 @@ easily be used.
 %     Additional verification of the peer certificate as well as
 %     accepting certificates that are not trusted by the given set
 %     can be realised using the hook
-%     cert_verify_hook(PredicateName).
-%     * cert_verify_hook(:PredicateName)
-%     The predicate ssl_negotiate/5 calls PredicateName as follows:
+%     cert_verify_hook(:Goal).
+%     * cert_verify_hook(:Goal)
+%     The predicate ssl_negotiate/5 calls Goal as follows:
 %
 %       ==
-%       call(PredicateName, +SSL,
+%       call(Goal, +SSL,
 %            +ProblemCertificate, +AllCertificates, +FirstCertificate,
 %            +Error)
 %       ==
@@ -260,7 +259,7 @@ easily be used.
 %     is used to negotiate the connection. Using version-specific
 %     methods is deprecated in recent OpenSSL versions, and this
 %     option will become obsolete and ignored in the future.
-%     * sni_hook(+PredicateName)
+%     * sni_hook(:Goal)
 %     This option provides Server Name Indication (SNI) for SSL
 %     servers. This means that depending on the host to which a
 %     client connects, different options (certificates etc.) can
@@ -271,7 +270,7 @@ easily be used.
 %     follows:
 %
 %     ==
-%     call(PredicateName, +SSL0, +HostName, -SSL)
+%     call(Goal, +SSL0, +HostName, -SSL)
 %     ==
 %
 %     Given the current context SSL0, and the host name of the
@@ -321,19 +320,19 @@ ssl_copy_context(SSL0, SSL) :-
     ssl_context(server, SSL, []),
     '_ssl_init_from_context'(SSL0, SSL).
 
-%!  ssl_set_sni_hook(+SSL0, +Pred, -SSL)
+%!  ssl_set_sni_hook(+SSL0, :Goal, -SSL)
 %
-%   SSL is the same as SSL0, except  that the SNI hook of SSL is Pred.
-%   See  the   sni_hook(+Pred)  option   of  ssl_context/3   for  more
+%   SSL is the same as SSL0, except  that the SNI hook of SSL is Goal.
+%   See  the   sni_hook(:Goal)  option   of  ssl_context/3   for  more
 %   information about this hook.
 %
 %   @tbd Some configuration  properties of SSL0 are  currently not yet
 %   retained in  SSL. However, all  configuration options that  can be
 %   specified when using the HTTP Unix daemon are fully handled.
 
-ssl_set_sni_hook(SSL0, Pred, SSL) :-
+ssl_set_sni_hook(SSL0, Goal, SSL) :-
     ssl_copy_context(SSL0, SSL),
-    '_ssl_set_sni_hook'(SSL, Pred).
+    '_ssl_set_sni_hook'(SSL, Goal).
 
 %!  ssl_negotiate(+SSL,
 %!                +PlainRead, +PlainWrite,

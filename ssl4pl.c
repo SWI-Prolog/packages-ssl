@@ -162,6 +162,10 @@ typedef struct pl_cert_key_pair {
     char                *certificate;
 } PL_CERT_KEY_PAIR;
 
+typedef struct pl_ssl_callback {
+    record_t goal;
+    module_t module;
+} PL_SSL_CALLBACK;
 
 typedef struct pl_ssl {
     long                 magic;
@@ -209,9 +213,9 @@ typedef struct pl_ssl {
     /*
      * Application defined handlers
      */
-    predicate_t         *cb_cert_verify_pred;
-    predicate_t         *cb_pem_passwd_pred;
-    predicate_t         *cb_sni_pred;
+    PL_SSL_CALLBACK      cb_cert_verify;
+    PL_SSL_CALLBACK      cb_pem_passwd;
+    PL_SSL_CALLBACK      cb_sni;
 #ifndef HAVE_X509_CHECK_HOST
     int                  hostname_check_status;
 #endif
@@ -279,21 +283,6 @@ get_file_arg(int a, term_t t, char **f)
   return TRUE;
 }
 
-
-static int
-get_predicate_arg(int a, module_t m, term_t t, int arity, predicate_t *pred)
-{ term_t t2 = PL_new_term_ref();
-  atom_t name;
-
-  _PL_get_arg(a, t, t2);
-  if ( !PL_strip_module(t2, &m, t2) ||
-       !PL_get_atom_ex(t2, &name) )
-    return FALSE;
-
-  *pred = PL_pred(PL_new_functor(name, arity), m);
-
-  return TRUE;
-}
 
 static int
 unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
@@ -1161,18 +1150,19 @@ get_conf(term_t config, PL_SSL **conf)
 static char *
 pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
 { fid_t fid = PL_open_foreign_frame();
-  term_t av = PL_new_term_refs(2);
-  predicate_t pred = config->cb_pem_passwd_pred;
+  term_t av = PL_new_term_refs(3);
+  predicate_t call3 = PL_predicate("call", 3, NULL);
   char *passwd = NULL;
   size_t len;
 
   /*
-   * hook(+SSL, -Passwd)
+   * call(CB, +SSL, -Passwd)
    */
+  PL_recorded(config->cb_pem_passwd.goal, av+0);
 
-  put_conf(av+0, config);
-  if ( PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) )
-  { if ( PL_get_nchars(av+1, &len, &passwd, CVT_ALL) )
+  put_conf(av+1, config);
+  if ( PL_call_predicate(config->cb_pem_passwd.module, PL_Q_PASS_EXCEPTION, call3, av) )
+  { if ( PL_get_nchars(av+2, &len, &passwd, CVT_ALL) )
     { if ( len >= (unsigned int)size )
       { PL_warning("pem_passwd too long");
       } else
@@ -1191,17 +1181,20 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
 static PL_SSL *
 pl_sni_hook(PL_SSL *config, const char *host)
 { fid_t fid = PL_open_foreign_frame();
-  term_t av = PL_new_term_refs(3);
-  predicate_t pred = config->cb_sni_pred;
+  term_t av = PL_new_term_refs(4);
+
+  predicate_t call4 = PL_predicate("call", 4, NULL);
   PL_SSL *new_config = NULL;
 
   /*
-   * hook(+SSL0, +Hostname, -SSL)
+   * call(CB, +SSL0, +Hostname, -SSL)
    */
-  put_conf(av+0, config);
-  if ( PL_unify_chars(av+1, PL_ATOM|REP_UTF8, strlen(host), host)
-       && PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) )
-    if ( !get_conf(av+2, &new_config) )
+  PL_recorded(config->cb_sni.goal, av+0);
+  put_conf(av+1, config);
+  if ( PL_unify_chars(av+2, PL_ATOM|REP_UTF8, strlen(host), host)
+       && PL_call_predicate(config->cb_sni.module,
+                            PL_Q_PASS_EXCEPTION, call4, av) )
+    if ( !get_conf(av+3, &new_config) )
       PL_warning("sni_hook returned wrong type");
 
   PL_close_foreign_frame(fid);
@@ -1215,22 +1208,21 @@ pl_cert_verify_hook(PL_SSL *config,
 		    const char *error,
                     int error_unknown)
 { fid_t fid = PL_open_foreign_frame();
-  term_t av = PL_new_term_refs(5);
+  term_t av = PL_new_term_refs(6);
   term_t error_term = PL_new_term_ref();
-  predicate_t pred = config->cb_cert_verify_pred;
+  predicate_t call6 = PL_predicate("call", 6, NULL);
   int val;
   STACK_OF(X509)* stack;
 
-  assert(pred);
+  PL_recorded(config->cb_cert_verify.goal, av+0);
 
   stack = X509_STORE_CTX_get1_chain(ctx);
 
-
   /*
-   * hook(+SSL, +Certificate, +Error)
+   * call(CB, +SSL, +ProblemCert, +AllCerts, +FirstCert, +Error)
    */
 
-  put_conf(av+0, config);
+  put_conf(av+1, config);
   if ( error_unknown )
     val = PL_unify_term(error_term,
                         PL_FUNCTOR, FUNCTOR_unknown1,
@@ -1238,10 +1230,11 @@ pl_cert_verify_hook(PL_SSL *config,
   else
     val = PL_unify_atom_chars(error_term, error);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
-  val &= ( unify_certificate(av+1, cert) &&
-           unify_certificates(av+2, av+3, stack) &&
-           PL_unify(av+4, error_term) &&
-           PL_call_predicate(NULL, PL_Q_PASS_EXCEPTION, pred, av) );
+  val &= ( unify_certificate(av+2, cert) &&
+           unify_certificates(av+3, av+4, stack) &&
+           PL_unify(av+5, error_term) &&
+           PL_call_predicate(config->cb_cert_verify.module,
+                             PL_Q_PASS_EXCEPTION, call6, av) );
 
   /* free any items still on stack, since X509_STORE_CTX_get1_chain returns a copy */
   sk_X509_pop_free(stack, X509_free);
@@ -1507,9 +1500,9 @@ ssl_new(void)
         new->crl_list            = NULL;
         new->peer_cert_required  = FALSE;
         new->crl_required        = FALSE;
-        new->cb_sni_pred         = NULL;
-        new->cb_cert_verify_pred = NULL;
-        new->cb_pem_passwd_pred  = NULL;
+        new->cb_sni.goal         = NULL;
+        new->cb_cert_verify.goal = NULL;
+        new->cb_pem_passwd.goal  = NULL;
 #ifndef HAVE_X509_CHECK_HOST
         new->hostname_check_status = 0;
 #endif
@@ -1538,14 +1531,17 @@ ssl_free(PL_SSL *config)
     if ( config->crl_list )
       sk_X509_CRL_pop_free(config->crl_list, X509_CRL_free);
     for (i = 0; i < config->num_cert_key_pairs; i++)
-    { if ( config->cert_key_pairs[i].certificate_X509 )
-        X509_free(config->cert_key_pairs[i].certificate_X509);
+    { X509_free(config->cert_key_pairs[i].certificate_X509);
       free(config->cert_key_pairs[i].certificate);
       free(config->cert_key_pairs[i].key);
     }
     free(config->password);
-    if ( config->peer_cert )
-      X509_free(config->peer_cert);
+    X509_free(config->peer_cert);
+
+    if (config->cb_sni.goal) PL_erase(config->cb_sni.goal);
+    if (config->cb_pem_passwd.goal) PL_erase(config->cb_pem_passwd.goal);
+    if (config->cb_cert_verify.goal) PL_erase(config->cb_cert_verify.goal);
+
     free(config);
     ssl_deb(1, "Released config structure\n");
   } else
@@ -1835,7 +1831,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
       }
       if ( config->hostname_check_status == 1 )
       { ssl_deb(3, "Hostname could not be verified!\n");
-        if ( config->cb_cert_verify_pred != NULL )
+        if ( config->cb_cert_verify.goal != NULL )
         { X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
           preverify_ok = (pl_cert_verify_hook(config, cert, ctx, "hostname_mismatch", 0) != 0);
         }
@@ -1846,7 +1842,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
     }
 #endif
 
-    if ( !preverify_ok || config->cb_cert_verify_pred != NULL ) {
+    if ( !preverify_ok || config->cb_cert_verify.goal != NULL ) {
         X509 *cert = NULL;
         const char *error;
         int err;
@@ -1925,7 +1921,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
           }
         }
 
-        if (config->cb_cert_verify_pred) {
+        if (config->cb_cert_verify.goal) {
           preverify_ok = (pl_cert_verify_hook(config, cert, ctx, error, error_unknown) != 0);
         } else {
             char  subject[256];
@@ -1963,7 +1959,7 @@ ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
     char   *passwd = NULL;
     int     len    = 0;
 
-    if (config->cb_pem_passwd_pred) {
+    if (config->cb_pem_passwd.goal) {
         /*
          * Callback installed
          */
@@ -2506,7 +2502,7 @@ ssl_init_sni(PL_SSL *config)
 {
 #ifndef OPENSSL_NO_TLSEXT
   if ( config->role == PL_SSL_SERVER &&
-       config->cb_sni_pred ) {
+       config->cb_sni.goal ) {
     SSL_CTX_set_tlsext_servername_callback(config->ctx, ssl_cb_sni);
     SSL_CTX_set_tlsext_servername_arg(config->ctx, config);
     ssl_deb(1, "installed SNI callback\n");
@@ -3027,20 +3023,15 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       ssl_set_keyf(conf, file);
     } else if ( name == ATOM_pem_password_hook && arity == 1 )
-    { predicate_t hook;
-
-      if ( !get_predicate_arg(1, module, head, 2, &hook) )
-	return FALSE;
-
-      conf->cb_pem_passwd_pred = hook;
-
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+      conf->cb_pem_passwd.goal   = PL_record(cb);
+      conf->cb_pem_passwd.module = module;
     } else if ( name == ATOM_cert_verify_hook && arity == 1 )
-    { predicate_t hook;
-
-      if ( !get_predicate_arg(1, module, head, 5, &hook) )
-	return FALSE;
-
-      conf->cb_cert_verify_pred = hook;
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+      conf->cb_cert_verify.goal   = PL_record(cb);
+      conf->cb_cert_verify.module = module;
     } else if ( name == ATOM_close_parent && arity == 1 )
     { int val;
 
@@ -3103,12 +3094,10 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       return SSL_CTX_set_max_proto_version(conf->ctx, version);
 #endif
     } else if ( name == ATOM_sni_hook && arity == 1 && r == PL_SSL_SERVER)
-    { predicate_t hook;
-
-      if ( !get_predicate_arg(1, module, head, 3, &hook) )
-        return FALSE;
-
-      conf->cb_sni_pred = hook;
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+      conf->cb_sni.goal   = PL_record(cb);
+      conf->cb_sni.module = module;
     } else if ( name == ATOM_close_notify && arity == 1 )
     { int val;
 
@@ -3291,6 +3280,15 @@ pl_ssl_negotiate(term_t config,
   return TRUE;
 }
 
+void
+ssl_copy_callback(const PL_SSL_CALLBACK old, PL_SSL_CALLBACK *new)
+{
+  if (old.goal)
+  { new->goal = PL_duplicate_record(old.goal);
+    new->module = old.module;
+  }
+}
+
 static foreign_t
 pl_ssl_init_from_context(term_t term_old, term_t term_new)
 {
@@ -3304,9 +3302,6 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->role                = old->role;
 
   new->password            = ssl_strdup(old->password);
-  new->cb_cert_verify_pred = old->cb_cert_verify_pred;
-  new->cb_pem_passwd_pred  = old->cb_pem_passwd_pred;
-  new->cb_sni_pred         = old->cb_sni_pred;
 
   new->close_parent        = old->close_parent;
   new->close_notify        = old->close_notify;
@@ -3315,6 +3310,10 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->cacert              = ssl_strdup(old->cacert);
   new->certificate_file    = ssl_strdup(old->certificate_file);
   new->key_file            = ssl_strdup(old->key_file);
+
+  ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
+  ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
+  ssl_copy_callback(old->cb_sni, &new->cb_sni);
 
   ssl_init_verify_locations(new);
 
@@ -3400,16 +3399,18 @@ pl_ssl_set_sni_hook(term_t config, term_t t)
 { PL_SSL *conf;
   module_t m = NULL;
   term_t t2 = PL_new_term_ref();
-  atom_t name;
 
   if ( !get_conf(config, &conf) )
     return FALSE;
 
-  if ( !PL_strip_module(t, &m, t2) ||
-       !PL_get_atom_ex(t2, &name) )
+  if ( !PL_strip_module(t, &m, t2) )
     return FALSE;
 
-  conf->cb_sni_pred = PL_pred(PL_new_functor(name, 3), m);
+  if (conf->cb_sni.goal)
+    PL_erase(conf->cb_sni.goal);
+
+  conf->cb_sni.goal  = PL_record(t2);
+  conf->cb_sni.module = m;
   ssl_init_sni(conf);
 
   return TRUE;
