@@ -178,38 +178,37 @@ ssl_deb(int level, char *fmt, ...)
  */
 
 /*
- * Read function.  To allow for setting a timeout on the SSL stream, we
- * use the timeout of this stream if we do not have a timeout ourselves.
- *
- * Note that if the underlying stream received a timeout, we lift this
- * error to the ssl stream and clear the error on the underlying stream.
- * This way, the normal timeout-reset in pl-stream.c correctly resets
- * a possible timeout.  See also test_ssl.c.  Patch and analysis by
- * Keri Harris.
+ * Read function.
  */
 
-int bio_read(BIO* bio, char* buf, int len)
-{
-   IOSTREAM *stream = BIO_get_ex_data(bio, 0);
-   IOSTREAM *ssl_stream = stream->upstream;
-   int rc;
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+lift_timeout() lifts the timeout error to  the   SSL  stream.  It is not
+clear to me why this is needed as the  public error API now walks up the
+filter chain to find the error status.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-   if ( ssl_stream &&
-	stream->timeout < 0 &&
-	ssl_stream->timeout > 0 )
-   { stream->timeout = ssl_stream->timeout;
-     rc = (int)Sfread(buf, sizeof(char), len, stream);
-     stream->timeout = -1;
-   } else
-   { rc = (int)Sfread(buf, sizeof(char), len, stream);
-   }
+static void
+lift_timeout(IOSTREAM *stream)
+{ if ( (stream->flags & SIO_TIMEOUT) )
+  { IOSTREAM *ssl_stream = stream->upstream;
 
-   if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
-   { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
-     Sclearerr(stream);
-   }
+    if ( ssl_stream )
+    { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
+      Sclearerr(stream);
+    }
+  }
+}
 
-   return rc;
+
+int
+bio_read(BIO* bio, char* buf, int len)
+{ IOSTREAM *stream = BIO_get_ex_data(bio, 0);
+  int rc;
+
+  rc = (int)Sread_pending(stream, buf, len, SIO_RP_BLOCK);
+  lift_timeout(stream);
+
+  return rc;
 }
 
 /*
@@ -217,52 +216,38 @@ int bio_read(BIO* bio, char* buf, int len)
  * what this was actually meant to do....
  */
 
-int bio_gets(BIO* bio, char* buf, int len)
-{
-   IOSTREAM* stream;
-   int r = 0;
-   stream = BIO_get_app_data(bio);
-   for (r = 0; r < len; r++)
-   {
-      int c = Sgetc(stream);
-      if (c == EOF)
-         return r-1;
-      buf[r] = (char)c;
-      if (buf[r] == '\n')
-         break;
-   }
-   return r;
+int
+bio_gets(BIO* bio, char* buf, int len)
+{ IOSTREAM *stream;
+  int r = 0;
+  stream = BIO_get_app_data(bio);
+
+  for (r = 0; r < len; r++)
+  { int c = Sgetc(stream);
+    if (c == EOF)
+      return r-1;
+    buf[r] = (char)c;
+    if (buf[r] == '\n')
+      break;
+  }
+
+  return r;
 }
 
 /*
  * Write function
  */
 
-int bio_write(BIO* bio, const char* buf, int len)
-{
-   IOSTREAM* stream = BIO_get_ex_data(bio, 0);
-   IOSTREAM* ssl_stream = stream->upstream;
-   int r;
+int
+bio_write(BIO* bio, const char* buf, int len)
+{ IOSTREAM* stream = BIO_get_ex_data(bio, 0);
+  int r;
 
-   if ( ssl_stream &&
-	stream->timeout < 0 &&
-	ssl_stream->timeout > 0 )
-   { stream->timeout = ssl_stream->timeout;
-     r = (int)Sfwrite(buf, sizeof(char), len, stream);
-     /* OpenSSL expects there to be no buffering when it writes. Flush here */
-     Sflush(stream);
-     stream->timeout = -1;
-   } else
-   { r = (int)Sfwrite(buf, sizeof(char), len, stream);
-     Sflush(stream);
-   }
+  r = (int)Sfwrite(buf, sizeof(char), len, stream);
+  Sflush(stream);
+  lift_timeout(stream);
 
-   if ( ssl_stream && (stream->flags & SIO_TIMEOUT) )
-   { ssl_stream->flags |= (SIO_FERR|SIO_TIMEOUT);
-     Sclearerr(stream);
-   }
-
-   return r;
+  return r;
 }
 
 /*
@@ -270,19 +255,20 @@ int bio_write(BIO* bio, const char* buf, int len)
  * There are several more mandatory, but as-yet unsupported functions...
  */
 
-long bio_control(BIO* bio, int cmd, long num, void* ptr)
-{
-   IOSTREAM* stream;
-   stream  = BIO_get_ex_data(bio, 0);
-   switch(cmd)
-   {
-     case BIO_CTRL_FLUSH:
-        Sflush(stream);
-        return 1;
-     case BIO_CTRL_EOF:
-        return Sfeof(stream);
-   }
-   return 0;
+long
+bio_control(BIO* bio, int cmd, long num, void* ptr)
+{ IOSTREAM* stream;
+  stream  = BIO_get_ex_data(bio, 0);
+
+  switch(cmd)
+  { case BIO_CTRL_FLUSH:
+      Sflush(stream);
+      return 1;
+    case BIO_CTRL_EOF:
+      return Sfeof(stream);
+  }
+
+  return 0;
 }
 
 /*
