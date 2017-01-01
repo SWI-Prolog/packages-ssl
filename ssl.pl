@@ -3,7 +3,7 @@
     Author:        Jan van der Steen, Matt Lilley and Jan Wielemaker,
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2016, SWI-Prolog Foundation
+    Copyright (c)  2004-2017, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -307,10 +307,6 @@ ssl_context(Role, SSL, Module:Options) :-
 %   versions, this predicate may allow updating the certificate of a
 %   running server. Currently, up to 12 additional certificates
 %   are admissible. This limit may be removed in the future.
-%
-%   @tbd Some configuration properties of SSL0 are currently not yet
-%   retained in SSL. However, all configuration options that can be
-%   specified when using the HTTP Unix daemon are fully handled.
 
 ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
     ssl_copy_context(SSL0, SSL),
@@ -325,10 +321,6 @@ ssl_copy_context(SSL0, SSL) :-
 %   SSL is the same as SSL0, except  that the SNI hook of SSL is Goal.
 %   See  the   sni_hook(:Goal)  option   of  ssl_context/3   for  more
 %   information about this hook.
-%
-%   @tbd Some configuration  properties of SSL0 are  currently not yet
-%   retained in  SSL. However, all  configuration options that  can be
-%   specified when using the HTTP Unix daemon are fully handled.
 
 ssl_set_sni_hook(SSL0, Goal, SSL) :-
     ssl_copy_context(SSL0, SSL),

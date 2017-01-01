@@ -3332,6 +3332,10 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->min_protocol        = old->min_protocol;
   new->max_protocol        = old->max_protocol;
 
+  if (old->crl_list)
+    new->crl_list          = sk_X509_CRL_dup(old->crl_list);
+  new->crl_required        = old->crl_required;
+
   ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
   ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
   ssl_copy_callback(old->cb_sni, &new->cb_sni);
@@ -3371,7 +3375,6 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
                             ssl_cb_cert_verify);
 
   new->cert_required         = old->cert_required;
-  new->crl_required          = old->crl_required;
 #ifndef HAVE_X509_CHECK_HOST
   new->hostname_check_status = old->hostname_check_status;
 #endif
@@ -3383,8 +3386,6 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   }
 
   ssl_init_sni(new);
-
-  /* TODO: transfer remaining settings (CRL.) */
 
   return TRUE;
 }
