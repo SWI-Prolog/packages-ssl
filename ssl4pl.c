@@ -3,7 +3,7 @@
     Author:        Jan van der Steen, Jan Wielemaker and Matt Lilley
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2016, SWI-Prolog Foundation
+    Copyright (c)  2004-2017, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -167,6 +167,11 @@ typedef struct pl_ssl_callback {
     module_t module;
 } PL_SSL_CALLBACK;
 
+typedef struct pl_ssl_protocol {
+    BOOL is_set;
+    int version;
+} PL_SSL_PROTOCOL;
+
 typedef struct pl_ssl {
     long                 magic;
     /*
@@ -209,6 +214,9 @@ typedef struct pl_ssl {
     BOOL                 cert_required;
     BOOL                 crl_required;
     BOOL                 peer_cert_required;
+
+    PL_SSL_PROTOCOL      min_protocol;
+    PL_SSL_PROTOCOL      max_protocol;
 
     /*
      * Application defined handlers
@@ -1481,6 +1489,9 @@ ssl_new(void)
         new->idx                 = -1;
         new->password            = NULL;
 
+        new->min_protocol.is_set = FALSE;
+        new->max_protocol.is_set = FALSE;
+
         new->use_system_cacert   = FALSE;
         new->host                = NULL;
 
@@ -2510,6 +2521,17 @@ ssl_init_sni(PL_SSL *config)
 #endif
 }
 
+void ssl_init_min_max_protocol(PL_SSL *config)
+{
+#ifdef SSL_CTX_set_min_proto_version
+  if (config->min_protocol.is_set)
+    SSL_CTX_set_min_proto_version(config->ctx, config->min_protocol.version);
+#endif
+#ifdef SSL_CTX_set_max_proto_version
+  if (config->max_protocol.is_set)
+    SSL_CTX_set_max_proto_version(config->ctx, config->max_protocol.version);
+#endif
+}
 
 int
 ssl_config(PL_SSL *config, term_t options)
@@ -2580,6 +2602,7 @@ ssl_config(PL_SSL *config, term_t options)
   ssl_deb(1, "installed certificate verification handler\n");
 
   ssl_init_sni(config);
+  ssl_init_min_max_protocol(config);
 
   return TRUE;
 }
@@ -3077,10 +3100,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       if ( !protocol_version_to_integer(val, &version) )
         return FALSE;
-
-#ifdef SSL_CTX_set_min_proto_version
-      SSL_CTX_set_min_proto_version(conf->ctx, version);
-#endif
+      conf->min_protocol.is_set  = TRUE;
+      conf->min_protocol.version = version;
     } else if ( name == ATOM_max_protocol_version && arity == 1 )
     { term_t val = PL_new_term_ref();
       int version;
@@ -3089,10 +3110,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       if ( !protocol_version_to_integer(val, &version) )
         return FALSE;
-
-#ifdef SSL_CTX_set_max_proto_version
-      return SSL_CTX_set_max_proto_version(conf->ctx, version);
-#endif
+      conf->max_protocol.is_set  = TRUE;
+      conf->max_protocol.version = version;
     } else if ( name == ATOM_sni_hook && arity == 1 && r == PL_SSL_SERVER)
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
@@ -3310,10 +3329,14 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->cacert              = ssl_strdup(old->cacert);
   new->certificate_file    = ssl_strdup(old->certificate_file);
   new->key_file            = ssl_strdup(old->key_file);
+  new->min_protocol        = old->min_protocol;
+  new->max_protocol        = old->max_protocol;
 
   ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
   ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
   ssl_copy_callback(old->cb_sni, &new->cb_sni);
+
+  ssl_init_min_max_protocol(new);
 
   ssl_init_verify_locations(new);
 
@@ -3361,7 +3384,7 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
 
   ssl_init_sni(new);
 
-  /* TODO: transfer remaining settings (CRL, protocol version etc.) */
+  /* TODO: transfer remaining settings (CRL.) */
 
   return TRUE;
 }
