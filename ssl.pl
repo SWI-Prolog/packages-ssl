@@ -303,10 +303,8 @@ ssl_context(Role, SSL, Module:Options) :-
 %   `certificate_key_pairs/1` option. As of OpenSSL 1.0.2, multiple
 %   certificate types with completely independent certificate chains
 %   are supported. If a certificate of the same type is added
-%   repeatedly to a context, the result is undefined. In future
-%   versions, this predicate may allow updating the certificate of a
-%   running server. Currently, up to 12 additional certificates
-%   are admissible. This limit may be removed in the future.
+%   repeatedly to a context, the result is undefined. Currently, up to
+%   12 additional certificates of different types are admissible.
 
 ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
     ssl_copy_context(SSL0, SSL),
