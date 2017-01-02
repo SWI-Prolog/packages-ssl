@@ -2476,7 +2476,7 @@ ssl_use_key(PL_SSL *config, char *key)
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 int
-ssl_use_certificates(PL_SSL *config, term_t options)
+ssl_use_certificates(PL_SSL *config)
 {
   int cert_idx;
 
@@ -2534,7 +2534,7 @@ void ssl_init_min_max_protocol(PL_SSL *config)
 }
 
 int
-ssl_config(PL_SSL *config, term_t options)
+ssl_config(PL_SSL *config)
 /*
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
@@ -2568,7 +2568,7 @@ ssl_config(PL_SSL *config, term_t options)
   if ( config->cert_required ||
        ( config->certificate_file && config->key_file ) ||
        ( config->num_cert_key_pairs > 0 ) )
-  { if ( !ssl_use_certificates(config, options) )
+  { if ( !ssl_use_certificates(config) )
       return FALSE;
     ssl_deb(1, "certificates installed successfully\n");
   }
@@ -3131,7 +3131,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
-  return register_conf(config, conf) && ssl_config(conf, options);
+  return register_conf(config, conf) && ssl_config(conf);
 }
 
 
@@ -3331,6 +3331,14 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->key_file            = ssl_strdup(old->key_file);
   new->min_protocol        = old->min_protocol;
   new->max_protocol        = old->max_protocol;
+  new->peer_cert_required  = old->peer_cert_required;
+  new->cipher_list         = ssl_strdup(old->cipher_list);
+  new->ecdh_curve          = ssl_strdup(old->ecdh_curve);
+
+  new->cert_required       = old->cert_required;
+#ifndef HAVE_X509_CHECK_HOST
+  new->hostname_check_status = old->hostname_check_status;
+#endif
 
   if (old->crl_list)
     new->crl_list          = sk_X509_CRL_dup(old->crl_list);
@@ -3340,54 +3348,13 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
   ssl_copy_callback(old->cb_sni, &new->cb_sni);
 
-  ssl_init_min_max_protocol(new);
-
-  ssl_init_verify_locations(new);
-
-  if ( new->certificate_file &&
-       SSL_CTX_use_certificate_chain_file(new->ctx,
-                                          new->certificate_file) <= 0 )
-    return raise_ssl_error(ERR_get_error());
-
-  if ( new->key_file &&
-       SSL_CTX_use_PrivateKey_file(new->ctx, new->key_file,
-                                   SSL_FILETYPE_PEM) <= 0 )
-    return raise_ssl_error(ERR_get_error());
-
   for (idx = 0; idx < old->num_cert_key_pairs; idx++)
-  { X509 *cert_x509;
-    new->cert_key_pairs[idx].certificate = strdup(old->cert_key_pairs[idx].certificate);
-    new->cert_key_pairs[idx].key = strdup(old->cert_key_pairs[idx].key);
-
-    if ( !ssl_use_certificate(new, new->cert_key_pairs[idx].certificate, &cert_x509) ||
-         !ssl_use_key(new, new->cert_key_pairs[idx].key) )
-      return FALSE;
-    new->cert_key_pairs[idx].certificate_X509 = cert_x509;
+  { new->cert_key_pairs[idx].certificate = ssl_strdup(old->cert_key_pairs[idx].certificate);
+    new->cert_key_pairs[idx].key = ssl_strdup(old->cert_key_pairs[idx].key);
     new->num_cert_key_pairs++;
   }
 
-  new->peer_cert_required    = old->peer_cert_required;
-
-  (void) SSL_CTX_set_verify(new->ctx,
-                            new->peer_cert_required ?
-                            SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT :
-                            SSL_VERIFY_NONE,
-                            ssl_cb_cert_verify);
-
-  new->cert_required         = old->cert_required;
-#ifndef HAVE_X509_CHECK_HOST
-  new->hostname_check_status = old->hostname_check_status;
-#endif
-
-  if (old->cipher_list)
-  { new->cipher_list = strdup(old->cipher_list);
-    if (!SSL_CTX_set_cipher_list(new->ctx, new->cipher_list))
-      return raise_ssl_error(ERR_get_error());
-  }
-
-  ssl_init_sni(new);
-
-  return TRUE;
+  return ssl_config(new);
 }
 
 
