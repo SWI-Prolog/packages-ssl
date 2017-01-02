@@ -2425,6 +2425,7 @@ ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
   certX509 = PEM_read_bio_X509(bio, NULL, NULL, NULL);
   if ( !certX509 )
     return raise_ssl_error(ERR_get_error());
+  *ret = certX509;
 
   if ( SSL_CTX_use_certificate(config->ctx, certX509) <= 0 )
     return raise_ssl_error(ERR_get_error());
@@ -2442,7 +2443,6 @@ ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
 
   BIO_free(bio);
 
-  *ret = certX509;
   return TRUE;
 }
 
