@@ -71,7 +71,6 @@ static atom_t ATOM_server;
 static atom_t ATOM_client;
 static atom_t ATOM_password;
 static atom_t ATOM_host;
-static atom_t ATOM_cert;
 static atom_t ATOM_peer_cert;
 static atom_t ATOM_cacert_file;
 static atom_t ATOM_require_crl;
@@ -211,7 +210,6 @@ typedef struct pl_ssl {
     char                *ecdh_curve;
     STACK_OF(X509_CRL)  *crl_list;
     char                *password;
-    BOOL                 cert_required;
     BOOL                 crl_required;
     BOOL                 peer_cert_required;
 
@@ -1496,7 +1494,6 @@ ssl_new(void)
         new->host                = NULL;
 
         new->cacert              = NULL;
-        new->cert_required       = FALSE;
         new->certificate_file    = NULL;
         new->num_cert_key_pairs  = 0;
         for (i = 0; i < SSL_MAX_CERT_KEY_PAIRS; i++)
@@ -2128,7 +2125,6 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
         assert(config->magic == SSL_CONFIG_MAGIC);
         config->ctx  = ssl_ctx;
         config->role = role;
-        config->cert_required = (role == PL_SSL_SERVER);
         config->peer_cert_required = (role != PL_SSL_SERVER);
 
         /*
@@ -2565,8 +2561,8 @@ ssl_config(PL_SSL *config)
   SSL_CTX_set_default_passwd_cb(config->ctx, ssl_cb_pem_passwd);
   ssl_deb(1, "password handler installed\n");
 
-  if ( config->cert_required ||
-       ( config->certificate_file && config->key_file ) ||
+  if ( config->certificate_file ||
+       config->key_file ||
        ( config->num_cert_key_pairs > 0 ) )
   { if ( !ssl_use_certificates(config) )
       return FALSE;
@@ -2943,13 +2939,6 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_host(conf, s);
-    } else if ( name == ATOM_cert && arity == 1 )
-    { int val;
-
-      if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
-
-      conf->cert_required = val;
     } else if ( name == ATOM_peer_cert && arity == 1 )
     { int val;
 
@@ -3335,7 +3324,6 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->cipher_list         = ssl_strdup(old->cipher_list);
   new->ecdh_curve          = ssl_strdup(old->ecdh_curve);
 
-  new->cert_required       = old->cert_required;
 #ifndef HAVE_X509_CHECK_HOST
   new->hostname_check_status = old->hostname_check_status;
 #endif
@@ -3596,7 +3584,6 @@ install_ssl4pl(void)
   MKATOM(client);
   MKATOM(password);
   MKATOM(host);
-  MKATOM(cert);
   MKATOM(peer_cert);
   MKATOM(cacert_file);
   MKATOM(certificate_file);

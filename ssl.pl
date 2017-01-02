@@ -82,7 +82,6 @@
                        crl(any),
                        require_crl(boolean),
                        cert_verify_hook(callable),
-                       cert(boolean),
                        peer_cert(boolean),
                        close_parent(boolean),
                        close_notify(boolean),
@@ -130,15 +129,17 @@ easily be used.
 %     certificate verification may fail when negotiating a
 %     secure connection.
 %     * certificate_file(+FileName)
-%     Specify where the certificate file can be found. This can be
-%     the same as the key_file(+FileName) option.  A certificate
-%     file is obligatory for a server and may be provided for a
-%     client if the server demands the client to identify itself
-%     with a client certificate using the peer_cert(true)
-%     option. If a certificate is provided, it is necessary to
-%     also provide a matching _private key_ via the key_file/1
-%     option. To configure multiple certificates, use the option
-%     certificate_key_pairs/1 instead.
+%     Specify where the certificate file can be found. This can be the
+%     same as the key_file(+FileName) option.  A server _must_ have at
+%     least one certificate before clients can connect. A client
+%     _must_ have a certificate only if the server demands the client
+%     to identify itself with a client certificate using the
+%     peer_cert(true) option. If a certificate is provided, it is
+%     necessary to also provide a matching _private key_ via the
+%     key_file/1 option. To configure multiple certificates, use the
+%     option certificate_key_pairs/1 instead. Alternatively, use
+%     ssl_add_certificate_key/4 to add certificates and keys to an
+%     existing context.
 %     * key_file(+FileName)
 %     Specify where the private key that matches the certificate can
 %     be found.  If the key is encrypted with a password, this must
@@ -214,11 +215,6 @@ easily be used.
 %     Specify a curve for ECDHE ciphers. If this option is not
 %     specified, the OpenSSL default parameters are used.  With
 %     OpenSSL prior to 1.1.0, `prime256v1` is used by default.
-%     * cert(+Boolean)
-%     Trigger the sending of our certificate specified by
-%     certificate_file(FileName).  Sending is automatic for the
-%     server role and implied if both a certificate and key are
-%     supplied for clients, making this option obsolete.
 %     * peer_cert(+Boolean)
 %     Trigger the request of our peer's certificate while
 %     establishing the SSL layer. This option is automatically
