@@ -2,7 +2,7 @@
 
     Author:        Matt Lilley and Markus Triska
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2016, SWI-Prolog Foundation
+    Copyright (c)  2004-2017, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -40,11 +40,12 @@
 #include "cryptolib.h"
 
 static atom_t ATOM_sslv23;
-static atom_t ATOM_minus;			/* "-" */
+static atom_t ATOM_minus;                       /* "-" */
 static atom_t ATOM_text;
 static atom_t ATOM_octet;
 static atom_t ATOM_utf8;
 
+static atom_t ATOM_md5;
 static atom_t ATOM_sha1;
 static atom_t ATOM_sha224;
 static atom_t ATOM_sha256;
@@ -55,6 +56,7 @@ static atom_t ATOM_pkcs;
 static atom_t ATOM_pkcs_oaep;
 static atom_t ATOM_none;
 static atom_t ATOM_block;
+static atom_t ATOM_algorithm;
 static atom_t ATOM_encoding;
 static atom_t ATOM_padding;
 
@@ -65,6 +67,255 @@ typedef enum
 { RSA_MODE, EVP_MODE
 } crypt_mode_t;
 
+
+                 /***************************
+                 *         HASHING          *
+                 ****************************/
+
+
+#define CONTEXT_MAGIC (~ 0x53481284L)
+
+typedef struct context
+{ int             magic;
+  atom_t          atom;
+  IOENC           encoding;
+  const EVP_MD   *algorithm;
+  EVP_MD_CTX     *ctx;
+} PL_CRYPTO_CONTEXT;
+
+
+static int
+release_context(atom_t atom)
+{ PL_CRYPTO_CONTEXT *c;
+  size_t size;
+
+  c = PL_blob_data(atom, &size, NULL);
+  ssl_deb(4, "Releasing PL_CRYPTO_CONTEXT %p\n", c);
+  EVP_MD_CTX_free(c->ctx);
+  free(c);
+  return TRUE;
+}
+
+static int
+compare_context(atom_t a, atom_t b)
+{ PL_CRYPTO_CONTEXT* *c1 = PL_blob_data(a, NULL, NULL);
+  PL_CRYPTO_CONTEXT* *c2 = PL_blob_data(b, NULL, NULL);
+
+  return ( c1 > c2 ?  1 :
+           c1 < c2 ? -1 : 0
+         );
+}
+
+static int
+write_context(IOSTREAM *s, atom_t symbol, int flags)
+{ PL_CRYPTO_CONTEXT *c = PL_blob_data(symbol, NULL, NULL);
+
+  Sfprintf(s, "<crypto_context>(%p)", c);
+
+  return TRUE;
+}
+
+static void
+acquire_context(atom_t atom)
+{ ssl_deb(4, "Acquire on atom %d\n", atom);
+}
+
+static PL_blob_t crypto_context_type =
+{ PL_BLOB_MAGIC,
+  PL_BLOB_NOCOPY,
+  "crypto_context",
+  release_context,
+  compare_context,
+  write_context,
+  acquire_context
+};
+
+static int
+put_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
+{ return PL_unify_atom(tcontext, context->atom);
+}
+
+static int
+register_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
+{ term_t blob = PL_new_term_ref();
+  int rc;
+
+  PL_put_blob(blob, context, sizeof(void*), &crypto_context_type);
+  rc = PL_get_atom(blob, &context->atom);
+  assert(rc);
+  ssl_deb(4, "Atom created: %d\n", context->atom);
+  return put_context(tcontext, context);
+}
+
+static int
+get_context(term_t tcontext, PL_CRYPTO_CONTEXT **context)
+{ PL_blob_t *type;
+  void *data;
+
+  if ( PL_get_blob(tcontext, &data, NULL, &type) &&
+       type == &crypto_context_type )
+  { PL_CRYPTO_CONTEXT *c = data;
+
+    assert(c->magic == CONTEXT_MAGIC);
+    *context = c;
+
+    return TRUE;
+  }
+
+  return PL_type_error("crypto_context", tcontext);
+}
+
+
+
+static int
+hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
+{ term_t opts = PL_copy_term_ref(options);
+  term_t opt = PL_new_term_ref();
+
+  /* defaults */
+  result->encoding = REP_UTF8;
+  result->algorithm = EVP_sha256();
+
+  while(PL_get_list(opts, opt, opts))
+  { atom_t aname;
+    size_t arity;
+
+    if ( PL_get_name_arity(opt, &aname, &arity) && arity == 1 )
+    { term_t a = PL_new_term_ref();
+
+      _PL_get_arg(1, opt, a);
+
+      if ( aname == ATOM_algorithm )
+      { atom_t a_algorithm;
+
+        if ( !PL_get_atom_ex(a, &a_algorithm) )
+          return FALSE;
+        if ( a_algorithm == ATOM_sha1  )
+        { result->algorithm = EVP_sha1();
+        } else if ( a_algorithm == ATOM_sha224 )
+        { result->algorithm = EVP_sha224();
+        } else if ( a_algorithm == ATOM_sha256 )
+        { result->algorithm = EVP_sha256();
+        } else if ( a_algorithm == ATOM_sha384 )
+        { result->algorithm = EVP_sha384();
+        } else if ( a_algorithm == ATOM_sha512 )
+        { result->algorithm = EVP_sha512();
+        } else if ( a_algorithm == ATOM_md5 )
+        { result->algorithm = EVP_md5();
+        } else
+          return PL_domain_error("algorithm", a);
+      } else if ( aname == ATOM_encoding )
+      { atom_t a_enc;
+
+        if ( !PL_get_atom_ex(a, &a_enc) )
+          return FALSE;
+        if ( a_enc == ATOM_utf8 )
+          result->encoding = REP_UTF8;
+        else if ( a_enc == ATOM_octet )
+          result->encoding = REP_ISO_LATIN_1;
+        else
+          return PL_domain_error("encoding", a);
+      }
+    } else
+    { return PL_type_error("option", opt);
+    }
+  }
+
+  if ( !PL_get_nil_ex(opts) )
+    return FALSE;
+
+  return TRUE;
+}
+
+
+static foreign_t
+pl_crypto_context_new(term_t tcontext, term_t options)
+{
+  PL_CRYPTO_CONTEXT *context = NULL;
+
+  context = malloc(sizeof(*context));
+
+  if ( !context )
+    return FALSE;
+
+  context->magic = CONTEXT_MAGIC;
+  context->ctx = EVP_MD_CTX_new();
+
+  if ( !hash_options(options, context) )
+    return FALSE;
+
+  if ( !EVP_DigestInit_ex(context->ctx, context->algorithm, NULL) )
+  { EVP_MD_CTX_free(context->ctx);
+    return FALSE;
+  }
+  return register_context(tcontext, context);
+}
+
+static foreign_t
+pl_crypto_context_copy(term_t tin, term_t tout)
+{
+  PL_CRYPTO_CONTEXT *in, *out;
+
+  if ( !get_context(tin, &in) )
+    return FALSE;
+
+  out = malloc(sizeof(*out));
+
+  if ( !out )
+    return FALSE;
+
+  out->magic = CONTEXT_MAGIC;
+  out->ctx = EVP_MD_CTX_new();
+
+  out->encoding = in->encoding;
+  out->algorithm = in->algorithm;
+
+  if ( !EVP_DigestInit_ex(out->ctx, out->algorithm, NULL) )
+  { EVP_MD_CTX_free(out->ctx);
+    return FALSE;
+  }
+
+  return register_context(tout, out) && EVP_MD_CTX_copy_ex(out->ctx, in->ctx);
+}
+
+
+static foreign_t
+pl_crypto_update_context(term_t from, term_t tcontext)
+{
+  PL_CRYPTO_CONTEXT *context = NULL;
+  size_t datalen;
+  char *data;
+
+  if ( !get_context(tcontext, &context) )
+    return FALSE;
+
+  if ( !PL_get_nchars(from, &datalen, &data,
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|context->encoding) )
+    return FALSE;
+
+
+  return EVP_DigestUpdate(context->ctx, data, datalen);
+}
+
+static foreign_t
+pl_crypto_context_hash(term_t tcontext, term_t hash)
+{
+  PL_CRYPTO_CONTEXT *context = NULL;
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int len;
+
+  if ( !get_context(tcontext, &context) )
+    return FALSE;
+
+  EVP_DigestFinal_ex(context->ctx, digest, &len);
+  return PL_unify_list_ncodes(hash, len, (char *) digest);
+}
+
+
+
+                 /***************************
+                 *       Bignums & Keys     *
+                 ****************************/
 
 static int
 get_bn_arg(int a, term_t t, BIGNUM **bn)
@@ -799,15 +1050,22 @@ install_crypto4pl(void)
   MKATOM(sha256);
   MKATOM(sha384);
   MKATOM(sha512);
+  MKATOM(md5);
   MKATOM(pkcs);
   MKATOM(pkcs_oaep);
   MKATOM(none);
   MKATOM(block);
   MKATOM(encoding);
+  MKATOM(algorithm);
   MKATOM(padding);
 
   FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
+
+  PL_register_foreign("crypto_context_new", 2, pl_crypto_context_new, 0);
+  PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
+  PL_register_foreign("_crypto_context_copy", 2, pl_crypto_context_copy, 0);
+  PL_register_foreign("_crypto_context_hash", 2, pl_crypto_context_hash, 0);
 
   PL_register_foreign("rsa_private_decrypt", 4, pl_rsa_private_decrypt, 0);
   PL_register_foreign("rsa_private_encrypt", 4, pl_rsa_private_encrypt, 0);

@@ -2,7 +2,7 @@
 
     Author:        Matt Lilley and Markus Triska
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2016, SWI-Prolog Foundation
+    Copyright (c)  2004-2017, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -33,7 +33,12 @@
 */
 
 :- module(crypto,
-          [ evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+          [ crypto_data_hash/3,         % +Data, -Hash, +Options
+            crypto_file_hash/3,         % +File, -Hash, +Options
+            crypto_context_new/2,       % -Context, +Options
+            crypto_data_context/3,      % +Data, +C0, -C
+            crypto_context_hash/2,      % +Context, -Hash
+            evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
             evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
             rsa_private_decrypt/3,      % +Key, +Ciphertext, -Plaintext
             rsa_private_encrypt/3,      % +Key, +Plaintext, -Ciphertext
@@ -60,6 +65,104 @@ connections, sockets or streams.
 @author Matt Lilley
 @author [Markus Triska](https://www.metalevel.at)
 */
+
+%%  crypto_data_hash(+Data, -Hash, +Options) is det
+%
+%   Hash is the hash of Data. The conversion is controlled
+%   by Options:
+%
+%    * algorithm(+Algorithm)
+%    One of =md5=, =sha1=, =sha224=, =sha256= (default), =sha384= or
+%    =sha512=.
+%    * encoding(+Encoding)
+%    If Data is a sequence of character _codes_, this must be
+%    translated into a sequence of _bytes_, because that is what
+%    the hashing requires.  The default encoding is =utf8=.  The
+%    other meaningful value is =octet=, claiming that Data contains
+%    raw bytes.
+%
+%  @param Data is either an atom, string or code-list
+%  @param Hash is an atom that represents the hash.
+
+crypto_data_hash(Data, Hash, Options) :-
+    crypto_context_new(Context0, Options),
+    crypto_data_context(Data, Context0, Context),
+    crypto_context_hash(Context, Hash).
+
+%!  crypto_file_hash(+File, -Hash, +Options) is det.
+%
+%   True if  Hash is the hash  of the content of  File. For Options,
+%   see crypto_data_hash/3.
+
+crypto_file_hash(File, Hash, Options) :-
+    setup_call_cleanup(open(File, read, In, [type(binary)]),
+                       crypto_stream_hash(In, Hash, Options),
+                       close(In)).
+
+crypto_stream_hash(Stream, Hash, Options) :-
+    crypto_context_new(Context0, Options),
+    update_hash(Stream, Context0, Context),
+    crypto_context_hash(Context, Hash).
+
+update_hash(In, Context0, Context) :-
+    (   at_end_of_stream(In)
+    ->  Context = Context0
+    ;   read_pending_codes(In, Data, []),
+        crypto_data_context(Data, Context0, Context1),
+        update_hash(In, Context1, Context)
+    ).
+
+
+%!  crypto_context_new(-Context, +Options) is det.
+%
+%   Context is unified  with the empty context,  taking into account
+%   Options.  The  context can  be used in  crypto_data_hash/4.  For
+%   Options, see crypto_data_hash/3.
+%
+%   @param Context is an opaque pure  Prolog term that is subject to
+%          garbage collection.
+
+%!  crypto_data_context(+Data, +Context0, -Context) is det
+%
+%   Context0 is an existing computation  context, and Context is the
+%   new context  after hashing  Data in  addition to  the previously
+%   hashed data.  Context0 may be  produced by a prior invocation of
+%   either crypto_context_new/2 or crypto_data_context/3 itself.
+%
+%   This predicate allows a hash to be computed in chunks, which may
+%   be important while working  with Metalink (RFC 5854), BitTorrent
+%   or similar technologies, or simply with big files.
+
+crypto_data_context(Data, Context0, Context) :-
+    '_crypto_context_copy'(Context0, Context),
+    '_crypto_update_context'(Data, Context).
+
+
+%!  crypto_context_hash(+Context, -Hash)
+%
+%   Obtain the  hash code of  Context. Hash is an  atom representing
+%   the hash code  that is associated with the current  state of the
+%   computation context Context.
+
+crypto_context_hash(Context, Hash) :-
+    '_crypto_context_copy'(Context, Copy),
+    '_crypto_context_hash'(Copy, List),
+    crypto_hash_atom(List, Hash).
+
+crypto_hash_atom(Codes, Hash) :-
+    phrase(bytes_hex(Codes), HexCodes),
+    atom_codes(Hash, HexCodes).
+
+bytes_hex([]) --> [].
+bytes_hex([H|T]) -->
+    { High is H>>4,
+      Low is H /\ 0xf,
+      code_type(C0, xdigit(High)),
+      code_type(C1, xdigit(Low))
+    },
+    [C0,C1],
+    bytes_hex(T).
+
 
 %!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
 %!  rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
@@ -216,6 +319,16 @@ rsa_verify(Key, Data, Signature, Options) :-
 %   Algorithm,  key  Key,  and  iv   IV,    to   give   CipherText.  See
 %   evp_decrypt/6.
 
+                 /*******************************
+                 *          Sandboxing          *
+                 *******************************/
+
+:- multifile sandbox:safe_primitive/1.
+
+sandbox:safe_primitive(crypto:crypto_data_hash(_,_,_)).
+sandbox:safe_primitive(crypto:crypto_data_context(_,_,_)).
+sandbox:safe_primitive(crypto:crypto_context_new(_,_)).
+sandbox:safe_primitive(crypto:crypto_context_hash(_,_)).
 
                  /*******************************
                  *           MESSAGES           *
