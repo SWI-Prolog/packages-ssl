@@ -38,6 +38,8 @@
             crypto_context_new/2,       % -Context, +Options
             crypto_data_context/3,      % +Data, +C0, -C
             crypto_context_hash/2,      % +Context, -Hash
+            crypto_open_hash_stream/3,  % +InStream, -HashStream, +Options
+            crypto_stream_hash/2,       % +HashStream, -Hash
             evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
             evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
             rsa_private_decrypt/3,      % +Key, +Ciphertext, -Plaintext
@@ -162,6 +164,34 @@ bytes_hex([H|T]) -->
     },
     [C0,C1],
     bytes_hex(T).
+
+%!  crypto_open_hash_stream(+OrgStream, -HashStream, +Options) is det.
+%
+%   Open a filter stream on OrgStream  that maintains a hash. The hash
+%   can be retrieved at any time using crypto_stream_hash/2. Available
+%   Options in addition to those of crypto_data_hash/3 are:
+%
+%     - close_parent(+Bool)
+%     If `true` (default), closing the filter stream also closes the
+%     original (parent) stream.
+
+crypto_open_hash_stream(OrgStream, HashStream, Options) :-
+    crypto_context_new(Context, Options),
+    '_crypto_open_hash_stream'(OrgStream, HashStream, Context).
+
+
+%!  crypto_stream_hash(+HashStream, -Hash) is det.
+%
+%   Unify  Hash with  a hash  for  the bytes  sent to  or read  from
+%   HashStream.  Note  that  the  hash is  computed  on  the  stream
+%   buffers. If the stream is an  output stream, it is first flushed
+%   and the Digest  represents the hash at the  current location. If
+%   the stream is an input stream  the Digest represents the hash of
+%   the processed input including the already buffered data.
+
+crypto_stream_hash(Stream, Hash) :-
+    '_crypto_stream_context'(Stream, Context),
+    crypto_context_hash(Context, Hash).
 
 
 %!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.

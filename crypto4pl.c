@@ -57,6 +57,7 @@ static atom_t ATOM_pkcs_oaep;
 static atom_t ATOM_none;
 static atom_t ATOM_block;
 static atom_t ATOM_algorithm;
+static atom_t ATOM_close_parent;
 static atom_t ATOM_encoding;
 static atom_t ATOM_padding;
 
@@ -80,9 +81,22 @@ typedef struct context
   atom_t          atom;
   IOENC           encoding;
   const EVP_MD   *algorithm;
+
+  IOSTREAM       *parent_stream;      /* Original stream */
+  IOSTREAM       *hash_stream;
+  IOENC           parent_encoding;
+  int             close_parent;
+
   EVP_MD_CTX     *ctx;
 } PL_CRYPTO_CONTEXT;
 
+static int
+free_crypto_context(PL_CRYPTO_CONTEXT *c)
+{
+  EVP_MD_CTX_free(c->ctx);
+  free(c);
+  return TRUE;
+}
 
 static int
 release_context(atom_t atom)
@@ -91,8 +105,7 @@ release_context(atom_t atom)
 
   c = PL_blob_data(atom, &size, NULL);
   ssl_deb(4, "Releasing PL_CRYPTO_CONTEXT %p\n", c);
-  EVP_MD_CTX_free(c->ctx);
-  free(c);
+  free_crypto_context(c);
   return TRUE;
 }
 
@@ -204,6 +217,9 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
         { result->algorithm = EVP_md5();
         } else
           return PL_domain_error("algorithm", a);
+      } else if ( aname == ATOM_close_parent )
+      { if ( !PL_get_bool_ex(a, &result->close_parent) )
+          return FALSE;
       } else if ( aname == ATOM_encoding )
       { atom_t a_enc;
 
@@ -240,6 +256,9 @@ pl_crypto_context_new(term_t tcontext, term_t options)
 
   context->magic = CONTEXT_MAGIC;
   context->ctx = EVP_MD_CTX_new();
+
+  context->parent_stream = NULL;
+  context->hash_stream   = NULL;
 
   if ( !hash_options(options, context) )
     return FALSE;
@@ -311,6 +330,154 @@ pl_crypto_context_hash(term_t tcontext, term_t hash)
   return PL_unify_list_ncodes(hash, len, (char *) digest);
 }
 
+
+                 /***************************
+                 *     Hashes on streams    *
+                 ****************************/
+
+static void
+hash_append(PL_CRYPTO_CONTEXT *context, void *data, size_t size)
+{
+  EVP_DigestUpdate(context->ctx, data, size);
+}
+
+
+static ssize_t                          /* range-limited read */
+hash_read(void *handle, char *buf, size_t size)
+{ PL_CRYPTO_CONTEXT *ctx = handle;
+  ssize_t rd;
+
+  if ( (rd = Sfread(buf, sizeof(char), size, ctx->parent_stream)) >= 0 )
+  { hash_append(ctx, buf, rd);
+
+    return rd;
+  }
+
+  return rd;
+}
+
+
+static ssize_t
+hash_write(void *handle, char *buf, size_t size)
+{ PL_CRYPTO_CONTEXT *ctx = handle;
+  size_t written = 0;
+
+  hash_append(ctx, buf, size);
+
+  while ( written < size )
+  { ssize_t wr = Sfwrite(buf+written, sizeof(char), size, ctx->parent_stream);
+
+    if ( wr >= 0 )
+    { written += wr;
+    } else
+      return wr;
+  }
+
+  return size;
+}
+
+
+static int
+hash_control(void *handle, int op, void *data)
+{ PL_CRYPTO_CONTEXT *ctx = handle;
+
+  switch(op)
+  { case SIO_SETENCODING:
+      return 0;                         /* allow switching encoding */
+    default:
+      if ( ctx->parent_stream->functions->control )
+        return (*ctx->parent_stream->functions->control)(ctx->parent_stream->handle, op, data);
+      return -1;
+  }
+}
+
+
+static int
+hash_close(void *handle)
+{ int rc = 0;
+  PL_CRYPTO_CONTEXT *ctx = handle;
+
+  ctx->parent_stream->encoding = ctx->parent_encoding;
+  if ( ctx->parent_stream->upstream )
+    Sset_filter(ctx->parent_stream, NULL);
+
+  if ( ctx->close_parent )
+    rc = Sclose(ctx->parent_stream);
+
+  free_crypto_context(ctx);
+
+  return rc;
+}
+
+static IOFUNCTIONS hash_functions =
+{ hash_read,
+  hash_write,
+  NULL,                 /* seek */
+  hash_close,
+  hash_control,
+  NULL,                 /* seek64 */
+};
+
+#define COPY_FLAGS (SIO_INPUT|SIO_OUTPUT| \
+                    SIO_TEXT| \
+                    SIO_REPXML|SIO_REPPL|\
+                    SIO_RECORDPOS)
+
+static foreign_t
+pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
+{ PL_CRYPTO_CONTEXT *context;
+  IOSTREAM *s, *s2;
+
+  if ( !get_context(tcontext, &context) )
+    return FALSE;
+
+  if ( !PL_get_stream_handle(org, &s) )
+    return FALSE;                       /* Error */
+
+  context->parent_encoding = s->encoding;
+  context->parent_stream = s;
+
+  if ( !(s2 = Snew(context,
+                   (s->flags&COPY_FLAGS)|SIO_FBUF,
+                   &hash_functions))    )
+  { PL_release_stream(s);
+
+    return FALSE;
+  }
+
+  s2->encoding = s->encoding;
+  s->encoding = ENC_OCTET;
+  context->hash_stream = s2;
+
+  if ( PL_unify_stream(new, s2) )
+  { Sset_filter(s, s2);
+    PL_release_stream(s);
+    /* Increase atom reference count so that the context is not
+       GCd until this session is complete */
+    PL_register_atom(context->atom);
+
+    return TRUE;
+  } else
+  { PL_release_stream(s);
+    return FALSE;
+  }
+}
+
+
+static foreign_t
+pl_crypto_stream_context(term_t stream, term_t tcontext)
+{ IOSTREAM *s;
+  int rc;
+
+  if ( PL_get_stream_handle(stream, &s) )
+  { PL_CRYPTO_CONTEXT *ctx = s->handle;
+    rc = register_context(tcontext, ctx);
+    PL_release_stream(s);
+    return rc;
+  }
+
+  return FALSE;
+}
 
 
                  /***************************
@@ -1057,6 +1224,7 @@ install_crypto4pl(void)
   MKATOM(block);
   MKATOM(encoding);
   MKATOM(algorithm);
+  MKATOM(close_parent);
   MKATOM(padding);
 
   FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
@@ -1066,6 +1234,9 @@ install_crypto4pl(void)
   PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
   PL_register_foreign("_crypto_context_copy", 2, pl_crypto_context_copy, 0);
   PL_register_foreign("_crypto_context_hash", 2, pl_crypto_context_hash, 0);
+  PL_register_foreign("_crypto_open_hash_stream", 3,
+                      pl_crypto_open_hash_stream, 0);
+  PL_register_foreign("_crypto_stream_context", 2, pl_crypto_stream_context, 0);
 
   PL_register_foreign("rsa_private_decrypt", 4, pl_rsa_private_decrypt, 0);
   PL_register_foreign("rsa_private_encrypt", 4, pl_rsa_private_encrypt, 0);
