@@ -43,17 +43,12 @@
                                         % +AllCertificates, +FirstCertificate,
                                         % +Error
             ssl_context/3,              % +Role, -Config, :Options
-            ssl_init/3,                 % -Config, +Role, :Options
-            ssl_accept/3,               % +Config, -Socket, -Peer
-            ssl_open/3,                 % +Config, -Read, -Write
-            ssl_open/4,                 % +Config, +Socket, -Read, -Write
             ssl_add_certificate_key/4,  % +Config, +Cert, +Key, -Config
             ssl_set_sni_hook/3,         % +Config, +Goal, -Config
             ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
                                         %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,     % +Stream, -Certificate
-            ssl_session/2,              % +Stream, -Session
-            ssl_exit/1                  % +Config
+            ssl_session/2               % +Stream, -Session
           ]).
 :- use_module(library(socket)).
 :- use_module(library(error)).
@@ -463,120 +458,6 @@ ssl_set_sni_hook(SSL0, Goal, SSL) :-
 %   you try and load such a key. Otherwise PublicKey will be unified
 %   with  public_key(KeyTerm)  where  KeyTerm  is    an  rsa/8  term
 %   representing an RSA key.
-
-
-/*
-  These predicates are here to support backward compatibility with the previous
-  incarnation of the SSL library. No changes should be required for legacy code.
-*/
-
-%!  ssl_init(-SSL, +Role, +Options) is det.
-%
-%   Create an SSL context.  Similar to ssl_context/3.
-%
-%   @deprecated   New   code   should     use    ssl_context/3   and
-%   ssl_negotiate/5 to realise an SSL connection.
-
-ssl_init(SSL, Role, Options) :-
-    must_be(oneof([client,server]), Role),
-    ssl_init2(Role, SSL, Options).
-
-ssl_init2(server, SSL, Options) :-
-    Options = _:Options1,
-    need_option(port(Port), Options1),
-    tcp_socket(Socket),
-    assertion(Socket = '$socket'(_)),       % may change
-    tcp_setopt(Socket, reuseaddr),
-    tcp_bind(Socket, Port),
-    tcp_listen(Socket, 5),
-    catch(ssl_context(server, SSL, Options),
-          Exception,
-          ( tcp_close_socket(Socket),
-            throw(Exception))),
-    Socket = '$socket'(S),
-    ssl_put_socket(SSL, S).
-ssl_init2(client, SSL, Options) :-
-    Options = _:Options1,
-    need_option(port(Port), Options1),
-    need_option(host(Host), Options1),
-    tcp_socket(Socket),
-    assertion(Socket = '$socket'(_)),       % may change
-    tcp_setopt(Socket, reuseaddr),
-    tcp_connect(Socket, Host:Port),
-    catch(ssl_context(client, SSL, Options),
-          Exception,
-          ( tcp_close_socket(Socket),
-            throw(Exception))),
-    Socket = '$socket'(S),
-    ssl_put_socket(SSL, S).
-
-need_option(Opt, Options) :-
-    option(Opt, Options),
-    !.
-need_option(Opt, _) :-
-    functor(Opt, Name, _),
-    existence_error(option, Name).
-
-%!  ssl_accept(+SSL, -Socket, -Peer) is det.
-%
-%   (Server) Blocks until a connection is made   to  the host on the
-%   port specified by the  SSL  object.   Socket  and  Peer are then
-%   returned.
-%
-%   @deprecated   New   code    should     use    tcp_accept/3   and
-%   ssl_negotiate/5.
-
-ssl_accept(SSL, Socket, Peer) :-
-    ssl_get_socket(SSL, S),
-    tcp_accept('$socket'(S), Socket, Peer).
-
-%!  ssl_open(+SSL, -Read, -Write) is det.
-%
-%   (Client) Connect to the  host  and   port  specified  by the SSL
-%   object, negotiate an SSL connection and   return  Read and Write
-%   streams if successful.  It  calls   ssl_open/4  with  the socket
-%   associated  to  the  SSL  instance.  See  ssl_open/4  for  error
-%   handling.
-%
-%   @deprecated New code should use ssl_negotiate/5.
-
-ssl_open(SSL, In, Out) :-
-    ssl_get_socket(SSL, Socket),
-    ssl_open(SSL, '$socket'(Socket), In, Out).
-
-%!  ssl_open(+SSL, +Socket, -Read, -Write) is det.
-%
-%   Given the Socket  returned  from   ssl_accept/3,  negotiate  the
-%   connection on the accepted socket  and   return  Read  and Write
-%   streams if successful. If ssl_negotiate/5   raises an exception,
-%   the Socket is closed and the exception is re-thrown.
-%
-%   @deprecated New code should use ssl_negotiate/5.
-
-ssl_open(SSL, Socket, In, Out):-
-    tcp_open_socket(Socket, Read, Write),
-    catch(ssl_negotiate(SSL, Read, Write, In, Out), E,
-          ssl_open_failed(Read, Write, E)).
-
-ssl_open_failed(Read, Write, Error) :-
-    close(Read, [force(true)]),
-    close(Write, [force(true)]),
-    throw(Error).
-
-%!  ssl_exit(+SSL)
-%
-%   Free an SSL context. SSL contexts   are  reclaimed by the Prolog
-%   (atom) garbage collector. Calling ssl_exit/1   is  needed if the
-%   deprecated  ssl_init/3  interface  is  used    rather  than  the
-%   ssl_context/3 based interface to reclaim the associated socket.
-
-ssl_exit(SSL) :-
-    (   ssl_get_socket(SSL, Socket),
-        Socket \== -1
-    ->  tcp_close_socket('$socket'(Socket))
-    ;   true
-    ),
-    '_ssl_exit'(Socket).
 
 
 %!  cert_accept_any(+SSL,

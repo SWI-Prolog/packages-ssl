@@ -178,7 +178,6 @@ typedef struct pl_ssl {
      */
     PL_SSL_ROLE          role;
 
-    int                  sock;           /* the listening/connected socket */
     int                  close_parent;
     atom_t               atom;
     BOOL                 close_notify;
@@ -230,7 +229,6 @@ typedef struct pl_ssl {
 typedef struct ssl_instance {
     PL_SSL              *config;
     SSL                 *ssl;
-    nbio_sock_t          sock;
     IOSTREAM            *sread;         /* wire streams */
     IOSTREAM            *swrite;
     IOSTREAM            *dread;         /* data streams */
@@ -1048,16 +1046,7 @@ acquire_ssl(atom_t atom)
 void
 ssl_exit(PL_SSL *config)
 { if ( config )
-  { if ( config->role == PL_SSL_SERVER && config->sock >= 0 )
-    { /* If the socket has been stored, then we ought to close it
-         if the SSL is being closed
-         FIXME: this beast is owned by Prolog now, no?
-      */
-      closesocket(config->sock);
-      config->sock = -1;
-    }
-
-    if (config->ctx)
+  { if (config->ctx)
     { ssl_deb(1, "Calling SSL_CTX_free()\n");
       SSL_CTX_free(config->ctx);	/* doesn't call free hook? */
     } else
@@ -1477,7 +1466,6 @@ ssl_new(void)
     if ((new = malloc(sizeof(*new))) != NULL) {
         new->role                = PL_SSL_NONE;
 
-        new->sock                = -1;
         new->close_parent        = FALSE;
         new->atom                = 0;
         new->close_notify        = FALSE;
@@ -2034,12 +2022,6 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
         if (instance->ssl) {
             SSL_free(instance->ssl);
-        }
-
-        if (instance->sock >= 0) {
-           /* If the socket has been stored, then we ought to close it if the SSL is being closed */
-           ret = closesocket(instance->sock);
-           instance->sock = -1;
         }
 
         if (instance->swrite != NULL) {
@@ -2611,7 +2593,6 @@ ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
   if ((new = malloc(sizeof(PL_SSL_INSTANCE))) != NULL)
   { memset(new, 0, sizeof(*new));
     new->config = config;
-    new->sock   = -1;
     new->sread  = sread;
     new->swrite = swrite;
     new->fatal_alert = FALSE;
@@ -3185,17 +3166,6 @@ pl_ssl_control(void *handle, int action, void *data)
 }
 
 
-
-static foreign_t
-pl_ssl_exit(term_t config)
-{
-  /* This is now handled by GC and this predicate does nothing.
-     See release_ssl()
-  */
-  PL_succeed;
-}
-
-
 static IOFUNCTIONS ssl_funcs =
 { ssl_read,				/* read */
   ssl_write,				/* write */
@@ -3203,23 +3173,6 @@ static IOFUNCTIONS ssl_funcs =
   pl_ssl_close,				/* close */
   pl_ssl_control			/* control */
 };
-
-
-static foreign_t
-pl_ssl_put_socket(term_t config, term_t data)
-{ PL_SSL *conf;
-  if ( !get_conf(config, &conf) )
-    return FALSE;
-  return PL_get_integer(data, &conf->sock);
-}
-
-static foreign_t
-pl_ssl_get_socket(term_t config, term_t data)
-{ PL_SSL *conf;
-  if ( !get_conf(config, &conf) )
-    return FALSE;
-  return PL_unify_integer(data, conf->sock);
-}
 
 
 /**
@@ -3644,11 +3597,8 @@ install_ssl4pl(void)
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
 
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
-  PL_register_foreign("_ssl_exit",	1, pl_ssl_exit,	      0);
   PL_register_foreign("_ssl_init_from_context",
 					2, pl_ssl_init_from_context, 0);
-  PL_register_foreign("ssl_put_socket",	2, pl_ssl_put_socket, 0);
-  PL_register_foreign("ssl_get_socket",	2, pl_ssl_get_socket, 0);
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
   PL_register_foreign("_ssl_add_certificate_key",
 					3, pl_ssl_add_certificate_key, 0);
