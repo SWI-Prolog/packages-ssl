@@ -59,7 +59,6 @@
 :- use_foreign_library(foreign(ssl4pl)).
 
 :- meta_predicate
-    ssl_init(-, +, :),
     ssl_context(+, -, :),
     ssl_set_sni_hook(+, 3, -).
 
@@ -82,7 +81,6 @@
                        close_notify(boolean),
                        sni_hook(callable)
                      ]).
-:- predicate_options(ssl_init/3, 3, [pass_to(ssl_context/3, 3)]).
 
 /** <module> Secure Socket Layer (SSL) library
 
