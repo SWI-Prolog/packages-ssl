@@ -124,4 +124,4 @@ distclean:	clean
 		rm -f $(DOC).aux $(DOC).log $(DOC).out $(DOC).toc
 		rm -rf html
 		rm -rf autom4te.cache
-		rm -rf test/test_certs tests/*.csr tests/11-*.der
+		rm -rf tests/test_certs tests/*.csr tests/11-*.der
