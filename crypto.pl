@@ -64,6 +64,17 @@ This library provides bindings  to  functionality   of  OpenSSL  that is
 related to cryptography and authentication,   not  necessarily involving
 connections, sockets or streams.
 
+The  hash functionality  of this  library subsumes  and extends  that of
+`library(sha)`, `library(hash_stream)` and `library(md5)` by providing a
+unified interface to all available digest algorithms.
+
+The underlying  OpenSSL library  (`libcrypto`) is dynamically  loaded if
+_either_ `library(crypto)`  or `library(ssl)` are loaded.  Therefore, if
+your application uses `library(ssl)`,  you can use `library(crypto)` for
+hashing without increasing the memory  footprint of your application. In
+other cases, the specialised hashing  libraries are more lightweight but
+less general alternatives to `library(crypto)`.
+
 @author Matt Lilley
 @author [Markus Triska](https://www.metalevel.at)
 */
