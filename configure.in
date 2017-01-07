@@ -108,6 +108,7 @@ AC_CHECK_FUNCS(X509_CRL_get0_signature X509_get0_signature)
 AC_CHECK_FUNCS(X509_get0_notBefore X509_get0_notAfter)
 AC_CHECK_FUNCS(OpenSSL_version)
 AC_CHECK_FUNCS(EVP_CIPHER_CTX_reset)
+AC_CHECK_FUNCS(EVP_blake2b512 EVP_blake2s256)
 
 if test "x$ac_cv_func_X509_get0_signature" = "xyes"; then
   ac_oldcflags="$CFLAGS"

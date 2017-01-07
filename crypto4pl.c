@@ -51,6 +51,8 @@ static atom_t ATOM_sha224;
 static atom_t ATOM_sha256;
 static atom_t ATOM_sha384;
 static atom_t ATOM_sha512;
+static atom_t ATOM_blake2s256;
+static atom_t ATOM_blake2b512;
 
 static atom_t ATOM_pkcs;
 static atom_t ATOM_pkcs_oaep;
@@ -215,6 +217,12 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
         { result->algorithm = EVP_sha512();
         } else if ( a_algorithm == ATOM_md5 )
         { result->algorithm = EVP_md5();
+#if defined(HAVE_EVP_BLAKE2B512) && defined(HAVE_EVP_BLAKE2S256)
+        } else if ( a_algorithm == ATOM_blake2b512 )
+        {  result->algorithm = EVP_blake2b512();
+        } else if ( a_algorithm == ATOM_blake2s256 )
+        { result->algorithm = EVP_blake2s256();
+#endif
         } else
           return PL_domain_error("algorithm", a);
       } else if ( aname == ATOM_close_parent )
@@ -1212,12 +1220,16 @@ install_crypto4pl(void)
   MKATOM(text);
   MKATOM(octet);
   MKATOM(utf8);
+
   MKATOM(sha1);
   MKATOM(sha224);
   MKATOM(sha256);
   MKATOM(sha384);
   MKATOM(sha512);
   MKATOM(md5);
+  MKATOM(blake2b512);
+  MKATOM(blake2s256);
+
   MKATOM(pkcs);
   MKATOM(pkcs_oaep);
   MKATOM(none);

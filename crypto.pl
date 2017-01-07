@@ -85,8 +85,9 @@ less general alternatives to `library(crypto)`.
 %   by Options:
 %
 %    * algorithm(+Algorithm)
-%    One of =md5=, =sha1=, =sha224=, =sha256= (default), =sha384= or
-%    =sha512=.
+%    One of =md5=, =sha1=, =sha224=, =sha256= (default), =sha384=,
+%    =sha512=, =blake2s256= or =blake2b512=. The =BLAKE= digest
+%    algorithms require OpenSSL 1.1.0 or greater.
 %    * encoding(+Encoding)
 %    If Data is a sequence of character _codes_, this must be
 %    translated into a sequence of _bytes_, because that is what
