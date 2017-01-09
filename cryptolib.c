@@ -48,13 +48,13 @@ OPENSSL_zalloc(size_t num)
 #endif
 
 #ifndef HAVE_EVP_MD_CTX_FREE
-void
+static void
 EVP_MD_CTX_free(EVP_MD_CTX *ctx)
 { EVP_MD_CTX_cleanup(ctx);
   OPENSSL_free(ctx);
 }
 
-EVP_MD_CTX *
+static EVP_MD_CTX *
 EVP_MD_CTX_new(void)
 { return OPENSSL_zalloc(sizeof(EVP_MD_CTX));
 }
@@ -70,7 +70,7 @@ EVP_MD_CTX_new(void)
  * error.  If there is already a pending exception, this is returned.
  *
  */
-int
+static int
 ssl_error_term(long e)
 { term_t ex;
   char buffer[256];
@@ -117,7 +117,7 @@ ssl_error_term(long e)
 }
 
 
-int
+static int
 raise_ssl_error(long e)
 { term_t ex;
 
@@ -128,19 +128,8 @@ raise_ssl_error(long e)
 }
 
 
-
-void
-ssl_msg(char *fmt, ...)
-{
-    va_list argpoint;
-
-    va_start(argpoint, fmt);
-	Svfprintf(Soutput, fmt, argpoint);
-    va_end(argpoint);
-}
-
-
-void
+#ifdef NEED_SSL_ERR
+static void
 ssl_err(char *fmt, ...)
 {
     va_list argpoint;
@@ -149,15 +138,17 @@ ssl_err(char *fmt, ...)
 	Svfprintf(Serror, fmt, argpoint);
     va_end(argpoint);
 }
+#endif
 
-
-int
+#ifdef NEED_SSL_SET_DEBUG
+static int
 ssl_set_debug(int level)
 { return nbio_debug(level);
 }
+#endif
 
 
-void
+static void
 ssl_deb(int level, char *fmt, ...)
 {
 #if DEBUG
@@ -177,11 +168,13 @@ ssl_deb(int level, char *fmt, ...)
  * BIO routines for SSL over streams
  */
 
+#ifdef NEED_BIO
+
 /*
  * Read function.
  */
 
-int
+static int
 bio_read(BIO* bio, char* buf, int len)
 { IOSTREAM *stream = BIO_get_ex_data(bio, 0);
 
@@ -193,7 +186,7 @@ bio_read(BIO* bio, char* buf, int len)
  * what this was actually meant to do....
  */
 
-int
+static int
 bio_gets(BIO* bio, char* buf, int len)
 { IOSTREAM *stream;
   int r = 0;
@@ -215,7 +208,7 @@ bio_gets(BIO* bio, char* buf, int len)
  * Write function
  */
 
-int
+static int
 bio_write(BIO* bio, const char* buf, int len)
 { IOSTREAM* stream = BIO_get_ex_data(bio, 0);
   int r;
@@ -231,7 +224,7 @@ bio_write(BIO* bio, const char* buf, int len)
  * There are several more mandatory, but as-yet unsupported functions...
  */
 
-long
+static long
 bio_control(BIO* bio, int cmd, long num, void* ptr)
 { IOSTREAM* stream;
   stream  = BIO_get_ex_data(bio, 0);
@@ -252,7 +245,8 @@ bio_control(BIO* bio, int cmd, long num, void* ptr)
  * It is our responsibility to set init to 1 here
  */
 
-int bio_create(BIO* bio)
+static int
+bio_create(BIO* bio)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
    bio->shutdown = 1;
@@ -272,7 +266,8 @@ int bio_create(BIO* bio)
  * Destroy function. Called when a BIO is freed
  */
 
-int bio_destroy(BIO* bio)
+static int
+bio_destroy(BIO* bio)
 {
    if (bio == NULL)
    {
@@ -286,32 +281,36 @@ int bio_destroy(BIO* bio)
  * Specify the BIO read and write function structures
  */
 
-BIO_METHOD bio_read_functions = {BIO_TYPE_MEM,
-                                 "read",
-                                 NULL,
-                                 &bio_read,
-                                 NULL,
-                                 &bio_gets,
-                                 &bio_control,
-                                 &bio_create,
-                                 &bio_destroy};
+static BIO_METHOD bio_read_functions = { BIO_TYPE_MEM,
+                                         "read",
+					 NULL,
+					 &bio_read,
+					 NULL,
+					 &bio_gets,
+					 &bio_control,
+					 &bio_create,
+					 &bio_destroy
+				       };
 
-BIO_METHOD bio_write_functions = {BIO_TYPE_MEM,
-                                  "write",
-                                  &bio_write,
-                                  NULL,
-                                  NULL,
-                                  NULL,
-                                  &bio_control,
-                                  &bio_create,
-                                  &bio_destroy};
+static BIO_METHOD bio_write_functions = { BIO_TYPE_MEM,
+					  "write",
+					  &bio_write,
+					  NULL,
+					  NULL,
+					  NULL,
+					  &bio_control,
+					  &bio_create,
+					  &bio_destroy
+					};
 
-BIO_METHOD *bio_read_method()
+static BIO_METHOD *
+bio_read_method(void)
 {
   return &bio_read_functions;
 }
 
-BIO_METHOD *bio_write_method()
+static BIO_METHOD *
+bio_write_method(void)
 {
   return &bio_write_functions;
 }
@@ -327,7 +326,8 @@ static CRYPTO_ONCE once_write = CRYPTO_ONCE_STATIC_INIT;
 static BIO_METHOD *read_method = NULL;
 static BIO_METHOD *write_method = NULL;
 
-void read_method_init ()
+static void
+read_method_init(void)
 {
   BIO_METHOD *rm = BIO_meth_new(BIO_TYPE_MEM, "read");
 
@@ -342,7 +342,8 @@ void read_method_init ()
   read_method = rm;
 }
 
-BIO_METHOD *bio_read_method()
+static BIO_METHOD *
+bio_read_method(void)
 {
   if (read_method != NULL) return read_method;
 
@@ -352,7 +353,8 @@ BIO_METHOD *bio_read_method()
   return read_method;
 }
 
-void write_method_init ()
+static void
+write_method_init(void)
 {
   BIO_METHOD *wm = BIO_meth_new(BIO_TYPE_MEM, "write");
 
@@ -366,7 +368,8 @@ void write_method_init ()
   write_method = wm;
 }
 
-BIO_METHOD *bio_write_method()
+static BIO_METHOD *
+bio_write_method(void)
 {
   if (write_method != NULL) return write_method;
 
@@ -376,3 +379,5 @@ BIO_METHOD *bio_write_method()
   return write_method;
 }
 #endif
+
+#endif /*NEED_BIO*/

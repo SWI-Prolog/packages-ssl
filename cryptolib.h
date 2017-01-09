@@ -78,21 +78,5 @@ static int PL_handle_signals(void) { return 0; }
 #define DEBUG 1
 #endif
 
-#ifndef HAVE_EVP_MD_CTX_FREE
-void EVP_MD_CTX_free(EVP_MD_CTX *ctx);
-EVP_MD_CTX *EVP_MD_CTX_new(void);
-#endif
-
-int             raise_ssl_error(long e);
-int             ssl_error_term(long e);
-
-void            ssl_msg          (char *fmt, ...);
-void            ssl_err          (char *fmt, ...);
-int             ssl_set_debug    (int level);
-void            ssl_deb          (int level, char *fmt, ...);
-
-BIO_METHOD      *bio_read_method();
-BIO_METHOD      *bio_write_method();
-
 #endif /*CRYPTOLIBH__*/
 

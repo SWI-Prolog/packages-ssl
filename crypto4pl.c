@@ -37,7 +37,7 @@
 #include <SWI-Prolog.h>
 #include <assert.h>
 #include <string.h>
-#include "cryptolib.h"
+#include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
 static atom_t ATOM_minus;                       /* "-" */
@@ -1146,7 +1146,7 @@ pthreads_thread_id(void)
 #define CRYPTO_THREADID_set_callback CRYPTO_set_id_callback
 #endif
 
-int
+static int
 crypto_lib_init(void)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -1176,7 +1176,7 @@ crypto_lib_init(void)
 
 #else /*_REENTRANT*/
 
-int
+static int
 crypto_lib_init(void)
 { return FALSE;
 }
@@ -1184,7 +1184,7 @@ crypto_lib_init(void)
 #endif /*_REENTRANT*/
 
 
-int
+static int
 crypto_lib_exit(void)
 /*
  * One-time library exit calls

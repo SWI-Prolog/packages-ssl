@@ -23,8 +23,8 @@ LIBPL=		@PLTARGETS@
 TARGETS=	@TARGETS@
 EXAMPLES=	client.pl server.pl https.pl
 
-SSLOBJ=		ssl4pl.o cryptolib.o ../clib/nonblockio.o ../clib/error.o
-CRYPTOOBJ=	crypto4pl.o cryptolib.o ../clib/nonblockio.o
+SSLOBJ=		ssl4pl.o ../clib/nonblockio.o ../clib/error.o
+CRYPTOOBJ=	crypto4pl.o ../clib/nonblockio.o ../clib/error.o
 
 all:		$(TARGETS)
 
@@ -33,6 +33,9 @@ ssl4pl.@SO@:	$(SSLOBJ)
 
 crypto4pl.@SO@:	$(CRYPTOOBJ)
 		$(LD) $(LDSOFLAGS) -o $@ $(CRYPTOOBJ) $(LIBS) $(LIBPLSO)
+
+ssl4pl.o:	cryptolib.c
+crypto4pl.o:	cryptolib.c
 
 install:	$(TARGETS) $(LIBPL)
 		mkdir -p $(DESTDIR)$(SOLIBDIR)

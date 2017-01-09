@@ -48,7 +48,10 @@
 #include <openssl/ssl.h>
 #include <openssl/bn.h>
 #include <openssl/dh.h>
-#include "cryptolib.h"
+#define NEED_BIO 1
+#define NEED_SSL_ERR 1
+#define NEED_SSL_SET_DEBUG 1
+#include "cryptolib.c"
 
 #include "../clib/nonblockio.h"
 
@@ -1043,7 +1046,7 @@ acquire_ssl(atom_t atom)
 /*
  * Clean up all allocated resources.
  */
-void
+static void
 ssl_exit(PL_SSL *config)
 { if ( config )
   { if (config->ctx)
@@ -1617,7 +1620,7 @@ ssl_config_free( void *            ctx
     }
 }
 
-char *
+static char *
 ssl_set_cacert(PL_SSL *config, const char *cacert)
 /*
  * Store certificate authority location in config storage
@@ -1631,7 +1634,7 @@ ssl_set_cacert(PL_SSL *config, const char *cacert)
 }
 
 
-char *
+static char *
 ssl_set_certificate_file(PL_SSL *config, const char *certificate_file)
 /*
  * Store certificate file location in config storage
@@ -1644,7 +1647,7 @@ ssl_set_certificate_file(PL_SSL *config, const char *certificate_file)
     return config->certificate_file;
 }
 
-char *
+static char *
 ssl_set_keyf(PL_SSL *config, const char *keyf)
 /*
  * Store private key location in config storage
@@ -1657,7 +1660,7 @@ ssl_set_keyf(PL_SSL *config, const char *keyf)
     return config->key_file;
 }
 
-STACK_OF(X509_CRL) *
+static STACK_OF(X509_CRL) *
 ssl_set_crl_list(PL_SSL *config, STACK_OF(X509_CRL) *crl)
 /*
  * Store CRL location in config storage
@@ -1672,7 +1675,7 @@ ssl_set_crl_list(PL_SSL *config, STACK_OF(X509_CRL) *crl)
     return config->crl_list;
 }
 
-char *
+static char *
 ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
 { if ( cipher_list )
   { if ( config->cipher_list )
@@ -1683,7 +1686,7 @@ ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
   return config->cipher_list;
 }
 
-char *
+static char *
 ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve)
 { if ( ecdh_curve )
   { if ( config->ecdh_curve )
@@ -1694,7 +1697,7 @@ ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve)
   return config->ecdh_curve;
 }
 
-char *
+static char *
 ssl_set_password(PL_SSL *config, const char *password)
 /*
  * Store supplied private key password in config storage
@@ -1707,7 +1710,7 @@ ssl_set_password(PL_SSL *config, const char *password)
     return config->password;
 }
 
-char *
+static char *
 ssl_set_host(PL_SSL *config, const char *host)
 /*
  * Store supplied host in config storage
@@ -2003,7 +2006,7 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
 #endif
 
 
-int
+static int
 ssl_close(PL_SSL_INSTANCE *instance)
 /*
  * Clean up TCP and SSL connection resources
@@ -2055,7 +2058,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
 
 
-X509 *
+static X509 *
 ssl_peer_certificate(PL_SSL_INSTANCE *instance)
 { if ( !instance->config->peer_cert )
     instance->config->peer_cert = SSL_get_peer_certificate(instance->ssl);
@@ -2080,7 +2083,7 @@ ERR_print_errors_pl()
 }
 
 
-PL_SSL *
+static PL_SSL *
 ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 /*
  * Allocate the holder for our parameters which will specify the
@@ -2269,7 +2272,7 @@ ssl_system_verify_locations(void)
 }
 
 
-STACK_OF(X509) *
+static STACK_OF(X509) *
 system_root_certificates(void)
 { pthread_mutex_lock(&root_store_lock);
   if ( !system_root_store_fetched )
@@ -2331,7 +2334,8 @@ ssl_init_verify_locations(PL_SSL *config)
 #ifndef HEADER_DH_H
 #include <openssl/dh.h>
 #endif
-DH *get_dh2048()
+static DH *
+get_dh2048(void)
         {
         static unsigned char dhp_2048[]={
                 0xF9,0xE7,0xCF,0x81,0x2D,0xA6,0xA8,0x54,0x72,0xB3,0x6E,0x79,
@@ -2390,7 +2394,7 @@ DH *get_dh2048()
 #define SSL_CTX_add0_chain_cert(CTX, C) SSL_CTX_add_extra_chain_cert(CTX, C)
 #endif
 
-int
+static int
 ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
 {
   X509 *certX509;
@@ -2424,7 +2428,7 @@ ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
   return TRUE;
 }
 
-int
+static int
 ssl_use_key(PL_SSL *config, char *key)
 {
   BIO* bio = BIO_new_mem_buf(key, -1);
@@ -2453,7 +2457,7 @@ ssl_use_key(PL_SSL *config, char *key)
    certificate_key_pairs/1.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-int
+static int
 ssl_use_certificates(PL_SSL *config)
 {
   int cert_idx;
@@ -2486,7 +2490,7 @@ ssl_use_certificates(PL_SSL *config)
   return TRUE;
 }
 
-void
+static void
 ssl_init_sni(PL_SSL *config)
 {
 #ifndef OPENSSL_NO_TLSEXT
@@ -2499,7 +2503,8 @@ ssl_init_sni(PL_SSL *config)
 #endif
 }
 
-void ssl_init_min_max_protocol(PL_SSL *config)
+static void
+ssl_init_min_max_protocol(PL_SSL *config)
 {
 #ifdef SSL_CTX_set_min_proto_version
   if (config->min_protocol.is_set)
@@ -2511,7 +2516,7 @@ void ssl_init_min_max_protocol(PL_SSL *config)
 #endif
 }
 
-int
+static int
 ssl_config(PL_SSL *config)
 /*
  * Initialize various SSL layer parameters using the supplied
@@ -2586,7 +2591,7 @@ ssl_config(PL_SSL *config)
 }
 
 
-PL_SSL_INSTANCE *
+static PL_SSL_INSTANCE *
 ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
 { PL_SSL_INSTANCE *new = NULL;
 
@@ -2601,7 +2606,7 @@ ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
   return new;
 }
 
-int
+static int
 ssl_lib_init(void)
 /*
  * One-time library initialization code
@@ -2648,7 +2653,7 @@ ssl_lib_init(void)
     return 0;
 }
 
-int
+static int
 ssl_lib_exit(void)
 /*
  * One-time library exit calls
@@ -2666,7 +2671,7 @@ ssl_lib_exit(void)
  * Establish an SSL session using the given read and write streams
  * and the role
  */
-int
+static int
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
             PL_SSL_INSTANCE** instancep)
 { PL_SSL_INSTANCE *instance;
@@ -2752,7 +2757,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
 /*
  * Perform read on SSL session
  */
-ssize_t
+static ssize_t
 ssl_read(void *handle, char *buf, size_t size)
 { PL_SSL_INSTANCE *instance = handle;
   SSL *ssl = instance->ssl;
@@ -2778,7 +2783,7 @@ ssl_read(void *handle, char *buf, size_t size)
 /*
  * Perform write on SSL session
  */
-ssize_t
+static ssize_t
 ssl_write(void *handle, char *buf, size_t size)
 { PL_SSL_INSTANCE *instance = handle;
   SSL *ssl = instance->ssl;
@@ -3241,7 +3246,7 @@ pl_ssl_negotiate(term_t config,
   return TRUE;
 }
 
-void
+static void
 ssl_copy_callback(const PL_SSL_CALLBACK old, PL_SSL_CALLBACK *new)
 {
   if (old.goal)
