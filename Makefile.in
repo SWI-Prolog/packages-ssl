@@ -23,15 +23,16 @@ LIBPL=		@PLTARGETS@
 TARGETS=	@TARGETS@
 EXAMPLES=	client.pl server.pl https.pl
 
-SSLOBJ=		crypto4pl.o cryptolib.o ssl4pl.o ../clib/nonblockio.o ../clib/error.o
+SSLOBJ=		ssl4pl.o cryptolib.o ../clib/nonblockio.o ../clib/error.o
+CRYPTOOBJ=	crypto4pl.o cryptolib.o ../clib/nonblockio.o
 
 all:		$(TARGETS)
 
 ssl4pl.@SO@:	$(SSLOBJ)
 		$(LD) $(LDSOFLAGS) -o $@ $(SSLOBJ) $(LIBS) $(LIBPLSO)
 
-crypto4pl.@SO@:	$(SSLOBJ)
-		$(LD) $(LDSOFLAGS) -o $@ $(SSLOBJ) $(LIBS) $(LIBPLSO)
+crypto4pl.@SO@:	$(CRYPTOOBJ)
+		$(LD) $(LDSOFLAGS) -o $@ $(CRYPTOOBJ) $(LIBS) $(LIBPLSO)
 
 install:	$(TARGETS) $(LIBPL)
 		mkdir -p $(DESTDIR)$(SOLIBDIR)
@@ -116,7 +117,7 @@ tests/test_certs:
 ################################################################
 
 clean:
-		rm -f $(SSLOBJ) *~ *.o *% a.out core config.log ssl.tex crypto.tex
+		rm -f *~ *.o *% a.out core config.log ssl.tex crypto.tex
 		$(RUNTEX) --clean ssl
 
 distclean:	clean
