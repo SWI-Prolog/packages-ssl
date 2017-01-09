@@ -505,7 +505,7 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
     if (type == NULL)
       return PL_unify_term(hash,
                            PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
-                           PL_INTEGER, nid);
+                           PL_INT, nid);
   }
 
   digestible_length=i2d(data,NULL);
@@ -3427,7 +3427,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
     goto err;
   if ( !PL_unify_term(node_t,
 		      PL_FUNCTOR, FUNCTOR_version1,
-		      PL_INTEGER, version))
+		      PL_INT, version))
     goto err;
 
   cipher = SSL_CIPHER_get_name(SSL_get_current_cipher(ssl));
