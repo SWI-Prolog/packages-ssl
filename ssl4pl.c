@@ -245,16 +245,6 @@ typedef enum
 { RSA_MODE, EVP_MODE
 } crypt_mode_t;
 
-static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
-{
-   return i2d_X509_CRL_INFO(i, d);
-}
-
-static int i2d_X509_CINF_wrapper(void* i, unsigned char** d)
-{
-   return i2d_X509_CINF(i, d);
-}
-
 static int
 get_char_arg(int a, term_t t, char **s)
 { term_t t2 = PL_new_term_ref();
@@ -477,39 +467,93 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   return PL_unify_int64(term, result);
 }
 
+static const EVP_MD *
+algorithm_to_type(const ASN1_OBJECT* algorithm, int *nid)
+{ *nid = OBJ_obj2nid(algorithm);
+  /* Annoyingly, EVP_get_digestbynid doesnt work for some of these algorithms. Instead check for
+     them explicitly and set the digest manually
+  */
+  switch (*nid)
+  { case NID_ecdsa_with_SHA1:
+      return EVP_sha1();
+    case NID_ecdsa_with_SHA256:
+      return EVP_sha256();
+    case NID_ecdsa_with_SHA384:
+      return EVP_sha384();
+#ifdef HAVE_OPENSSL_MD2_H
+    case NID_md2WithRSAEncryption:
+      return EVP_md2();
+#endif
+  }
+
+  return EVP_get_digestbynid(*nid);
+}
+
+#if defined(HAVE_X509_DIGEST) && defined(HAVE_X509_CRL_DIGEST)
+
+static int
+hash_X509_digest_wrapper(const void *data, const EVP_MD *type, unsigned char* md, unsigned int *l)
+{
+  return X509_digest((X509 *) data, type, md, l);
+}
+
+static int
+hash_X509_crl_digest_wrapper(const void *data, const EVP_MD *type, unsigned char* md, unsigned int *l)
+{
+  return X509_CRL_digest((X509_CRL *) data, type, md, l);
+}
+
+static int
+unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
+           int (*data_to_digest)(const void*, const EVP_MD *, unsigned char*, unsigned int*),
+           void *data)
+{
+  int nid;
+  const EVP_MD *type = algorithm_to_type(algorithm, &nid);
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int digest_length;
+
+  if (type == NULL)
+    return PL_unify_term(hash,
+                         PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
+                         PL_INT, nid);
+
+  if (!data_to_digest(data, type, digest, &digest_length))
+    return FALSE;
+
+  return unify_bytes_hex(hash, digest_length, digest);
+}
+
+#else
+
+static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
+{
+   return i2d_X509_CRL_INFO(i, d);
+}
+
+static int i2d_X509_CINF_wrapper(void* i, unsigned char** d)
+{
+   return i2d_X509_CINF(i, d);
+}
+
+
 static int
 unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
 	   int (*i2d)(void*, unsigned char**), void * data)
-{ const EVP_MD *type;
+{ int nid;
+  const EVP_MD *type = algorithm_to_type(algorithm, &nid);
   EVP_MD_CTX *ctx = EVP_MD_CTX_new();
   int digestible_length;
   unsigned char* digest_buffer;
   unsigned char digest[EVP_MAX_MD_SIZE];
   unsigned int digest_length;
   unsigned char* p;
-  int nid = 0;
   /* Generate hash */
-  nid = OBJ_obj2nid(algorithm);
-  /* Annoyingly, EVP_get_digestbynid doesnt work for some of these algorithms. Instead check for
-     them explicitly and set the digest manually
-  */
-  if (nid == NID_ecdsa_with_SHA1)
-  { type = EVP_sha1();
-  } else if (nid == NID_ecdsa_with_SHA256)
-  { type = EVP_sha256();
-  } else if (nid == NID_ecdsa_with_SHA384)
-  { type = EVP_sha384();
-#ifdef HAVE_OPENSSL_MD2_H
-  } else if (nid == NID_md2WithRSAEncryption)
-  { type = EVP_md2();
-#endif
-  } else
-  { type = EVP_get_digestbynid(nid);
-    if (type == NULL)
-      return PL_unify_term(hash,
-                           PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
-                           PL_INT, nid);
-  }
+
+  if (type == NULL)
+    return PL_unify_term(hash,
+                         PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
+                         PL_INT, nid);
 
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
@@ -538,6 +582,9 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
   PL_free(digest_buffer);
   return unify_bytes_hex(hash, digest_length, digest);
 }
+
+#endif
+
 
 static int
 unify_name(term_t term, X509_NAME* name)
@@ -622,11 +669,10 @@ unify_crl(term_t term, X509_CRL* crl)
   X509_CRL_get0_signature(crl, &psig, &palg);
   i2a_ASN1_INTEGER(mem, (ASN1_BIT_STRING *) psig);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-        unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
+#ifdef HAVE_X509_CRL_DIGEST
+        unify_hash(hash, palg->algorithm, hash_X509_crl_digest_wrapper, crl) &&
 #else
-	/* TODO: is crl a valid choice here? */
-        unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl) &&
+        unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
 #endif
         unify_asn1_time(next_update, X509_CRL_get0_nextUpdate(crl)) &&
         unify_bytes_hex(signature, psig->length, psig->data) &&
@@ -803,11 +849,10 @@ unify_certificate(term_t cert, X509* data)
      )
      return FALSE;
   if (!((hash = PL_new_term_ref()) &&
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
+#ifdef HAVE_X509_DIGEST
+        unify_hash(hash, palg->algorithm, hash_X509_digest_wrapper, data) &&
 #else
-        /* TODO: Is "data" a valid choice for the last argument? */
-        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data) &&
+        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
 #endif
         PL_unify_list(list, item, list) &&
         PL_unify_term(item,
