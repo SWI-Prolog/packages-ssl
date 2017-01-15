@@ -119,6 +119,7 @@ static functor_t FUNCTOR_key1;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_next_update1;
 static functor_t FUNCTOR_signature1;
+static functor_t FUNCTOR_to_be_signed1;
 static functor_t FUNCTOR_equals2;
 static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
@@ -797,6 +798,11 @@ unify_certificate(term_t cert, X509* data)
   X509_EXTENSION * crl_ext = NULL;
   GET0SIG_CONST_T ASN1_BIT_STRING *psig;
   GET0SIG_CONST_T X509_ALGOR *palg;
+#ifdef HAVE_I2D_RE_X509_TBS
+  term_t to_be_signed;
+  unsigned char *tbs = NULL;
+  int tbs_len = i2d_re_X509_tbs(data, &tbs);
+#endif
 
   X509_get0_signature(&psig, &palg, data);
 
@@ -867,6 +873,19 @@ unify_certificate(term_t cert, X509* data)
                       PL_TERM, signature)
          ))
      return FALSE;
+
+#ifdef HAVE_I2D_RE_X509_TBS
+  if (!((to_be_signed = PL_new_term_ref()) &&
+        (tbs_len >= 0) &&
+        unify_bytes_hex(to_be_signed, tbs_len, tbs) &&
+        PL_unify_list(list, item, list) &&
+        PL_unify_term(item,
+                      PL_FUNCTOR, FUNCTOR_to_be_signed1,
+                      PL_TERM, to_be_signed)
+        ))
+    return FALSE;
+  OPENSSL_free(tbs);
+#endif
 
   if (!(PL_unify_list(list, item, list) &&
         (issuername = PL_new_term_ref()) &&
@@ -3630,6 +3649,7 @@ install_ssl4pl(void)
   FUNCTOR_hash1             = PL_new_functor(PL_new_atom("hash"), 1);
   FUNCTOR_next_update1      = PL_new_functor(PL_new_atom("next_update"), 1);
   FUNCTOR_signature1        = PL_new_functor(PL_new_atom("signature"), 1);
+  FUNCTOR_to_be_signed1     = PL_new_functor(PL_new_atom("to_be_signed"), 1);
   FUNCTOR_equals2           = PL_new_functor(PL_new_atom("="), 2);
   FUNCTOR_crl1              = PL_new_functor(PL_new_atom("crl"), 1);
   FUNCTOR_revoked2          = PL_new_functor(PL_new_atom("revoked"), 2);
