@@ -212,13 +212,13 @@ resolve_key(Info, Key, KeyCallback, Options):-
     memberchk(element(ns(_, XENC):'CipherValue', _, CipherValueElement), CipherData),
     base64_element(CipherValueElement, CipherValue),
     (  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p'
-    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs_oaep)])
+    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs1_oaep)])
     ;  Algorithm == 'http://www.w3.org/2009/xmlenc11#rsa-oaep',
            memberchk(element(ns(_, 'http://www.w3.org/2009/xmlenc11#'):'MGF', MGFAttributes, _), EncryptionMethod),
            memberchk('Algorithm'='http://www.w3.org/2009/xmlenc11#mgf1sha1', MGFAttributes)   % This is just the same as rsa-oaep-mgf1p!
-    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs_oaep)])
+    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs1_oaep)])
     ;  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-1_5'
-    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs)])
+    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs1)])
     ;  domain_error(key_transport, Algorithm)
     ).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-

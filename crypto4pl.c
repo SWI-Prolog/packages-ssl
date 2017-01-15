@@ -54,8 +54,8 @@ static atom_t ATOM_sha512;
 static atom_t ATOM_blake2s256;
 static atom_t ATOM_blake2b512;
 
-static atom_t ATOM_pkcs;
-static atom_t ATOM_pkcs_oaep;
+static atom_t ATOM_pkcs1;
+static atom_t ATOM_pkcs1_oaep;
 static atom_t ATOM_none;
 static atom_t ATOM_block;
 static atom_t ATOM_algorithm;
@@ -615,8 +615,8 @@ get_padding(term_t t, crypt_mode_t mode, int *padding)
 { atom_t a;
 
   if ( PL_get_atom_ex(t, &a) )
-  { if      ( a == ATOM_pkcs && mode == RSA_MODE )       *padding = RSA_PKCS1_PADDING;
-    else if ( a == ATOM_pkcs_oaep && mode == RSA_MODE  ) *padding = RSA_PKCS1_OAEP_PADDING;
+  { if      ( a == ATOM_pkcs1 && mode == RSA_MODE )      *padding = RSA_PKCS1_PADDING;
+    else if ( a == ATOM_pkcs1_oaep && mode == RSA_MODE ) *padding = RSA_PKCS1_OAEP_PADDING;
     else if ( a == ATOM_none && mode == RSA_MODE  )      *padding = RSA_NO_PADDING;
     else if ( a == ATOM_sslv23  && mode == RSA_MODE )    *padding = RSA_SSLV23_PADDING;
     else if ( a == ATOM_none  && mode == EVP_MODE )      *padding = 0;
@@ -1230,8 +1230,8 @@ install_crypto4pl(void)
   MKATOM(blake2b512);
   MKATOM(blake2s256);
 
-  MKATOM(pkcs);
-  MKATOM(pkcs_oaep);
+  MKATOM(pkcs1);
+  MKATOM(pkcs1_oaep);
   MKATOM(none);
   MKATOM(block);
   MKATOM(encoding);
