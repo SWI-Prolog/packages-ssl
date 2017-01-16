@@ -279,10 +279,9 @@ tools.
 
 Accessing an \verb$https://$ server can be achieved using the code
 skeleton below. The line \verb$:- use_module(library(http/http_ssl_plugin)).$
-can be omitted if the development environment is present because the
-plugin is dynamically loaded by http_open/3 of the \const{https} scheme
-is detected.  See \secref{ssl-security} for more information about
-security aspects.
+can actually be omitted because the plugin is dynamically loaded by
+http_open/3 if the \const{https}~scheme is detected.
+See \secref{ssl-security} for more information about security aspects.
 
 \begin{code}
 :- use_module(library(http/http_open)).
