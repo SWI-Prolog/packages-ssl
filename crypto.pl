@@ -257,29 +257,38 @@ rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
 %   Create an RSA signature for Data.  Options:
 %
 %     - type(+Type)
-%     SHA algorithm used to compute the digest.  Values are the
-%     same as for sha_hash/3: `sha1` (default), `sha224`, `sha256`,
-%     `sha384` or `sha512`
+%     SHA algorithm used to compute the digest.  Values are
+%     `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for Data.  Default is `octet`.  Alternatives
 %     are `utf8` and `text`.
 %
-%   This predicate is used  to   compute  a  _sha1WithRSAEncryption_
+%   This predicate can be used to compute a =|sha256WithRSAEncryption|=
 %   signature as follows:
 %
 %     ```
-%     sha1_with_rsa(PemKeyFile, KeyPassword, Data, Signature) :-
-%         DigestAlgorithm = sha1,
-%         read_key(PemKeyFile, KeyPassword, PrivateKey),
-%         sha_hash(Data, Digest, [algorithm(DigestAlgorithm)]),
-%         rsa_sign(Key, Digest, Signature, [type(DigestAlgorithm)]).
+%     sha256_with_rsa(PemKeyFile, Password, Data, Signature) :-
+%         Algorithm = sha256,
+%         read_key(PemKeyFile, Password, Key),
+%         crypto_data_hash(Data, Digest, [algorithm(Algorithm),
+%                                         encoding(octet)]),
+%         atom_chars(Digest, Cs),
+%         phrase(hex_bytes(Cs), Bytes),
+%         rsa_sign(Key, Bytes, Signature, [type(Algorithm)]).
 %
-%     read_key(PemKeyFile, KeyPassword, PrivateKey) :-
+%     hex_bytes([]) --> [].
+%     hex_bytes([H1,H2|Hs]) --> [Byte],
+%         { char_type(H1, xdigit(High)),
+%           char_type(H2, xdigit(Low)),
+%           Byte is High*16 + Low },
+%         hex_bytes(Hs).
+%
+%     read_key(File, Password, Key) :-
 %         setup_call_cleanup(
 %             open(File, read, In, [type(binary)]),
 %             load_private_key(In, Password, Key),
-%             close(In).
+%             close(In)).
 %     ```
 
 rsa_sign(Key, Data, Signature, Options) :-
@@ -293,9 +302,8 @@ rsa_sign(Key, Data, Signature, Options) :-
 %   Verifies an RSA signature for Data.  Options:
 %
 %     - type(+Type)
-%     SHA algorithm used to compute the digest.  Values are the
-%     same as for sha_hash/3: `sha1` (default), `sha224`, `sha256`,
-%     `sha384` or `sha512`
+%     SHA algorithm used to compute the digest.  Values are
+%     `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for Data.  Default is `octet`.  Alternatives
