@@ -51,7 +51,7 @@
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_sign/4,                 % +Key, +Data, -Signature, +Options
-            rsa_verify/4                % +Key, +Data, -Signature, +Options
+            rsa_verify/4                % +Key, +Data, +Signature, +Options
           ]).
 :- use_module(library(option)).
 
@@ -288,7 +288,7 @@ rsa_sign(Key, Data, Signature, Options) :-
     rsa_sign(Key, Type, Enc, Data, Signature).
 
 
-%!  rsa_verify(+Key, +Data, -Signature, +Options) is det.
+%!  rsa_verify(+Key, +Data, +Signature, +Options) is det.
 %
 %   Verifies an RSA signature for Data.  Options:
 %
