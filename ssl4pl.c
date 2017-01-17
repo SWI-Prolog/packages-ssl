@@ -974,19 +974,40 @@ static int
 unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
-  X509* cert = sk_X509_pop(stack);
+  STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
+  X509* cert = sk_X509_pop(copy);
   int retval = 1;
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
     retval &= unify_certificate(item, cert);
-    X509_free(cert);
-    cert = sk_X509_pop(stack);
+    cert = sk_X509_pop(copy);
     if (cert == NULL)
+    { sk_X509_free(copy);
       return PL_unify(tail, item) && PL_unify_nil(list);
+    }
   }
+  sk_X509_free(copy);
   return retval && PL_unify_nil(list);
 }
+
+static int
+unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
+{ term_t item = PL_new_term_ref();
+  term_t list = PL_copy_term_ref(certs);
+  STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
+  X509* cert = sk_X509_shift(copy);
+  int retval = 1;
+
+  while (cert != NULL && retval == 1)
+  { retval &= PL_unify_list(list, item, list);
+    retval &= unify_certificate(item, cert);
+    cert = sk_X509_shift(copy);
+  }
+  sk_X509_free(copy);
+  return retval && PL_unify_nil(list);
+}
+
 
 static foreign_t
 pl_load_public_key(term_t source, term_t key_t)
@@ -1275,6 +1296,10 @@ pl_sni_hook(PL_SSL *config, const char *host)
   return new_config;
 }
 
+#ifndef HAVE_X509_STORE_CTX_GET0_CHAIN
+#define X509_STORE_CTX_get0_chain(c) X509_STORE_CTX_get_chain(c)
+#endif
+
 static BOOL
 pl_cert_verify_hook(PL_SSL *config,
                     X509 * cert,
@@ -1286,11 +1311,9 @@ pl_cert_verify_hook(PL_SSL *config,
   term_t error_term = PL_new_term_ref();
   predicate_t call6 = PL_predicate("call", 6, NULL);
   int val;
-  STACK_OF(X509)* stack;
+  STACK_OF(X509)* stack = X509_STORE_CTX_get0_chain(ctx);
 
   PL_recorded(config->cb_cert_verify.goal, av+0);
-
-  stack = X509_STORE_CTX_get1_chain(ctx);
 
   /*
    * call(CB, +SSL, +ProblemCert, +AllCerts, +FirstCert, +Error)
@@ -1310,8 +1333,6 @@ pl_cert_verify_hook(PL_SSL *config,
            PL_call_predicate(config->cb_cert_verify.module,
                              PL_Q_PASS_EXCEPTION, call6, av) );
 
-  /* free any items still on stack, since X509_STORE_CTX_get1_chain returns a copy */
-  sk_X509_pop_free(stack, X509_free);
   PL_close_foreign_frame(fid);
 
   return val;
@@ -3605,6 +3626,25 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
   return FALSE;
 }
 
+static foreign_t
+pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
+{ IOSTREAM* stream;
+  PL_SSL_INSTANCE* instance;
+
+  if ( !PL_get_stream_handle(stream_t, &stream) )
+    return FALSE;
+  if ( stream->functions != &ssl_funcs )
+  { PL_release_stream(stream);
+    return PL_domain_error("ssl_stream", stream_t);
+  }
+
+  instance = stream->handle;
+  PL_release_stream(stream);
+
+  return unify_certificates_inorder(chain,
+                                    SSL_get_peer_cert_chain(instance->ssl));
+}
+
 
 		 /*******************************
 		 *	     INSTALL		*
@@ -3690,7 +3730,9 @@ install_ssl4pl(void)
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
   PL_register_foreign("ssl_peer_certificate",
-					2, pl_ssl_peer_certificate, 0);
+                                        2, pl_ssl_peer_certificate, 0);
+  PL_register_foreign("ssl_peer_certificate_chain",
+                                        2, pl_ssl_peer_certificate_chain, 0);
   PL_register_foreign("load_crl",       2, pl_load_crl,      0);
   PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);

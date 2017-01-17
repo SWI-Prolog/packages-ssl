@@ -34,21 +34,22 @@
 */
 
 :- module(ssl,
-          [ load_certificate/2,         % +Stream, -Certificate
-            load_private_key/3,         % +Stream, +Password, -Key
-            load_public_key/2,          % +Stream, -Key
-            load_crl/2,                 % +Stream, -Crl
-            system_root_certificates/1, % -List
-            cert_accept_any/5,          % +SSL, +ProblemCertificate,
-                                        % +AllCertificates, +FirstCertificate,
-                                        % +Error
-            ssl_context/3,              % +Role, -Config, :Options
-            ssl_add_certificate_key/4,  % +Config, +Cert, +Key, -Config
-            ssl_set_sni_hook/3,         % +Config, +Goal, -Config
-            ssl_negotiate/5,            % +Config, +PlainRead, +PlainWrite,
-                                        %          -SSLRead,   -SSLWrite
-            ssl_peer_certificate/2,     % +Stream, -Certificate
-            ssl_session/2               % +Stream, -Session
+          [ load_certificate/2,           % +Stream, -Certificate
+            load_private_key/3,           % +Stream, +Password, -Key
+            load_public_key/2,            % +Stream, -Key
+            load_crl/2,                   % +Stream, -Crl
+            system_root_certificates/1,   % -List
+            cert_accept_any/5,            % +SSL, +ProblemCertificate,
+                                          % +AllCertificates, +FirstCertificate,
+                                          % +Error
+            ssl_context/3,                % +Role, -Config, :Options
+            ssl_add_certificate_key/4,    % +Config, +Cert, +Key, -Config
+            ssl_set_sni_hook/3,           % +Config, +Goal, -Config
+            ssl_negotiate/5,              % +Config, +PlainRead, +PlainWrite,
+                                          %          -SSLRead,   -SSLWrite
+            ssl_peer_certificate/2,       % +Stream, -Certificate
+            ssl_peer_certificate_chain/2, % +Stream, -Certificates
+            ssl_session/2                 % +Stream, -Session
           ]).
 :- use_module(library(socket)).
 :- use_module(library(error)).
@@ -349,6 +350,11 @@ ssl_set_sni_hook(SSL0, Goal, SSL) :-
 %       memberchk(subject(Subject), Cert),
 %       memberchk('CN' = CommonName), Subject)
 %     ==
+
+%!  ssl_peer_certificate_chain(+Stream, -Certificates) is det.
+%
+%   Certificates  is the  certificate  chain provided  by the  peer,
+%   represented as a list of certificates.
 
 %!  ssl_session(+Stream, -Session) is det.
 %
