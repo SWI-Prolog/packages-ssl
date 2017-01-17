@@ -383,13 +383,13 @@ ssl_set_sni_hook(SSL0, Goal, SSL) :-
 %   Loads a certificate from a PEM- or DER-encoded stream, returning
 %   a term which  will unify with the same  certificate if presented
 %   in  cert_verify_hook. A  certificate  is a  list containing  the
-%   following terms: issuer_name/1,  hash/1, signature/1, version/1,
-%   notbefore/1,   notafter/1,   serial/1,  subject/1   and   key/1.
-%   subject/1  and  issuer_name/1  are   both  lists  of  =/2  terms
-%   representing  the   name.   With  OpenSSL  1.0.2   and  greater,
-%   to_be_signed/1  is  also  available,  yielding  the  hexadecimal
-%   representation  of   the  TBS  (to-be-signed)  portion   of  the
-%   certificate.
+%   following    terms:    issuer_name/1,    hash/1,    signature/1,
+%   signature_algorithm/1,   version/1,   notbefore/1,   notafter/1,
+%   serial/1, subject/1 and key/1.   subject/1 and issuer_name/1 are
+%   both lists  of =/2  terms representing  the name.   With OpenSSL
+%   1.0.2 and  greater, to_be_signed/1  is also  available, yielding
+%   the hexadecimal representation of the TBS (to-be-signed) portion
+%   of the certificate.
 %
 %   Note that the OpenSSL `CA.pl`  utility creates certificates that
 %   have a human readable textual representation in front of the PEM
