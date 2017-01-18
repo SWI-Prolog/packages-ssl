@@ -446,25 +446,25 @@ ssl_set_sni_hook(SSL0, Goal, SSL) :-
 
 %!  load_private_key(+Stream, +Password, -PrivateKey) is det.
 %
-%   Load a private key PrivateKey  from   the  given  stream Stream,
-%   using Password to decrypt the key if  it is encrypted. Note that
-%   the  password  is  currently  only   supported  for  PEM  files.
+%   Load  a private  key PrivateKey  from the  given stream  Stream,
+%   using Password to decrypt the key  if it is encrypted. Note that
+%   the  password  is  currently   only  supported  for  PEM  files.
 %   DER-encoded keys which are password protected will not load. The
-%   key must be an RSA key. EC, DH   and DSA keys are not supported,
-%   and PrivateKey will be  bound  to   an  atom  (ec_key, dh_key or
-%   dsa_key) if you try and load   such  a key. Otherwise PrivateKey
-%   will be unified with private_key(KeyTerm)   where  KeyTerm is a
-%   rsa/8 term representing an RSA key.
+%   key must be an RSA or EC key. DH and DSA keys are not supported,
+%   and PrivateKey will  be bound to an atom (dh_key  or dsa_key) if
+%   you  try and  load such  a  key.  Otherwise  PrivateKey will  be
+%   unified with private_key(KeyTerm) where KeyTerm is an rsa/8 term
+%   representing an RSA key, or ec/3 for EC keys.
 
 %!  load_public_key(+Stream, -PublicKey) is det.
 %
-%   Load a public key  PublicKey  from   the  given  stream  Stream.
+%   Load  a  public key  PublicKey  from  the given  stream  Stream.
 %   Supports loading both DER- and PEM-encoded keys. The key must be
-%   an RSA key. EC, DH and DSA keys are not supported, and PublicKey
-%   will be bound to an atom (one   of ec_key, dh_key or dsa_key) if
-%   you try and load such a key. Otherwise PublicKey will be unified
-%   with  public_key(KeyTerm)  where  KeyTerm  is    an  rsa/8  term
-%   representing an RSA key.
+%   an  RSA or  EC  key. DH  and  DSA keys  are  not supported,  and
+%   PublicKey will  be bound to an  atom (dh_key or dsa_key)  if you
+%   try and  load such  a key. Otherwise  PublicKey will  be unified
+%   with  public_key(KeyTerm)   where  KeyTerm  is  an   rsa/8  term
+%   representing an RSA key, or ec/3 for EC keys.
 
 
 %!  cert_accept_any(+SSL,

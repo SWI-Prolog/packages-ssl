@@ -115,6 +115,7 @@ static functor_t FUNCTOR_serial1;
 static functor_t FUNCTOR_public_key1;
 static functor_t FUNCTOR_private_key1;
 static functor_t FUNCTOR_rsa8;
+static functor_t FUNCTOR_ec3;
 static functor_t FUNCTOR_key1;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_next_update1;
@@ -284,20 +285,28 @@ get_file_arg(int a, term_t t, char **f)
 
 
 static int
+unify_bignum(term_t t, const BIGNUM *bn)
+{
+  int rc;
+  if ( bn )
+  { char *hex = BN_bn2hex(bn);
+
+    rc = PL_unify_chars(t, PL_STRING|REP_ISO_LATIN_1, (size_t)-1, hex);
+    OPENSSL_free(hex);
+  } else
+    rc = PL_unify_atom(t, ATOM_minus);
+
+  return rc;
+}
+
+
+static int
 unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
 { term_t arg;
 
   if ( (arg = PL_new_term_ref()) &&
        PL_get_arg(a, t, arg) )
-  { int rc;
-
-    if ( bn )
-    { char *hex = BN_bn2hex(bn);
-
-      rc = PL_unify_chars(arg, PL_STRING|REP_ISO_LATIN_1, (size_t)-1, hex);
-      OPENSSL_free(hex);
-    } else
-      rc = PL_unify_atom(arg, ATOM_minus);
+  { int rc = unify_bignum(arg, bn);
 
     PL_reset_term_refs(arg);
     return rc;
@@ -306,40 +315,6 @@ unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
   return FALSE;
 }
 
-
-static int
-unify_rsa(term_t item, RSA* rsa)
-{
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
-	   unify_bignum_arg(1, item, rsa->n) &&
-	   unify_bignum_arg(2, item, rsa->e) &&
-	   unify_bignum_arg(3, item, rsa->d) &&
-	   unify_bignum_arg(4, item, rsa->p) &&
-	   unify_bignum_arg(5, item, rsa->q) &&
-	   unify_bignum_arg(6, item, rsa->dmp1) &&
-	   unify_bignum_arg(7, item, rsa->dmq1) &&
-	   unify_bignum_arg(8, item, rsa->iqmp)
-	 );
-#else
-  const BIGNUM *n = NULL, *e = NULL, *d = NULL,
-    *p = NULL, *q = NULL,
-    *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
-  RSA_get0_key(rsa, &n, &e, &d);
-  RSA_get0_factors(rsa, &p, &q);
-  RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
-  return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
-	   unify_bignum_arg(1, item, n) &&
-	   unify_bignum_arg(2, item, e) &&
-	   unify_bignum_arg(3, item, d) &&
-	   unify_bignum_arg(4, item, p) &&
-	   unify_bignum_arg(5, item, q) &&
-	   unify_bignum_arg(6, item, dmp1) &&
-	   unify_bignum_arg(7, item, dmq1) &&
-	   unify_bignum_arg(8, item, iqmp)
-	 );
-#endif
-}
 
 static int
 unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
@@ -716,6 +691,70 @@ unify_crl(term_t term, X509_CRL* crl)
   return result && PL_unify_nil(list);
 }
 
+
+static int
+unify_rsa(term_t item, RSA* rsa)
+{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
+	   unify_bignum_arg(1, item, rsa->n) &&
+	   unify_bignum_arg(2, item, rsa->e) &&
+	   unify_bignum_arg(3, item, rsa->d) &&
+	   unify_bignum_arg(4, item, rsa->p) &&
+	   unify_bignum_arg(5, item, rsa->q) &&
+	   unify_bignum_arg(6, item, rsa->dmp1) &&
+	   unify_bignum_arg(7, item, rsa->dmq1) &&
+	   unify_bignum_arg(8, item, rsa->iqmp)
+	 );
+#else
+  const BIGNUM *n = NULL, *e = NULL, *d = NULL,
+    *p = NULL, *q = NULL,
+    *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
+  RSA_get0_key(rsa, &n, &e, &d);
+  RSA_get0_factors(rsa, &p, &q);
+  RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
+  return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
+	   unify_bignum_arg(1, item, n) &&
+	   unify_bignum_arg(2, item, e) &&
+	   unify_bignum_arg(3, item, d) &&
+	   unify_bignum_arg(4, item, p) &&
+	   unify_bignum_arg(5, item, q) &&
+	   unify_bignum_arg(6, item, dmp1) &&
+	   unify_bignum_arg(7, item, dmq1) &&
+	   unify_bignum_arg(8, item, iqmp)
+	 );
+#endif
+}
+
+#ifndef OPENSSL_NO_EC
+static int
+unify_ec(term_t item, EC_KEY *key)
+{
+  unsigned char *buf = NULL;
+  int rc, publen;
+  term_t privkey, pubkey;
+
+  publen = i2o_ECPublicKey(key, &buf);
+
+  if ( publen < 0 )
+    return raise_ssl_error(ERR_get_error());
+
+  rc = ( (pubkey = PL_new_term_ref()) &&
+         (privkey = PL_new_term_ref()) &&
+         unify_bignum(privkey, EC_KEY_get0_private_key(key)) &&
+         unify_bytes_hex(pubkey, publen, buf) &&
+         PL_unify_term(item,
+                       PL_FUNCTOR, FUNCTOR_ec3,
+                       PL_TERM, privkey,
+                       PL_TERM, pubkey,
+                       PL_CHARS, OBJ_nid2sn(EC_GROUP_get_curve_name(EC_KEY_get0_group(key)))) );
+
+  OPENSSL_free(buf);
+  return rc;
+}
+#endif
+
+
 static int
 unify_key(EVP_PKEY* key, functor_t type, term_t item)
 { if ( !PL_unify_functor(item, type) ||
@@ -736,7 +775,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 #ifndef OPENSSL_NO_EC
     case EVP_PKEY_EC:
     { EC_KEY* ec = EVP_PKEY_get1_EC_KEY(key);
-      rc = PL_unify_atom_chars(item, "ec_key");
+      rc = unify_ec(item, ec);
       EC_KEY_free(ec);
       return rc;
     }
@@ -910,8 +949,8 @@ unify_certificate(term_t cert, X509* data)
 
   if (!PL_unify_list(list, item, list))
     return FALSE;
-  /* X509_extract_key returns a copy of the existing key */
-  key = X509_extract_key(data);
+  /* X509_get_pubkey returns a copy of the existing key */
+  key = X509_get_pubkey(data);
   if ( !PL_unify_functor(item, FUNCTOR_key1) ||
        !PL_get_arg(1, item, item) ||
        !unify_public_key(key, item) )
@@ -3698,6 +3737,7 @@ install_ssl4pl(void)
   FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
   FUNCTOR_rsa8              = PL_new_functor(PL_new_atom("rsa"), 8);
+  FUNCTOR_ec3               = PL_new_functor(PL_new_atom("ec"), 3);
   FUNCTOR_hash1             = PL_new_functor(PL_new_atom("hash"), 1);
   FUNCTOR_next_update1      = PL_new_functor(PL_new_atom("next_update"), 1);
   FUNCTOR_signature1        = PL_new_functor(PL_new_atom("signature"), 1);
