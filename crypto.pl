@@ -40,6 +40,8 @@
             crypto_context_hash/2,      % +Context, -Hash
             crypto_open_hash_stream/3,  % +InStream, -HashStream, +Options
             crypto_stream_hash/2,       % +HashStream, -Hash
+            ecdsa_sign/4,               % +Key, +Data, -Signature, +Options
+            ecdsa_verify/4,             % +Key, +Data, +Signature, +Options
             evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
             evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
             rsa_private_decrypt/3,      % +Key, +Ciphertext, -Plaintext
@@ -165,14 +167,14 @@ crypto_context_hash(Context, Hash) :-
 
 crypto_hash_atom(Codes, Hash) :-
     phrase(bytes_hex(Codes), HexCodes),
-    atom_codes(Hash, HexCodes).
+    atom_chars(Hash, HexCodes).
 
 bytes_hex([]) --> [].
 bytes_hex([H|T]) -->
     { High is H>>4,
       Low is H /\ 0xf,
-      code_type(C0, xdigit(High)),
-      code_type(C1, xdigit(Low))
+      char_type(C0, xdigit(High)),
+      char_type(C1, xdigit(Low))
     },
     [C0,C1],
     bytes_hex(T).
@@ -204,6 +206,55 @@ crypto_open_hash_stream(OrgStream, HashStream, Options) :-
 crypto_stream_hash(Stream, Hash) :-
     '_crypto_stream_context'(Stream, Context),
     crypto_context_hash(Context, Hash).
+
+%!  ecdsa_sign(+Key, +Data, -Signature, Options)
+%
+%   Create an ECDSA signature for Data with EC private key Key.
+%
+%   Options:
+%
+%     - encoding(+Encoding)
+%     Encoding to use for Data.  Default is `hex`.  Alternatives
+%     are `octet`, `utf8` and `text`.
+
+ecdsa_sign(private_key(ec(Private,Public0,Curve)), Data0, Signature, Options) :-
+    option(encoding(Enc0), Options, hex),
+    hex_encoding(Enc0, Data0, Enc, Data),
+    hex_bytes(Public0, Public),
+    '_crypto_ecdsa_sign'(ec(Private,Public,Curve), Data, Enc, Signature).
+
+hex_encoding(hex, Data0, octet, Data) :- !,
+    hex_bytes(Data0, Data).
+hex_encoding(Enc, Data, Enc, Data).
+
+hex_bytes(Hs, Bytes) :-
+    string_chars(Hs, Chars),
+    phrase(hex_bytes(Chars), Bytes).
+
+hex_bytes([]) --> [].
+hex_bytes([H1,H2|Hs]) --> [Byte],
+    { char_type(H1, xdigit(High)),
+      char_type(H2, xdigit(Low)),
+      Byte is High*16 + Low },
+    hex_bytes(Hs).
+
+%!  ecdsa_verify(+Key, +Data, +Signature, +Options) is semidet.
+%
+%   True iff Signature can be verified as the ECDSA signature for
+%   Data, using the EC public key Key.
+%
+%   Options:
+%
+%     - encoding(+Encoding)
+%     Encoding to use for Data.  Default is `hex`.  Alternatives
+%     are `octet`, `utf8` and `text`.
+
+ecdsa_verify(public_key(ec(Private,Public0,Curve)), Data0, Signature0, Options) :-
+    option(encoding(Enc0), Options, hex),
+    hex_encoding(Enc0, Data0, Enc, Data),
+    hex_bytes(Public0, Public),
+    hex_bytes(Signature0, Signature),
+    '_crypto_ecdsa_verify'(ec(Private,Public,Curve), Data, Enc, Signature).
 
 
 %!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.

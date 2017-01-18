@@ -60,6 +60,32 @@ EVP_MD_CTX_new(void)
 }
 #endif
 
+static int
+unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
+{ char tmp[512];
+  char *out, *o;
+  static const char *tohex = "0123456789ABCDEF";
+  const unsigned char *end = data+len;
+  int rc;
+
+  if ( len*2 <= sizeof(tmp) )
+    out = tmp;
+  else if ( !(out = malloc(len*2)) )
+    return PL_resource_error("memory");
+
+  for(o=out ; data < end; data++)
+  { *o++ = tohex[(*data >> 4) & 0xf];
+    *o++ = tohex[(*data >> 0) & 0xf];
+  }
+
+  rc = PL_unify_chars(t, PL_STRING|REP_ISO_LATIN_1, len*2, out);
+  if ( out != tmp )
+    free(out);
+
+  return rc;
+}
+
+
 
 /***********************************************************************
  * Warning, error and debug reporting

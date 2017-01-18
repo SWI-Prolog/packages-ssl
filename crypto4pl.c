@@ -512,6 +512,43 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
   return FALSE;
 }
 
+static int
+recover_ec(term_t t, EC_KEY **rec)
+{
+  EC_KEY *ec;
+  BIGNUM *privkey = NULL;
+  term_t pubkey;
+  unsigned char *codes;
+  size_t codes_len;
+  term_t tcurve = PL_new_term_ref();
+  char *curve;
+
+  if ( !(tcurve &&
+         PL_get_arg(3, t, tcurve) &&
+         PL_get_chars(tcurve, &curve, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) &&
+         (ec = EC_KEY_new_by_curve_name(OBJ_sn2nid(curve)))) )
+    return FALSE;
+
+  if ( !get_bn_arg(1, t, &privkey) )
+  { EC_KEY_free(ec);
+    return FALSE;
+  }
+
+  if ( privkey )
+    EC_KEY_set_private_key(ec, privkey);
+
+  if ( (pubkey=PL_new_term_ref()) &&
+       PL_get_arg(2, t, pubkey) &&
+       PL_get_nchars(pubkey, &codes_len, (char **) &codes,
+                     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) &&
+       (ec = o2i_ECPublicKey(&ec, (const unsigned char**) &codes, codes_len)) )
+  { *rec = ec;
+    return TRUE;
+  }
+
+  EC_KEY_free(ec);
+  return FALSE;
+}
 
 static int
 recover_rsa(term_t t, RSA** rsap)
@@ -590,9 +627,9 @@ recover_public_key(term_t t, RSA** rsap)
 }
 
 
-		 /*******************************
-		 *       RSA ENCRYPT/DECRYPT	*
-		 *******************************/
+                 /*******************************
+                 *       OPTION PROCESSING      *
+                 *******************************/
 
 static int
 get_text_representation(term_t t, int *rep)
@@ -678,6 +715,78 @@ parse_options(term_t options_t, crypt_mode_t mode, int* rep, int* padding)
 
   return TRUE;
 }
+
+
+
+                 /*******************************
+                 *       ECDSA SIGN/VERIFY      *
+                 *******************************/
+
+
+static foreign_t
+pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
+{ unsigned char *data;
+  size_t data_len;
+  EC_KEY *key;
+  ECDSA_SIG *sig;
+  unsigned char *signature = NULL;
+  unsigned int signature_len;
+  int rc;
+
+  if ( !recover_ec(Private, &key) ||
+       !get_enc_text(Data, Enc, &data_len, &data) )
+    return FALSE;
+
+  sig = ECDSA_do_sign(data, (unsigned int)data_len, key);
+  EC_KEY_free(key);
+
+  if ( (signature_len = i2d_ECDSA_SIG(sig, &signature)) < 0 )
+    return raise_ssl_error(ERR_get_error());
+
+  rc = unify_bytes_hex(Signature, signature_len, signature);
+  OPENSSL_free(signature);
+
+  return rc;
+}
+
+static foreign_t
+pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
+{ unsigned char *data;
+  size_t data_len;
+  EC_KEY *key;
+  ECDSA_SIG *sig;
+  unsigned char *signature;
+  const unsigned char *copy;
+  size_t signature_len;
+  int rc;
+
+  if ( !recover_ec(Public, &key) ||
+       !get_enc_text(Data, Enc, &data_len, &data) ||
+       !PL_get_nchars(Signature, &signature_len, (char **) &signature, REP_ISO_LATIN_1|CVT_LIST|CVT_EXCEPTION) )
+    return FALSE;
+
+  copy = signature;
+
+  if ( !(sig = d2i_ECDSA_SIG(NULL, &copy, signature_len)) )
+    return FALSE;
+
+  rc = ECDSA_do_verify(data, data_len, sig, key);
+
+  EC_KEY_free(key);
+  ECDSA_SIG_free(sig);
+
+  if (rc == 0 || rc == 1 )
+    return rc;
+
+  return raise_ssl_error(ERR_get_error());
+}
+
+
+
+                 /*******************************
+                 *       RSA ENCRYPT/DECRYPT    *
+                 *******************************/
+
 
 static foreign_t
 pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
@@ -1249,6 +1358,9 @@ install_crypto4pl(void)
   PL_register_foreign("_crypto_open_hash_stream", 3,
                       pl_crypto_open_hash_stream, 0);
   PL_register_foreign("_crypto_stream_context", 2, pl_crypto_stream_context, 0);
+
+  PL_register_foreign("_crypto_ecdsa_sign", 4, pl_ecdsa_sign, 0);
+  PL_register_foreign("_crypto_ecdsa_verify", 4, pl_ecdsa_verify, 0);
 
   PL_register_foreign("rsa_private_decrypt", 4, pl_rsa_private_decrypt, 0);
   PL_register_foreign("rsa_private_encrypt", 4, pl_rsa_private_encrypt, 0);
