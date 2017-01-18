@@ -3532,7 +3532,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 		      PL_INT, version))
     goto err;
 
-  cipher = SSL_CIPHER_get_name(SSL_get_current_cipher(ssl));
+  cipher = SSL_get_cipher_name(ssl);
 
   if ( !add_key_string(list_t, FUNCTOR_cipher1,
 		       strlen(cipher), (unsigned char*)cipher) )
