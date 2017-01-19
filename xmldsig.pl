@@ -39,6 +39,7 @@
 :- use_module(library(option)).
 :- use_module(library(sha)).
 :- use_module(library(ssl)).
+:- use_module(library(crypto)).
 :- use_module(library(base64)).
 :- use_module(library(debug)).
 :- use_module(library(dcg/basics)).
@@ -151,15 +152,13 @@ signed_info_dom(Hash, SDOM, _Options) :-
 
 rsa_signature(SignedInfo, Signature, KeyDOM, Options) :-
     option(algorithm(Algorithm), Options, sha1),
-    sha_hash(SignedInfo, Digest, [algorithm(Algorithm)]),
-    hash_atom(Digest, Hex),
-    string_upper(Hex, HEX),
-    debug(xmldsig, 'SignedInfo ~w digest = ~p', [Algorithm, HEX]),
+    crypto_data_hash(SignedInfo, Digest, [algorithm(Algorithm)]),
+    string_upper(Digest, DIGEST),
+    debug(xmldsig, 'SignedInfo ~w digest = ~p', [Algorithm, DIGEST]),
     private_key(Key, Options),
     rsa_key_dom(Key, KeyDOM),
     rsa_sign(Key, Digest, String,
-             [ type(Algorithm),
-               encoding(octet)
+             [ type(Algorithm)
              ]),
     string_length(String, Len),
     debug(xmldsig, 'RSA signatute length: ~p', [Len]),
@@ -270,9 +269,10 @@ xmld_verify_signature(DOM, SignatureDOM, Certificate, Options) :-
     ->  with_output_to(string(C14N),
                        xml_write_canonical(current_output, SignedInfo,
                                            [method(CanonicalizationMethod)|Options])),
-        sha_hash(C14N, HashCodes, [algorithm(HashType)]),
-        string_codes(Digest, HashCodes),
-        rsa_verify(PublicKey, Digest, RawSignature, [type(HashType), encoding(octet)])
+        crypto_data_hash(C14N, Digest, [algorithm(HashType)]),
+        atom_codes(RawSignature, Codes),
+        hash_atom(Codes, HexSignature),
+        rsa_verify(PublicKey, Digest, HexSignature, [type(HashType)])
     ;   domain_error(supported_signature_algorithm, Algorithm)
     ).
 

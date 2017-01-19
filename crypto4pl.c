@@ -1017,8 +1017,7 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
   { PL_free(signature);
     return raise_ssl_error(ERR_get_error());
   }
-  rc = PL_unify_chars(Signature, PL_STRING|REP_ISO_LATIN_1,
-		      signature_len, (char*)signature);
+  rc = unify_bytes_hex(Signature, signature_len, signature);
   PL_free(signature);
 
   return rc;
@@ -1038,17 +1037,18 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
   if ( !get_enc_text(Data, Enc, &data_len, &data) ||
        !recover_public_key(Public, &key) ||
        !get_digest_type(Type, &type) ||
-       !PL_get_nchars(Signature, &signature_len, (char**)&signature, CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+       !PL_get_nchars(Signature, &signature_len, (char**)&signature, REP_ISO_LATIN_1|CVT_LIST|CVT_EXCEPTION) )
     return FALSE;
 
   rc = RSA_verify(type,
                   data, (unsigned int)data_len,
                   signature, (unsigned int)signature_len, key);
   RSA_free(key);
-  if ( rc != 1 )
-  { return raise_ssl_error(ERR_get_error());
-  }
-  return 1;
+
+  if ( rc == 0 || rc == 1 )
+    return rc;
+
+  return raise_ssl_error(ERR_get_error());
 }
 
 

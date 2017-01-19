@@ -209,7 +209,12 @@ crypto_stream_hash(Stream, Hash) :-
 
 %!  ecdsa_sign(+Key, +Data, -Signature, Options)
 %
-%   Create an ECDSA signature for Data with EC private key Key.
+%   Create  an ECDSA  signature for  Data with  EC private  key Key.
+%   Among the most  common cases is signing a hash  that was created
+%   with crypto_data_hash/3 or other predicates of this library. For
+%   this reason, the  default encoding (`hex`) assumes  that Data is
+%   an atom,  string, character list  or code list  representing the
+%   data in hexadecimal notation. See rsa_sign/4 for an example.
 %
 %   Options:
 %
@@ -224,7 +229,10 @@ ecdsa_sign(private_key(ec(Private,Public0,Curve)), Data0, Signature, Options) :-
     '_crypto_ecdsa_sign'(ec(Private,Public,Curve), Data, Enc, Signature).
 
 hex_encoding(hex, Data0, octet, Data) :- !,
-    hex_bytes(Data0, Data).
+    (   hex_bytes(Data0, Data)
+    ->  true
+    ;   domain_error(hex_encoding, Data0)
+    ).
 hex_encoding(Enc, Data, Enc, Data).
 
 hex_bytes(Hs, Bytes) :-
@@ -312,8 +320,8 @@ rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
 %     `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`.
 %
 %     - encoding(+Encoding)
-%     Encoding to use for Data.  Default is `octet`.  Alternatives
-%     are `utf8` and `text`.
+%     Encoding to use for Data.  Default is `hex`.  Alternatives
+%     are `octet`, `utf8` and `text`.
 %
 %   This predicate can be used to compute a =|sha256WithRSAEncryption|=
 %   signature as follows:
@@ -322,18 +330,9 @@ rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
 %     sha256_with_rsa(PemKeyFile, Password, Data, Signature) :-
 %         Algorithm = sha256,
 %         read_key(PemKeyFile, Password, Key),
-%         crypto_data_hash(Data, Digest, [algorithm(Algorithm),
-%                                         encoding(octet)]),
-%         atom_chars(Digest, Cs),
-%         phrase(hex_bytes(Cs), Bytes),
-%         rsa_sign(Key, Bytes, Signature, [type(Algorithm)]).
-%
-%     hex_bytes([]) --> [].
-%     hex_bytes([H1,H2|Hs]) --> [Byte],
-%         { char_type(H1, xdigit(High)),
-%           char_type(H2, xdigit(Low)),
-%           Byte is High*16 + Low },
-%         hex_bytes(Hs).
+%         crypto_data_hash(Data, Hash, [algorithm(Algorithm),
+%                                       encoding(octet)]),
+%         rsa_sign(Key, Hash, Signature, [type(Algorithm)]).
 %
 %     read_key(File, Password, Key) :-
 %         setup_call_cleanup(
@@ -341,14 +340,18 @@ rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
 %             load_private_key(In, Password, Key),
 %             close(In)).
 %     ```
+%
+%   Note that a hash that is computed by crypto_data_hash/3 can be
+%   directly used in rsa_sign/4 as well as ecdsa_sign/4.
 
-rsa_sign(Key, Data, Signature, Options) :-
+rsa_sign(Key, Data0, Signature, Options) :-
     option(type(Type), Options, sha1),
-    option(encoding(Enc), Options, octet),
+    option(encoding(Enc0), Options, hex),
+    hex_encoding(Enc0, Data0, Enc, Data),
     rsa_sign(Key, Type, Enc, Data, Signature).
 
 
-%!  rsa_verify(+Key, +Data, +Signature, +Options) is det.
+%!  rsa_verify(+Key, +Data, +Signature, +Options) is semidet.
 %
 %   Verifies an RSA signature for Data.  Options:
 %
@@ -357,12 +360,14 @@ rsa_sign(Key, Data, Signature, Options) :-
 %     `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`.
 %
 %     - encoding(+Encoding)
-%     Encoding to use for Data.  Default is `octet`.  Alternatives
-%     are `utf8` and `text`.
+%     Encoding to use for Data.  Default is `hex`.  Alternatives
+%     are `octet`, `utf8` and `text`.
 
-rsa_verify(Key, Data, Signature, Options) :-
+rsa_verify(Key, Data0, Signature0, Options) :-
     option(type(Type), Options, sha1),
-    option(encoding(Enc), Options, octet),
+    option(encoding(Enc0), Options, hex),
+    hex_encoding(Enc0, Data0, Enc, Data),
+    hex_bytes(Signature0, Signature),
     rsa_verify(Key, Type, Enc, Data, Signature).
 
 %!  evp_decrypt(+CipherText,
