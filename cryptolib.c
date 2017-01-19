@@ -48,13 +48,13 @@ OPENSSL_zalloc(size_t num)
 #endif
 
 #ifndef HAVE_EVP_MD_CTX_FREE
-static void
+static inline void
 EVP_MD_CTX_free(EVP_MD_CTX *ctx)
 { EVP_MD_CTX_cleanup(ctx);
   OPENSSL_free(ctx);
 }
 
-static EVP_MD_CTX *
+static inline EVP_MD_CTX *
 EVP_MD_CTX_new(void)
 { return OPENSSL_zalloc(sizeof(EVP_MD_CTX));
 }
