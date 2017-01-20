@@ -127,8 +127,8 @@ update_hash(In, Context0, Context) :-
 
 %!  crypto_context_new(-Context, +Options) is det.
 %
-%   Context is unified  with the empty context,  taking into account
-%   Options.  The  context can  be used in  crypto_data_hash/4.  For
+%   Context is  unified with  the empty  context, taking  into account
+%   Options.  The  context can be used  in crypto_data_context/3.  For
 %   Options, see crypto_data_hash/3.
 %
 %   @param Context is an opaque pure  Prolog term that is subject to
@@ -203,7 +203,7 @@ crypto_stream_hash(Stream, Hash) :-
     '_crypto_stream_context'(Stream, Context),
     crypto_context_hash(Context, Hash).
 
-%!  ecdsa_sign(+Key, +Data, -Signature, Options)
+%!  ecdsa_sign(+Key, +Data, -Signature, +Options)
 %
 %   Create  an ECDSA  signature for  Data with  EC private  key Key.
 %   Among the most  common cases is signing a hash  that was created
