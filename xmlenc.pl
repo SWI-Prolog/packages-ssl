@@ -38,6 +38,7 @@
          [ decrypt_xml/4   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
          ]).
 :- use_module(library(ssl)).
+:- use_module(library(crypto)).
 :- use_module(library(sgml)).
 :- use_module(library(base64)).
 :- use_module(library(error)).
@@ -292,27 +293,11 @@ resolve_key(Info, _, _, _):-
     existence_error(usable_key, Info).
 
 
-base64_to_hex(Base64, HexString):-
+base64_to_hex(Base64, Hex):-
     base64(Raw, Base64),
     atom_codes(Raw, Codes),
-    phrase(hex_bytes(HexCodes), Codes),
-    string_codes(HexString, HexCodes).
-
-hex_bytes([A,B|T]) -->
-    [Byte],
-    !,
-    {Hi is (Byte >> 4) /\ 0xf,
-     Lo is Byte /\ 0xf,
-     (  Hi >= 10
-     -> A is 55 + Hi
-     ;  A is 48 + Hi
-     ),
-     (  Lo >= 10
-     -> B is 55 + Lo
-     ;  B is 48 + Lo
-     )},
-    hex_bytes(T).
-hex_bytes([]) --> [].
+    hex_bytes(Hex0, Codes),
+    string_upper(Hex0, Hex).
 
 
 determine_encryption_algorithm(EncryptedData, Algorithm, IVSize):-

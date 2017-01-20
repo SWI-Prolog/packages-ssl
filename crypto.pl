@@ -44,6 +44,7 @@
             ecdsa_verify/4,             % +Key, +Data, +Signature, +Options
             evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
             evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+            hex_bytes/2,                % ?Hex, ?List
             rsa_private_decrypt/4,      % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
@@ -95,6 +96,8 @@ less general alternatives to `library(crypto)`.
 %
 %  @param Data is either an atom, string or code-list
 %  @param Hash is an atom that represents the hash.
+%
+%  @see hex_bytes/2 for conversion between hashes and lists.
 
 crypto_data_hash(Data, Hash, Options) :-
     crypto_context_new(Context0, Options),
@@ -225,22 +228,8 @@ ecdsa_sign(private_key(ec(Private,Public0,Curve)), Data0, Signature, Options) :-
     '_crypto_ecdsa_sign'(ec(Private,Public,Curve), Data, Enc, Signature).
 
 hex_encoding(hex, Data0, octet, Data) :- !,
-    (   hex_bytes(Data0, Data)
-    ->  true
-    ;   domain_error(hex_encoding, Data0)
-    ).
+    hex_bytes(Data0, Data).
 hex_encoding(Enc, Data, Enc, Data).
-
-hex_bytes(Hs, Bytes) :-
-    string_chars(Hs, Chars),
-    phrase(hex_bytes(Chars), Bytes).
-
-hex_bytes([]) --> [].
-hex_bytes([H1,H2|Hs]) --> [Byte],
-    { char_type(H1, xdigit(High)),
-      char_type(H2, xdigit(Low)),
-      Byte is High*16 + Low },
-    hex_bytes(Hs).
 
 %!  ecdsa_verify(+Key, +Data, +Signature, +Options) is semidet.
 %
@@ -259,6 +248,44 @@ ecdsa_verify(public_key(ec(Private,Public0,Curve)), Data0, Signature0, Options) 
     hex_bytes(Public0, Public),
     hex_bytes(Signature0, Signature),
     '_crypto_ecdsa_verify'(ec(Private,Public,Curve), Data, Enc, Signature).
+
+
+%!  hex_bytes(?Hex, ?List) is det.
+%
+%   Relation between hexadecimal  sequence and list of  bytes.  Hex is
+%   an  atom,  string,  list  of   characters  or  list  of  codes  in
+%   hexadecimal  encoding.  This  is  the   format  that  is  used  by
+%   crypto_data_hash/3 and  related predicates to  represent _hashes_.
+%   Bytes is a list of _integers_ between 0 and 255 that represent the
+%   sequence as a  list of bytes.  At least one  of the arguments must
+%   be instantiated. When converting List  _to_ Hex, an _atom_ is used
+%   to represent the sequence of hexadecimal digits.
+%
+%   Example:
+%
+%   ==
+%   ?- hex_bytes('501ACE', Bs).
+%   Bs = [80, 26, 206].
+%   ==
+
+hex_bytes(Hs, Bytes) :-
+    (   ground(Hs) ->
+        string_chars(Hs, Chars),
+        (   phrase(hex_bytes(Chars), Bytes)
+        ->  true
+        ;   domain_error(hex_encoding, Hs)
+        )
+    ;   must_be(list(between(0,255)), Bytes),
+        phrase(bytes_hex(Bytes), Chars),
+        atom_chars(Hs, Chars)
+    ).
+
+hex_bytes([]) --> [].
+hex_bytes([H1,H2|Hs]) --> [Byte],
+    { char_type(H1, xdigit(High)),
+      char_type(H2, xdigit(Low)),
+      Byte is High*16 + Low },
+    hex_bytes(Hs).
 
 
 %!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Options) is det.

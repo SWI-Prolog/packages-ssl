@@ -225,16 +225,9 @@ key_info(Key, _) :-
 base64_bignum_arg(I, Key, Value) :-
     arg(I, Key, HexModulesString),
     string_codes(HexModulesString, HexModules),
-    phrase(hex_bytes(Bytes), HexModules),
+    hex_bytes(HexModules, Bytes),
     phrase(base64(Bytes), Bytes64),
     string_codes(Value, Bytes64).
-
-hex_bytes([H|T]) -->
-    xdigit(D1), xdigit(D2),
-    !,
-    { H is D1<<4+D2 },
-    hex_bytes(T).
-hex_bytes([]) --> [].
 
 
 signed_xml_dom(ObjectDOM, SDOM, KeyDOM, Signature, SignedDOM, _Options) :-
@@ -271,7 +264,7 @@ xmld_verify_signature(DOM, SignatureDOM, Certificate, Options) :-
                                            [method(CanonicalizationMethod)|Options])),
         crypto_data_hash(C14N, Digest, [algorithm(HashType)]),
         atom_codes(RawSignature, Codes),
-        hash_atom(Codes, HexSignature),
+        hex_bytes(HexSignature, Codes),
         rsa_verify(PublicKey, Digest, HexSignature, [type(HashType)])
     ;   domain_error(supported_signature_algorithm, Algorithm)
     ).
