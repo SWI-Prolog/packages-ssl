@@ -91,13 +91,18 @@ clientcert:
 # Documentation
 ################################################################
 
-TEXEXTRA=	ssllib.tex crypto.tex saml.tex xmldsig.tex xmlenc.tex
+PUBLICPL=@PL@
+LIBTOTEX=$(PUBLICPL) -q -f ../../man/libtotex.pl -g libtotex --
+
+TEXEXTRA=	ssllib.tex crypto.tex cryptolib.tex \
+		saml.tex xmldsig.tex xmlenc.tex
 $(TEX):		$(TEXEXTRA)
 
 ssllib.tex:	ssl.pl
 		$(PLTOTEX) --out=$@ --section 'library(ssl)'
-crypto.tex:	crypto.pl
-		$(PLTOTEX) --out=$@ --section 'library(crypto)'
+cryptolib.tex:	cryptolib.md crypto.pl
+		mkdir -p summaries.d
+		$(LIBTOTEX) --lib=crypto --module=crypto cryptolib.md
 saml.tex:	saml.pl
 		$(PLTOTEX) --out=$@ --subsection 'library(saml)'
 xmldsig.tex:	xmldsig.pl
@@ -120,7 +125,8 @@ tests/test_certs:
 ################################################################
 
 clean:
-		rm -f *~ *.o *% a.out core config.log ssl.tex crypto.tex
+		rm -f *~ *.o *% a.out core config.log ssl.tex
+		rm -f crypto.tex cryptolib.tex
 		$(RUNTEX) --clean ssl
 
 distclean:	clean

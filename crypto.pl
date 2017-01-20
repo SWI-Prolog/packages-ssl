@@ -320,7 +320,7 @@ hex_bytes([H1,H2|Hs]) --> [Byte],
 
 %!  rsa_sign(+Key, +Data, -Signature, +Options) is det.
 %
-%   Create an RSA signature for Data.  Options:
+%   Create an RSA signature for Data with private key Key.  Options:
 %
 %     - type(+Type)
 %     SHA algorithm used to compute the digest.  Values are
@@ -360,7 +360,9 @@ rsa_sign(Key, Data0, Signature, Options) :-
 
 %!  rsa_verify(+Key, +Data, +Signature, +Options) is semidet.
 %
-%   Verifies an RSA signature for Data.  Options:
+%   Verify an RSA signature for Data with public key Key.
+%
+%   Options:
 %
 %     - type(+Type)
 %     SHA algorithm used to compute the digest.  Values are
