@@ -136,8 +136,8 @@ test(trip_private_public, In == Out) :-
                 load_certificate(S2, Cert)
               )),
     memberchk(key(PublicKey), Cert),
-    rsa_private_encrypt(PrivateKey, In, Encrypted),
-    rsa_public_decrypt(PublicKey, Encrypted, Out).
+    rsa_private_encrypt(PrivateKey, In, Encrypted, []),
+    rsa_public_decrypt(PublicKey, Encrypted, Out, []).
 test(trip_private_public, In == Out) :-
     numlist(1040, 1060, L),
     string_codes(In, L),
@@ -148,8 +148,8 @@ test(trip_private_public, In == Out) :-
                 load_certificate(S2, Cert)
               )),
     memberchk(key(PublicKey), Cert),
-    rsa_private_encrypt(PrivateKey, In, Encrypted),
-    rsa_public_decrypt(PublicKey, Encrypted, Out).
+    rsa_private_encrypt(PrivateKey, In, Encrypted, []),
+    rsa_public_decrypt(PublicKey, Encrypted, Out, []).
 test(trip_public_private, In == Out) :-
     In = "Hello World!",
     from_file('tests/test_certs/server-key.pem', S1,
@@ -159,8 +159,8 @@ test(trip_public_private, In == Out) :-
                 load_certificate(S2, Cert)
               )),
     memberchk(key(PublicKey), Cert),
-    rsa_public_encrypt(PublicKey, In, Encrypted),
-    rsa_private_decrypt(PrivateKey, Encrypted, Out).
+    rsa_public_encrypt(PublicKey, In, Encrypted, []),
+    rsa_private_decrypt(PrivateKey, Encrypted, Out, []).
 
 :- end_tests(ssl_keys).
 

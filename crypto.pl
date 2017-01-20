@@ -44,10 +44,6 @@
             ecdsa_verify/4,             % +Key, +Data, +Signature, +Options
             evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
             evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
-            rsa_private_decrypt/3,      % +Key, +Ciphertext, -Plaintext
-            rsa_private_encrypt/3,      % +Key, +Plaintext, -Ciphertext
-            rsa_public_decrypt/3,       % +Key, +Ciphertext, -Plaintext
-            rsa_public_encrypt/3,       % +Key, +Plaintext, -Ciphertext
             rsa_private_decrypt/4,      % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
@@ -265,10 +261,6 @@ ecdsa_verify(public_key(ec(Private,Public0,Curve)), Data0, Signature0, Options) 
     '_crypto_ecdsa_verify'(ec(Private,Public,Curve), Data, Enc, Signature).
 
 
-%!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText) is det.
-%!  rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText) is det.
-%!  rsa_public_decrypt(+PublicKey, +CipherText, -PlainText) is det.
-%!  rsa_public_encrypt(+PublicKey, +PlainText, -CipherText) is det.
 %!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Options) is det.
 %!  rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Options) is det.
 %!  rsa_public_decrypt(+PublicKey, +CipherText, -PlainText, +Options) is det.
@@ -298,18 +290,6 @@ ecdsa_verify(public_key(ec(Private,Public0,Curve)), Data0, Signature0, Options) 
 %
 %   @error ssl_error(Code, LibName, FuncName, Reason)   is raised if
 %   there is an error, e.g., if the text is too long for the key.
-
-rsa_private_decrypt(PrivateKey, CipherText, PlainText) :-
-    rsa_private_decrypt(PrivateKey, CipherText, PlainText, [encoding(utf8)]).
-
-rsa_private_encrypt(PrivateKey, PlainText, CipherText) :-
-    rsa_private_encrypt(PrivateKey, PlainText, CipherText, [encoding(utf8)]).
-
-rsa_public_decrypt(PublicKey, CipherText, PlainText) :-
-    rsa_public_decrypt(PublicKey, CipherText, PlainText, [encoding(utf8)]).
-
-rsa_public_encrypt(PublicKey, PlainText, CipherText) :-
-    rsa_public_encrypt(PublicKey, PlainText, CipherText, [encoding(utf8)]).
 
 %!  rsa_sign(+Key, +Data, -Signature, +Options) is det.
 %
