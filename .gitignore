@@ -35,6 +35,8 @@ saml.tex
 xmlenc.tex
 xmldsig.tex
 crypto.tex
+cryptolib.tex
 ssl.html
 ssl.pdf
 .gdbinit
+summaries.d
