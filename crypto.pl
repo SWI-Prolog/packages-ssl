@@ -93,6 +93,13 @@ less general alternatives to `library(crypto)`.
 %    the hashing requires.  The default encoding is =utf8=.  The
 %    other meaningful value is =octet=, claiming that Data contains
 %    raw bytes.
+%    * hmac(+Key)
+%    If this option is specified, a _hash-based message authentication
+%    code_ (HMAC) is computed, using the specified Key which is either
+%    an atom or string. Any of the available digest algorithms can be
+%    used with this option. The cryptographic strength of the HMAC
+%    depends on that of the chosen algorithm and also on the key. This
+%    option requires OpenSSL 1.1.0 or greater.
 %
 %  @param Data is either an atom, string or code-list
 %  @param Hash is an atom that represents the hash.
@@ -162,21 +169,7 @@ crypto_data_context(Data, Context0, Context) :-
 crypto_context_hash(Context, Hash) :-
     '_crypto_context_copy'(Context, Copy),
     '_crypto_context_hash'(Copy, List),
-    crypto_hash_atom(List, Hash).
-
-crypto_hash_atom(Codes, Hash) :-
-    phrase(bytes_hex(Codes), HexCodes),
-    atom_chars(Hash, HexCodes).
-
-bytes_hex([]) --> [].
-bytes_hex([H|T]) -->
-    { High is H>>4,
-      Low is H /\ 0xf,
-      char_type(C0, xdigit(High)),
-      char_type(C1, xdigit(Low))
-    },
-    [C0,C1],
-    bytes_hex(T).
+    hex_bytes(Hash, List).
 
 %!  crypto_open_hash_stream(+OrgStream, -HashStream, +Options) is det.
 %
@@ -252,9 +245,9 @@ ecdsa_verify(public_key(ec(Private,Public0,Curve)), Data0, Signature0, Options) 
 
 %!  hex_bytes(?Hex, ?List) is det.
 %
-%   Relation between hexadecimal  sequence and list of  bytes.  Hex is
-%   an  atom,  string,  list  of   characters  or  list  of  codes  in
-%   hexadecimal  encoding.  This  is  the   format  that  is  used  by
+%   Relation between a hexadecimal sequence  and a list of bytes.  Hex
+%   is  an atom,  string,  list  of characters  or  list  of codes  in
+%   hexadecimal  encoding.   This  is  the  format  that  is  used  by
 %   crypto_data_hash/3 and  related predicates to  represent _hashes_.
 %   Bytes is a list of _integers_ between 0 and 255 that represent the
 %   sequence as a  list of bytes.  At least one  of the arguments must
@@ -287,6 +280,15 @@ hex_bytes([H1,H2|Hs]) --> [Byte],
       Byte is High*16 + Low },
     hex_bytes(Hs).
 
+bytes_hex([]) --> [].
+bytes_hex([B|Bs]) -->
+    { High is B>>4,
+      Low is B /\ 0xf,
+      char_type(C0, xdigit(High)),
+      char_type(C1, xdigit(Low))
+    },
+    [C0,C1],
+    bytes_hex(Bs).
 
 %!  rsa_private_decrypt(+PrivateKey, +CipherText, -PlainText, +Options) is det.
 %!  rsa_private_encrypt(+PrivateKey, +PlainText, -CipherText, +Options) is det.

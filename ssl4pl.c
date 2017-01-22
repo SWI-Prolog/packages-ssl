@@ -1556,17 +1556,6 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
   return SSL_PL_ERROR;
 }
 
-static char *
-ssl_strdup(const char *s)
-{
-    char *new = NULL;
-
-    if (s != NULL && (new = malloc(strlen(s)+1)) != NULL) {
-        strcpy(new, s);
-    }
-    return new;
-}
-
 static PL_SSL *
 ssl_new(void)
 /*

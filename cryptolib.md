@@ -8,8 +8,8 @@ connections, sockets or streams.
 
 A **hash**, also called **digest**, is  a way to verify the integrity of
 data.  In typical  cases, a hash is significantly shorter  than the data
-itself, and  already miniscule  changes in the  data lead  to completely
-different hashes.
+itself,  and already  miniscule changes  in the  data lead  to different
+hashes.
 
 The  hash functionality  of this  library subsumes  and extends  that of
 `library(sha)`, `library(hash_stream)` and `library(md5)` by providing a

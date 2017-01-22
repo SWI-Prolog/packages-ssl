@@ -85,6 +85,16 @@ unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
   return rc;
 }
 
+static char *
+ssl_strdup(const char *s)
+{
+    char *new = NULL;
+
+    if (s != NULL && (new = malloc(strlen(s)+1)) != NULL) {
+        strcpy(new, s);
+    }
+    return new;
+}
 
 
 /***********************************************************************

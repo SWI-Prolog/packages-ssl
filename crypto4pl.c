@@ -33,10 +33,11 @@
 */
 
 #include <config.h>
-#include <SWI-Stream.h>
-#include <SWI-Prolog.h>
 #include <assert.h>
 #include <string.h>
+#include <SWI-Stream.h>
+#include <SWI-Prolog.h>
+#include <openssl/hmac.h>
 #include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
@@ -59,6 +60,7 @@ static atom_t ATOM_pkcs1_oaep;
 static atom_t ATOM_none;
 static atom_t ATOM_block;
 static atom_t ATOM_algorithm;
+static atom_t ATOM_hmac;
 static atom_t ATOM_close_parent;
 static atom_t ATOM_encoding;
 static atom_t ATOM_padding;
@@ -90,6 +92,8 @@ typedef struct context
   int             close_parent;
 
   EVP_MD_CTX     *ctx;
+  HMAC_CTX       *hmac_ctx;
+  char           *hmac_key;
 } PL_CRYPTO_CONTEXT;
 
 static int
@@ -97,6 +101,10 @@ free_crypto_context(PL_CRYPTO_CONTEXT *c)
 {
   EVP_MD_CTX_free(c->ctx);
   free(c);
+  free(c->hmac_key);
+#ifdef HAVE_HMAC_CTX_FREE
+  HMAC_CTX_free(c->hmac_ctx);
+#endif
   return TRUE;
 }
 
@@ -225,6 +233,14 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
 #endif
         } else
           return PL_domain_error("algorithm", a);
+      } else if ( aname == ATOM_hmac )
+      { size_t key_len;
+        char *key;
+
+        if ( !PL_get_nchars(a, &key_len, &key,
+                      CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
+          return FALSE;
+        result->hmac_key = ssl_strdup(key);
       } else if ( aname == ATOM_close_parent )
       { if ( !PL_get_bool_ex(a, &result->close_parent) )
           return FALSE;
@@ -262,8 +278,10 @@ pl_crypto_context_new(term_t tcontext, term_t options)
   if ( !context )
     return FALSE;
 
-  context->magic = CONTEXT_MAGIC;
-  context->ctx = EVP_MD_CTX_new();
+  context->magic    = CONTEXT_MAGIC;
+  context->ctx      = NULL;
+  context->hmac_ctx = NULL;
+  context->hmac_key = NULL;
 
   context->parent_stream = NULL;
   context->hash_stream   = NULL;
@@ -271,10 +289,26 @@ pl_crypto_context_new(term_t tcontext, term_t options)
   if ( !hash_options(options, context) )
     return FALSE;
 
-  if ( !EVP_DigestInit_ex(context->ctx, context->algorithm, NULL) )
-  { EVP_MD_CTX_free(context->ctx);
-    return FALSE;
+#ifdef HAVE_HMAC_CTX_NEW
+  if ( context->hmac_key )
+  { context->hmac_ctx = HMAC_CTX_new();
+    if ( !HMAC_Init_ex(context->hmac_ctx,
+                       context->hmac_key, strlen(context->hmac_key),
+                       context->algorithm, NULL) )
+    { HMAC_CTX_free(context->hmac_ctx);
+      return FALSE;
+    }
   }
+#endif
+
+  if ( !context->hmac_ctx )
+  { context->ctx = EVP_MD_CTX_new();
+    if ( !EVP_DigestInit_ex(context->ctx, context->algorithm, NULL) )
+    { EVP_MD_CTX_free(context->ctx);
+      return FALSE;
+    }
+  }
+
   return register_context(tcontext, context);
 }
 
@@ -282,6 +316,7 @@ static foreign_t
 pl_crypto_context_copy(term_t tin, term_t tout)
 {
   PL_CRYPTO_CONTEXT *in, *out;
+  int rc = 0;
 
   if ( !get_context(tin, &in) )
     return FALSE;
@@ -292,17 +327,47 @@ pl_crypto_context_copy(term_t tin, term_t tout)
     return FALSE;
 
   out->magic = CONTEXT_MAGIC;
-  out->ctx = EVP_MD_CTX_new();
+  out->hmac_key = ssl_strdup(in->hmac_key);
 
   out->encoding = in->encoding;
   out->algorithm = in->algorithm;
 
-  if ( !EVP_DigestInit_ex(out->ctx, out->algorithm, NULL) )
-  { EVP_MD_CTX_free(out->ctx);
-    return FALSE;
+  out->ctx = in->ctx ? EVP_MD_CTX_new() : NULL;
+  if ( out->ctx )
+  { if ( !EVP_DigestInit_ex(out->ctx, out->algorithm, NULL) )
+    { EVP_MD_CTX_free(out->ctx);
+      return FALSE;
+    }
+    rc = EVP_MD_CTX_copy_ex(out->ctx, in->ctx);
   }
 
-  return register_context(tout, out) && EVP_MD_CTX_copy_ex(out->ctx, in->ctx);
+#if defined(HAVE_HMAC_CTX_NEW) && defined(HAVE_HMAC_CTX_FREE)
+  out->hmac_ctx = in->hmac_ctx ? HMAC_CTX_new() : NULL;
+
+  if ( out->hmac_ctx )
+  { if ( !HMAC_Init_ex(out->hmac_ctx,
+                       out->hmac_key, strlen(out->hmac_key),
+                       out->algorithm, NULL) )
+    { HMAC_CTX_free(out->hmac_ctx);
+      return FALSE;
+    }
+    rc = HMAC_CTX_copy(out->hmac_ctx, in->hmac_ctx);
+  }
+#else
+  out->hmac_ctx = NULL;
+#endif
+
+  return register_context(tout, out) && rc;
+}
+
+
+static int
+hash_append(PL_CRYPTO_CONTEXT *context, void *data, size_t size)
+{
+  if ( context->hmac_ctx )
+    return HMAC_Update(context->hmac_ctx, data, size);
+
+  return EVP_DigestUpdate(context->ctx, data, size);
 }
 
 
@@ -321,7 +386,7 @@ pl_crypto_update_context(term_t from, term_t tcontext)
     return FALSE;
 
 
-  return EVP_DigestUpdate(context->ctx, data, datalen);
+  return hash_append(context, data, datalen);
 }
 
 static foreign_t
@@ -334,7 +399,12 @@ pl_crypto_context_hash(term_t tcontext, term_t hash)
   if ( !get_context(tcontext, &context) )
     return FALSE;
 
-  EVP_DigestFinal_ex(context->ctx, digest, &len);
+  if ( context->hmac_ctx )
+  { HMAC_Final(context->hmac_ctx, digest, &len);
+  } else
+  { EVP_DigestFinal_ex(context->ctx, digest, &len);
+  }
+
   return PL_unify_list_ncodes(hash, len, (char *) digest);
 }
 
@@ -342,13 +412,6 @@ pl_crypto_context_hash(term_t tcontext, term_t hash)
                  /***************************
                  *     Hashes on streams    *
                  ****************************/
-
-static void
-hash_append(PL_CRYPTO_CONTEXT *context, void *data, size_t size)
-{
-  EVP_DigestUpdate(context->ctx, data, size);
-}
-
 
 static ssize_t                          /* range-limited read */
 hash_read(void *handle, char *buf, size_t size)
@@ -1345,6 +1408,7 @@ install_crypto4pl(void)
   MKATOM(block);
   MKATOM(encoding);
   MKATOM(algorithm);
+  MKATOM(hmac);
   MKATOM(close_parent);
   MKATOM(padding);
 
