@@ -2119,7 +2119,13 @@ ssl_close(PL_SSL_INSTANCE *instance)
              * Send SSL/TLS close_notify, if no fatal alert has occurred.
              */
             if ( !instance->fatal_alert )
-              SSL_shutdown(instance->ssl);
+	    { switch(SSL_shutdown(instance->ssl))
+	      { case  1: break;		/* ok */
+	        case  2: break;		/* TBD: not yes completed */
+	        case  3: break;		/* TBD: undocumented */
+	        case -1: ret = -1;
+	      }
+	    }
         }
 
         if (instance->ssl) {
@@ -2131,7 +2137,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
            Sset_filter(instance->swrite, NULL);
            /* Close the stream if requested */
            if (instance->config->close_parent)
-             Sclose(instance->swrite);
+             ret += Sclose(instance->swrite);
         }
 
         if (instance->sread != NULL) {
@@ -2139,7 +2145,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
            Sset_filter(instance->sread, NULL);
            /* Close the stream if requested */
            if (instance->config->close_parent)
-             Sclose(instance->sread);
+             ret += Sclose(instance->sread);
         }
         /* Decrease reference count on the context */
         ssl_deb(4, "Decreasing atom count on %d\n", instance->config->atom);
@@ -2152,7 +2158,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
 #endif
 
     ssl_deb(1, "Controlled close\n");
-    return ret;
+    return ret == 0 ? 0 : -1;
 }
 
 
