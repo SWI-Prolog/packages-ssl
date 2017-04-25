@@ -3294,61 +3294,65 @@ pl_ssl_negotiate(term_t config,
 		 term_t org_in, term_t org_out, /* wire streams */
 		 term_t in, term_t out)		/* data streams */
 { PL_SSL *conf;
-  IOSTREAM *sorg_in, *sorg_out;
+  IOSTREAM *sorg_in = NULL, *sorg_out = NULL;
   IOSTREAM *i, *o;
   PL_SSL_INSTANCE * instance = NULL;
-  int rc;
+  int rc = FALSE;
 
   if ( !get_conf(config, &conf) )
     return FALSE;
-  if ( !PL_get_stream_handle(org_in, &sorg_in) )
-    return FALSE;
-  if ( !PL_get_stream_handle(org_out, &sorg_out) )
-    return FALSE;
+  if ( !PL_get_stream_handle(org_in, &sorg_in) ||
+       !PL_get_stream_handle(org_out, &sorg_out) )
+    goto out;
 
   if ( !(rc = ssl_ssl_bio(conf, sorg_in, sorg_out, &instance)) )
-  { PL_release_stream(sorg_in);
-    PL_release_stream(sorg_out);
-    return raise_ssl_error(ERR_get_error());
+  { rc = raise_ssl_error(ERR_get_error());
+    goto out;
   }
 
   if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
-  { PL_release_stream(sorg_in);
-    PL_release_stream(sorg_out);
-    return PL_resource_error("memory");
+  { rc = PL_resource_error("memory");
+    goto out;
   }
   instance->close_needed++;
   if ( !PL_unify_stream(in, i) )
   { Sclose(i);
-    PL_release_stream(sorg_in);
-    PL_release_stream(sorg_out);
-    return FALSE;
+    goto out;
   }
   Sset_filter(sorg_in, i);
-  PL_release_stream(sorg_in);
   instance->dread = i;
 
   if ( !(o=Snew(instance, SIO_OUTPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
-  { PL_release_stream(sorg_out);
-    return PL_resource_error("memory");
+  { rc = PL_resource_error("memory");
+    goto out;
   }
   instance->close_needed++;
   if ( !PL_unify_stream(out, o) )
   { Sclose(i);
-    Sset_filter(sorg_in, NULL);
-    PL_release_stream(sorg_out);
     Sclose(o);
-    return FALSE;
+    goto out;
   }
   Sset_filter(sorg_out, o);
-  PL_release_stream(sorg_out);
   instance->dwrite = o;
 
   /* Increase atom reference count so that the context is not
      GCd until this session is complete */
   ssl_deb(4, "Increasing count on %d\n", conf->atom);
   PL_register_atom(conf->atom);
-  return TRUE;
+
+out:
+  if ( sorg_in  )
+  { if ( !rc )
+      Sset_filter(sorg_in, NULL);
+    PL_release_stream(sorg_in);
+  }
+  if ( sorg_out )
+  { if ( !rc )
+      Sset_filter(sorg_out, NULL);
+    PL_release_stream(sorg_out);
+  }
+
+  return rc;
 }
 
 static void
