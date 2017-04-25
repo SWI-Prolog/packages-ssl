@@ -2107,58 +2107,48 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
 
 static int
 ssl_close(PL_SSL_INSTANCE *instance)
-/*
- * Clean up TCP and SSL connection resources
- */
-{
-    int ret = 0;
-    if (instance) {
-        if ( (instance->config->role != PL_SSL_SERVER) ||
-             instance->config->close_notify ) {
-            /*
-             * Send SSL/TLS close_notify, if no fatal alert has occurred.
-             */
-            if ( !instance->fatal_alert )
-	    { switch(SSL_shutdown(instance->ssl))
-	      { case  1: break;		/* ok */
-	        case  2: break;		/* TBD: not yes completed */
-	        case  3: break;		/* TBD: undocumented */
-	        case -1: ret = -1;
-	      }
-	    }
-        }
+{ int ret = 0;
 
-        if (instance->ssl) {
-            SSL_free(instance->ssl);
-        }
-
-        if (instance->swrite != NULL) {
-           /* Indicate we are no longer filtering the stream */
-           Sset_filter(instance->swrite, NULL);
-           /* Close the stream if requested */
-           if (instance->config->close_parent)
-             ret += Sclose(instance->swrite);
-        }
-
-        if (instance->sread != NULL) {
-           /* Indicate we are no longer filtering the stream */
-           Sset_filter(instance->sread, NULL);
-           /* Close the stream if requested */
-           if (instance->config->close_parent)
-             ret += Sclose(instance->sread);
-        }
-        /* Decrease reference count on the context */
-        ssl_deb(4, "Decreasing atom count on %d\n", instance->config->atom);
-        PL_unregister_atom(instance->config->atom);
-
-        free(instance);
+  if ( instance )
+  { if ( (instance->config->role != PL_SSL_SERVER) ||
+	 instance->config->close_notify )
+    { /* Send SSL/TLS close_notify, if no fatal alert has occurred. */
+      if ( !instance->fatal_alert )
+      { switch(SSL_shutdown(instance->ssl))
+	{ case  1: break;		/* ok */
+	  case  2: break;		/* TBD: not yet completed */
+	  case  3: break;		/* TBD: undocumented */
+	  case -1: ret = -1;		/* I/O error */
+	}
+      }
     }
+
+    if ( instance->ssl )
+      SSL_free(instance->ssl);
+
+    if ( instance->swrite )
+      Sset_filter(instance->swrite, NULL);
+    if ( instance->sread )
+      Sset_filter(instance->sread, NULL);
+
+    if ( instance->config->close_parent )
+    { if ( instance->swrite )
+	ret += Sclose(instance->swrite);
+      if ( instance->sread )
+	ret += Sclose(instance->sread);
+    }
+
+    ssl_deb(4, "Decreasing atom count on %d\n", instance->config->atom);
+    PL_unregister_atom(instance->config->atom);
+
+    free(instance);
+  }
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-    ERR_free_strings();
+  ERR_free_strings();
 #endif
 
-    ssl_deb(1, "Controlled close\n");
-    return ret == 0 ? 0 : -1;
+  ssl_deb(1, "Controlled close: %d\n", ret);
+  return ret == 0 ? 0 : -1;
 }
 
 
@@ -3309,6 +3299,9 @@ pl_ssl_negotiate(term_t config,
   { rc = raise_ssl_error(ERR_get_error());
     goto out;
   }
+
+  assert(instance->sread = sorg_in);
+  assert(instance->swrite = sorg_out);
 
   if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
   { rc = PL_resource_error("memory");
