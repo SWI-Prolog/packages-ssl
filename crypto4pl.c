@@ -1322,6 +1322,9 @@ static int
 crypto_lib_init(void)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+  OpenSSL_add_all_algorithms();
+  ERR_load_crypto_strings();
+
   if ( (old_id_callback=CRYPTO_THREADID_get_callback()) == 0 )
   { int i;
 
