@@ -2710,8 +2710,6 @@ ssl_lib_init(void)
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     (void) SSL_library_init();
     SSL_load_error_strings();
-#else
-    (void) OPENSSL_init_ssl(0, NULL);
 #endif
 
     if ((ctx_idx = SSL_CTX_get_ex_new_index( 0
