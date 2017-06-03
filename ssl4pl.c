@@ -2707,9 +2707,6 @@ ssl_lib_init(void)
  * One-time library initialization code
  */
 {
-    /* This call will ensure we only end up calling RAND_poll() once
-       - preventing an ugly synchronization issue in OpenSSL */
-    RAND_status();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     (void) SSL_library_init();
     SSL_load_error_strings();
