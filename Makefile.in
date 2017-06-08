@@ -91,7 +91,7 @@ clientcert:
 # Documentation
 ################################################################
 
-LIBTOTEX=$(PUBLICPL) -q -f ../../man/libtotex.pl -g libtotex --
+LIBTOTEX=$(PUBLICPL) ../../man/libtotex.pl --
 
 TEXEXTRA=	ssllib.tex crypto.tex cryptolib.tex \
 		saml.tex xmldsig.tex xmlenc.tex
