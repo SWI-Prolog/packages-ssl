@@ -114,7 +114,7 @@ xmlenc.tex:	xmlenc.pl
 ################################################################
 
 check::		tests/test_certs
-		$(PL) -q -f test_ssl.pl -F none -g test_ssl,halt -t 'halt(1)'
+		$(PL) -q -f test_ssl.pl -F none -g test_ssl -t halt
 
 tests/test_certs:
 		(cd tests && ./mkcerts.sh >& /dev/null)
