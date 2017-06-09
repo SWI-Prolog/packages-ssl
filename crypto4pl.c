@@ -54,6 +54,7 @@ static atom_t ATOM_sha384;
 static atom_t ATOM_sha512;
 static atom_t ATOM_blake2s256;
 static atom_t ATOM_blake2b512;
+static atom_t ATOM_ripemd160;
 
 static atom_t ATOM_pkcs1;
 static atom_t ATOM_pkcs1_oaep;
@@ -231,6 +232,8 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
         } else if ( a_algorithm == ATOM_blake2s256 )
         { result->algorithm = EVP_blake2s256();
 #endif
+        } else if ( a_algorithm == ATOM_ripemd160 )
+        { result->algorithm = EVP_ripemd160();
         } else
           return PL_domain_error("algorithm", a);
       } else if ( aname == ATOM_hmac )
@@ -1404,6 +1407,7 @@ install_crypto4pl(void)
   MKATOM(md5);
   MKATOM(blake2b512);
   MKATOM(blake2s256);
+  MKATOM(ripemd160);
 
   MKATOM(pkcs1);
   MKATOM(pkcs1_oaep);
