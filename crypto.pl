@@ -33,7 +33,8 @@
 */
 
 :- module(crypto,
-          [ crypto_data_hash/3,         % +Data, -Hash, +Options
+          [ crypto_n_random_bytes/2,    % +N, -Bytes
+            crypto_data_hash/3,         % +Data, -Hash, +Options
             crypto_file_hash/3,         % +File, -Hash, +Options
             crypto_context_new/2,       % -Context, +Options
             crypto_data_context/3,      % +Data, +C0, -C
@@ -77,6 +78,45 @@ less general alternatives to `library(crypto)`.
 @author Matt Lilley
 @author [Markus Triska](https://www.metalevel.at)
 */
+
+%%  crypto_n_random_bytes(+N, -Bytes) is det
+%
+%   Bytes is unified with a list of N cryptographically secure
+%   pseudo-random bytes. Each byte is an integer between 0 and 255. If
+%   the internal pseudo-random number generator (PRNG) has not been
+%   seeded with enough entropy to ensure an unpredictable byte
+%   sequence, an exception is thrown.
+%
+%   One way to relate such a list of bytes to an _integer_ is to use
+%   CLP(FD) constraints as follows:
+%
+%   ==
+%   :- use_module(library(clpfd)).
+%
+%   bytes_integer(Bs, N) :-
+%           foldl(pow, Bs, 0-0, N-_).
+%
+%   pow(B, N0-I0, N-I) :-
+%           B in 0..255,
+%           N #= N0 + B*256^I0,
+%           I #= I0 + 1.
+%   ==
+%
+%   With this definition, you can generate a random 256-bit integer
+%   _from_ a list of 32 random _bytes_:
+%
+%   ==
+%   ?- crypto_n_random_bytes(32, Bs),
+%      bytes_integer(Bs, I).
+%   Bs = [98, 9, 35, 100, 126, 174, 48, 176, 246|...],
+%   I = 109798276762338328820827...(53 digits omitted).
+%   ==
+%
+%   The above relation also works in the other direction, letting you
+%   translate an integer _to_ a list of bytes. In addition, you can
+%   use hex_bytes/2 to convert bytes to _tokens_ that can be easily
+%   exchanged in your applications. This also works if you have
+%   compiled SWI-Prolog without support for large integers.
 
 %%  crypto_data_hash(+Data, -Hash, +Options) is det
 %

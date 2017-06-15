@@ -4,6 +4,15 @@ This library provides bindings  to  functionality   of  OpenSSL  that is
 related to cryptography and authentication,   not  necessarily involving
 connections, sockets or streams.
 
+## Cryptographically secure random numbers {#crypto-random}
+
+Many cryptographic applications require the availability of numbers that
+are  sufficiently unpredictable.   Examples  are the  creation of  keys,
+nonces and salts.  With this library, you can generate cryptographically
+strong pseudo-random numbers for such use cases:
+
+  * [[crypto_n_random_bytes/2]]
+
 ## Hashes and digests {#crypto-hash}
 
 A **hash**, also called **digest**, is  a way to verify the integrity of
