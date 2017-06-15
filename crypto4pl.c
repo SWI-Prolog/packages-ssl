@@ -38,6 +38,7 @@
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
 #include <openssl/hmac.h>
+#include <openssl/rand.h>
 #include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
@@ -72,6 +73,37 @@ static functor_t FUNCTOR_private_key1;
 typedef enum
 { RSA_MODE, EVP_MODE
 } crypt_mode_t;
+
+
+                 /***************************
+                 *       RANDOM BYTES       *
+                 ****************************/
+
+static foreign_t
+pl_crypto_n_random_bytes(term_t tn, term_t tout)
+{
+  int len, rc;
+  unsigned char *buffer;
+
+  if ( !PL_get_integer_ex(tn, &len) )
+    return FALSE;
+
+  buffer = malloc(len);
+
+  if ( !buffer )
+    return FALSE;
+
+  if (RAND_bytes(buffer, len) == 0)
+  { free(buffer);
+    return raise_ssl_error(ERR_get_error());
+  }
+
+  rc = PL_unify_chars(tout, PL_CODE_LIST|REP_ISO_LATIN_1, len, (const char *) buffer);
+
+  free(buffer);
+
+  return rc;
+}
 
 
                  /***************************
@@ -1421,6 +1453,8 @@ install_crypto4pl(void)
 
   FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
+
+  PL_register_foreign("_crypto_n_random_bytes", 2, pl_crypto_n_random_bytes, 0);
 
   PL_register_foreign("crypto_context_new", 2, pl_crypto_context_new, 0);
   PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
