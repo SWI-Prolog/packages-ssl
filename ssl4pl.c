@@ -3610,7 +3610,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
   PL_SSL_INSTANCE* instance;
   X509 *cert;
 
-  if ( !PL_get_stream_handle(stream_t, &stream) )
+  if ( !PL_get_stream(stream_t, &stream, SIO_INPUT) )
     return FALSE;
   if ( stream->functions != &ssl_funcs )
   { PL_release_stream(stream);
@@ -3631,7 +3631,7 @@ pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
 { IOSTREAM* stream;
   PL_SSL_INSTANCE* instance;
 
-  if ( !PL_get_stream_handle(stream_t, &stream) )
+  if ( !PL_get_stream(stream_t, &stream, SIO_INPUT) )
     return FALSE;
   if ( stream->functions != &ssl_funcs )
   { PL_release_stream(stream);
