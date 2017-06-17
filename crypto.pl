@@ -1,6 +1,6 @@
 /*  Part of SWI-Prolog
 
-    Author:        Matt Lilley and Markus Triska
+    Author:        Markus Triska and Matt Lilley
     WWW:           http://www.swi-prolog.org
     Copyright (c)  2004-2017, SWI-Prolog Foundation
                               VU University Amsterdam
@@ -75,8 +75,8 @@ hashing without increasing the memory  footprint of your application. In
 other cases, the specialised hashing  libraries are more lightweight but
 less general alternatives to `library(crypto)`.
 
-@author Matt Lilley
 @author [Markus Triska](https://www.metalevel.at)
+@author Matt Lilley
 */
 
 %%  crypto_n_random_bytes(+N, -Bytes) is det
