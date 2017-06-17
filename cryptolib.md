@@ -93,3 +93,11 @@ The following predicates provide _symmetric_ encryption and decryption:
 
   * [[evp_decrypt/6]]
   * [[evp_encrypt/6]]
+
+## Arithmetic {#crypto-arithmetic}
+
+This  library provides  arithmetic operations  that frequently  arise in
+cryptographic applications, complementing the existing built-ins and GMP
+bindings:
+
+   * [[crypto_modular_inverse/3]]

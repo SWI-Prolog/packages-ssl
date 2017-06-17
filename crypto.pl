@@ -51,7 +51,8 @@
             rsa_public_decrypt/4,       % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_sign/4,                 % +Key, +Data, -Signature, +Options
-            rsa_verify/4                % +Key, +Data, +Signature, +Options
+            rsa_verify/4,               % +Key, +Data, +Signature, +Options
+            crypto_modular_inverse/3    % +X, +M, -Y
           ]).
 :- use_module(library(option)).
 
@@ -475,6 +476,46 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %   Encrypt  the  given  PlainText,  using    the   symmetric  algorithm
 %   Algorithm,  key  Key,  and  iv   IV,    to   give   CipherText.  See
 %   evp_decrypt/6.
+
+
+%%  crypto_modular_inverse(+X, +M, -Y) is det
+%
+%   Compute the modular multiplicative inverse of the integer X. Y is
+%   unified with an integer such that X*Y is congruent to 1 modulo M.
+
+
+crypto_modular_inverse(X, M, Y) :-
+    integer_serialized(X, XS),
+    integer_serialized(M, MS),
+    '_crypto_modular_inverse'(XS, MS, YHex),
+    hex_bytes(YHex, Bytes0),
+    reverse(Bytes0, Bytes),
+    foldl(pow256, Bytes, 0-0, Y-_).
+
+integer_serialized(I, serialized(S)) :-
+    must_be(integer, I),
+    integer_atomic_sign(I, Sign),
+    Abs is abs(I),
+    format(atom(A0), "~16r", [Abs]),
+    atom_length(A0, L),
+    Rem is L mod 2,
+    hex_pad(Rem, Sign, A0, S).
+
+integer_atomic_sign(I, S) :-
+    Sign is sign(I),
+    sign_atom(Sign, S).
+
+sign_atom(-1, '-').
+sign_atom( 0, '').
+sign_atom( 1, '').
+
+hex_pad(0, Sign, A0, A) :- atom_concat(Sign, A0, A).
+hex_pad(1, Sign, A0, A) :- atomic_list_concat([Sign,'0',A0], A).
+
+pow256(Byte, N0-I0, N-I) :-
+    N is N0 + Byte*256^I0,
+    I is I0 + 1.
+
 
                  /*******************************
                  *          Sandboxing          *

@@ -1266,6 +1266,40 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
 }
 
 
+          /*******************************************
+          *      MODULAR MULTIPLICATIVE INVERSE      *
+          ********************************************/
+
+static foreign_t
+pl_crypto_modular_inverse(term_t tx, term_t tm, term_t tout)
+{ BIGNUM *x = NULL, *m = NULL, *r = NULL;
+  BN_CTX *ctx = NULL;
+  char *hex = NULL;
+  int rc, ssl_err = FALSE;
+
+  if ( get_bn_arg(1, tx, &x) &&
+       get_bn_arg(1, tm, &m)  &&
+       ( ctx = BN_CTX_new() ) &&
+       ( r = BN_mod_inverse(NULL, x, m, ctx) ) &&
+       ( hex = BN_bn2hex(r) ) )
+  { rc = PL_unify_chars(tout, PL_STRING|REP_ISO_LATIN_1, strlen(hex), hex);
+  } else
+  { ssl_err = TRUE;
+  }
+
+  OPENSSL_free(hex);
+  BN_free(x);
+  BN_free(m);
+  BN_free(r);
+  BN_CTX_free(ctx);
+
+  if ( ssl_err )
+  { return raise_ssl_error(ERR_get_error());
+  }
+
+  return rc;
+}
+
 
                 /*******************************
                 *            THREADING         *
@@ -1454,6 +1488,8 @@ install_crypto4pl(void)
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
 
   PL_register_foreign("crypto_n_random_bytes", 2, pl_crypto_n_random_bytes, 0);
+  PL_register_foreign("_crypto_modular_inverse", 3,
+                      pl_crypto_modular_inverse, 0);
 
   PL_register_foreign("crypto_context_new", 2, pl_crypto_context_new, 0);
   PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
