@@ -523,10 +523,28 @@ pow256(Byte, N0-I0, N-I) :-
 
 :- multifile sandbox:safe_primitive/1.
 
+sandbox:safe_primitive(crypto:hex_bytes(_,_)).
+sandbox:safe_primitive(crypto:crypto_n_random_bytes(_,_)).
+
 sandbox:safe_primitive(crypto:crypto_data_hash(_,_,_)).
 sandbox:safe_primitive(crypto:crypto_data_context(_,_,_)).
 sandbox:safe_primitive(crypto:crypto_context_new(_,_)).
 sandbox:safe_primitive(crypto:crypto_context_hash(_,_)).
+
+sandbox:safe_primitive(crypto:ecdsa_sign(_,_,_,_)).
+sandbox:safe_primitive(crypto:ecdsa_verify(_,_,_,_)).
+
+sandbox:safe_primitive(crypto:rsa_sign(_,_,_,_)).
+sandbox:safe_primitive(crypto:rsa_verify(_,_,_,_)).
+sandbox:safe_primitive(crypto:rsa_public_encrypt(_,_,_,_)).
+sandbox:safe_primitive(crypto:rsa_public_decrypt(_,_,_,_)).
+sandbox:safe_primitive(crypto:rsa_private_encrypt(_,_,_,_)).
+sandbox:safe_primitive(crypto:rsa_private_decrypt(_,_,_,_)).
+
+sandbox:safe_primitive(crypto:evp_decrypt(_,_,_,_,_,_)).
+sandbox:safe_primitive(crypto:evp_encrypt(_,_,_,_,_,_)).
+
+sandbox:safe_primitive(crypto:crypto_modular_inverse(_,_,_)).
 
                  /*******************************
                  *           MESSAGES           *
