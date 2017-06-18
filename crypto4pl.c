@@ -132,11 +132,11 @@ static int
 free_crypto_context(PL_CRYPTO_CONTEXT *c)
 {
   EVP_MD_CTX_free(c->ctx);
-  free(c);
   free(c->hmac_key);
 #ifdef HAVE_HMAC_CTX_FREE
   HMAC_CTX_free(c->hmac_ctx);
 #endif
+  free(c);
   return TRUE;
 }
 
