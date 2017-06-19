@@ -52,7 +52,11 @@
             rsa_public_encrypt/4,       % +Key, +Plaintext, -Ciphertext, +Enc
             rsa_sign/4,                 % +Key, +Data, -Signature, +Options
             rsa_verify/4,               % +Key, +Data, +Signature, +Options
-            crypto_modular_inverse/3    % +X, +M, -Y
+            crypto_modular_inverse/3,   % +X, +M, -Y
+            crypto_name_curve/2,        % +Name, -Curve
+            crypto_curve_order/2,       % +Curve, -Order
+            crypto_curve_generator/2,   % +Curve, -Generator
+            crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
           ]).
 :- use_module(library(option)).
 
@@ -488,9 +492,7 @@ crypto_modular_inverse(X, M, Y) :-
     integer_serialized(X, XS),
     integer_serialized(M, MS),
     '_crypto_modular_inverse'(XS, MS, YHex),
-    hex_bytes(YHex, Bytes0),
-    reverse(Bytes0, Bytes),
-    foldl(pow256, Bytes, 0-0, Y-_).
+    hex_to_integer(YHex, Y).
 
 integer_serialized(I, serialized(S)) :-
     must_be(integer, I),
@@ -515,6 +517,57 @@ hex_pad(1, Sign, A0, A) :- atomic_list_concat([Sign,'0',A0], A).
 pow256(Byte, N0-I0, N-I) :-
     N is N0 + Byte*256^I0,
     I is I0 + 1.
+
+hex_to_integer(Hex, N) :-
+    hex_bytes(Hex, Bytes0),
+    reverse(Bytes0, Bytes),
+    foldl(pow256, Bytes, 0-0, N-_).
+
+%%  crypto_name_curve(+Name, -Curve) is det
+%
+%   Obtain a handle for a _named_ elliptic curve. Name is an atom, and
+%   Curve is unified with an opaque object that represents the curve.
+%   Currently, only elliptic curves over prime fields are
+%   supported. Examples of such curves are `prime256v1` and
+%   `secp256k1`.
+%
+%   If you have OpenSSL installed, you can get a list of supported
+%   curves via:
+%
+%   ==
+%   $ openssl ecparam -list_curves
+%   ==
+
+%%  crypto_curve_order(+Curve, -Order) is det
+%
+%   Obtain the order of an elliptic curve. Order is an integer,
+%   denoting how many points on the curve can be reached by
+%   multiplying the curve's generator with a scalar.
+
+crypto_curve_order(Curve, Order) :-
+    '_crypto_curve_order'(Curve, Hex),
+    hex_to_integer(Hex, Order).
+
+
+%%  crypto_curve_generator(+Curve, -Point) is det
+%
+%   Point is the _generator_ of the elliptic curve Curve.
+
+crypto_curve_generator(Curve, point(X,Y)) :-
+    '_crypto_curve_generator'(Curve, X0, Y0),
+    hex_to_integer(X0, X),
+    hex_to_integer(Y0, Y).
+
+%% crypto_curve_scalar_mult(+Curve, +N, +Point, +R) is det
+%
+%  R is the result of N times Point on the elliptic curve Curve. N
+%  must be an integer, and Point must be a point on the curve.
+
+crypto_curve_scalar_mult(Curve, S0, point(X0,Y0), point(A,B)) :-
+    maplist(integer_serialized, [S0,X0,Y0], [S,X,Y]),
+    '_crypto_curve_scalar_mult'(Curve, S, X, Y, A0, B0),
+    hex_to_integer(A0, A),
+    hex_to_integer(B0, B).
 
 
                  /*******************************
@@ -545,6 +598,11 @@ sandbox:safe_primitive(crypto:evp_decrypt(_,_,_,_,_,_)).
 sandbox:safe_primitive(crypto:evp_encrypt(_,_,_,_,_,_)).
 
 sandbox:safe_primitive(crypto:crypto_modular_inverse(_,_,_)).
+
+sandbox:safe_primitive(crypto:crypto_name_curve(_,_)).
+sandbox:safe_primitive(crypto:crypto_curve_order(_,_)).
+sandbox:safe_primitive(crypto:crypto_curve_generator(_,_)).
+sandbox:safe_primitive(crypto:crypto_curve_scalar_mult(_,_,_,_)).
 
                  /*******************************
                  *           MESSAGES           *

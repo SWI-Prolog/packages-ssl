@@ -101,3 +101,82 @@ cryptographic applications, complementing the existing built-ins and GMP
 bindings:
 
    * [[crypto_modular_inverse/3]]
+
+## Elliptic curves {#crypto-ec}
+
+This  library  provides  functionality   for  reasoning  over  _elliptic
+curves_. Elliptic curves are represented as opaque objects.  You acquire
+a handle for an elliptic curve via crypto_name_curve/2.
+
+A _point_ on a curve is  represented by the Prolog term =|point(X, Y)|=,
+where  `X`  and `Y`  are  integers  that  represent the  point's  affine
+coordinates.
+
+The  following  predicates  are  provided for  reasoning  over  elliptic
+curves:
+
+    * [[crypto_name_curve/2]]
+    * [[crypto_curve_order/2]]
+    * [[crypto_curve_generator/2]]
+    * [[crypto_curve_scalar_mult/4]]
+
+## Example: Establishing a shared secret
+
+As one example that involves most predicates of this library, we explain
+a way to establish a _shared  secret_ over an insecure channel. We shall
+use _elliptic curves_ for this purpose.
+
+Suppose Alice  wants to establish  an encrypted connection with  Bob. To
+achieve this  even over a channel  that may be subject  to eavesdrooping
+and man-in-the-middle attacks, Bob performs the following steps:
+
+    1. Choose an elliptic curve `C`, using crypto_name_curve/2.
+    2. Pick a random integer _k_ such that _k_ is greater than 0 and
+       smaller than the order of `C`. This can be done using
+       crypto_curve_order/2 and crypto_n_random_bytes/2.
+    3. Use crypto_curve_generator/2 to obtain the generator `G` of `C`, and
+       use crypto_curve_scalar_mult/4 to compute the scalar product _k*G_.
+       We call this result `R`, denoting a point on the curve.
+    4. Sign `R` (using for example rsa_sign/4 or ecdsa_sign/4) and
+       send this to Alice.
+
+This mechanism hinges on a way for Alice to establish the _authenticity_
+of  the   signed  message   (using  predicates  like   rsa_verify/4  and
+ecdsa_verify/4),  for  example  by  means  of  a  public  key  that  was
+previously exchanged or is signed by a  trusted party in such a way that
+Alice can be sufficiently certain that it belongs to Bob.  However, none
+of these steps require any encryption!
+
+Alice in turn performs the following steps:
+
+    1. Create a random integer _j_ such that _j_ is greater than 0 and
+       smaller than the order of C. Alice can also use
+       crypto_curve_order/2 and crypto_n_random_bytes/2 for this.
+    2. Compute the scalar product _j*G_, where `G` is again the generator
+       of `C` as obtained via crypto_curve_generator/2.
+    3. Further, compute the scalar product _j*R_, which is a point on
+       the curve that we shall call Q. We can derive a _shared secret_
+       from `Q`, using for example crypto_data_hash/3, and encrypt any
+       message with it (using for example evp_encrypt/6).
+    4. Send the point _j*G_ and the encrypted message to Bob.
+
+Bob  receives `j*G`  in plain  text and  can arrive  at the  same shared
+secret  by  performing   the  calculation  `k*(j*G)`,  which   is  -  by
+associativity and commutativity of  scalar multiplication - identical to
+the point `j*(k*G)`,  which is again Q from which  the shared secret can
+be derived, and the message can be decrypted with evp_decrypt/6.
+
+This method is known as Diffie-Hellman-Merkle key exchange over elliptic
+curves, abbreviated as  ECDH. It provides forward secrecy  (FS): Even if
+the private key that was used  to establish the _authenticity_ of Bob is
+later compromised, the encrypted messages cannot be decrypted with it.
+
+A major attraction of using elliptic curves for this purpose is found in
+the  comparatively small  key size  that  suffices to  make any  attacks
+unrealistic as far as we currently know.  In particular, given any point
+on the curve,  we currently have no efficient way  to determine by which
+scalar the  generator was multiplied  to obtain that point.   The method
+described above relies on the hardness of this so-called _elliptic curve
+discrete logarithm  problem_ (ECDLP).   On the other  hand, some  of the
+named curves have  been suspected to be  chosen in such a  way that they
+could be prone to attacks that are not publicly known.
