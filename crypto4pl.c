@@ -1302,6 +1302,242 @@ pl_crypto_modular_inverse(term_t tx, term_t tm, term_t tout)
 
 
                 /*******************************
+                *        ELLIPTIC CURVES       *
+                *******************************/
+
+#define CURVE_MAGIC (~ 0x51431485L)
+
+typedef struct curve
+{ int             magic;
+  atom_t          atom;
+
+  EC_GROUP       *group;
+  BN_CTX         *ctx;
+} PL_CRYPTO_CURVE;
+
+static int
+free_crypto_curve(PL_CRYPTO_CURVE *c)
+{ BN_CTX_free(c->ctx);
+  EC_GROUP_free(c->group);
+  free(c);
+  return TRUE;
+}
+
+static int
+release_curve(atom_t atom)
+{ PL_CRYPTO_CURVE *c;
+  size_t size;
+
+  c = PL_blob_data(atom, &size, NULL);
+  ssl_deb(4, "Releasing PL_CRYPTO_CURVE %p\n", c);
+  free_crypto_curve(c);
+  return TRUE;
+}
+
+static int
+compare_curve(atom_t a, atom_t b)
+{ PL_CRYPTO_CURVE* *c1 = PL_blob_data(a, NULL, NULL);
+  PL_CRYPTO_CURVE* *c2 = PL_blob_data(b, NULL, NULL);
+
+  return ( c1 > c2 ?  1 :
+           c1 < c2 ? -1 : 0
+         );
+}
+
+static int
+write_curve(IOSTREAM *s, atom_t symbol, int flags)
+{ PL_CRYPTO_CURVE *c = PL_blob_data(symbol, NULL, NULL);
+  const char *name = OBJ_nid2sn(EC_GROUP_get_curve_name(c->group));
+
+  Sfprintf(s, "<crypto_curve>(%s, %p)", name, c);
+
+  return TRUE;
+}
+
+static void
+acquire_curve(atom_t atom)
+{ size_t size;
+  PL_CRYPTO_CURVE *c = PL_blob_data(atom, &size, NULL);
+  c->atom = atom;
+}
+
+static PL_blob_t crypto_curve_type =
+{ PL_BLOB_MAGIC,
+  PL_BLOB_NOCOPY,
+  "crypto_curve",
+  release_curve,
+  compare_curve,
+  write_curve,
+  acquire_curve
+};
+
+static int
+unify_curve(term_t tcurve, PL_CRYPTO_CURVE *curve)
+{ if ( PL_unify_blob(tcurve, curve, sizeof(void*), &crypto_curve_type) )
+    return TRUE;
+
+  free_crypto_curve(curve);
+
+  if ( !PL_exception(0) )
+    return PL_uninstantiation_error(tcurve);
+
+  return FALSE;
+}
+
+static int
+get_curve(term_t tcurve, PL_CRYPTO_CURVE **curve)
+{ PL_blob_t *type;
+  void *data;
+
+  if ( PL_get_blob(tcurve, &data, NULL, &type) &&
+       type == &crypto_curve_type )
+  { PL_CRYPTO_CURVE *c = data;
+
+    assert(c->magic == CURVE_MAGIC);
+    *curve = c;
+
+    return TRUE;
+  }
+
+  return PL_type_error("crypto_curve", tcurve);
+}
+
+
+static foreign_t
+pl_crypto_name_curve(term_t tname, term_t tcurve)
+{ PL_CRYPTO_CURVE *curve = NULL;
+  char *name;
+
+  if ( !PL_get_chars(tname, &name, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
+    return FALSE;
+
+  if ( !(curve = malloc(sizeof(*curve))) )
+    return PL_resource_error("memory");
+
+  curve->magic    = CURVE_MAGIC;
+  curve->ctx      = NULL;
+  curve->group    = NULL;
+
+  if ( ( curve->group = EC_GROUP_new_by_curve_name(OBJ_sn2nid(name)) ) &&
+       ( curve->ctx   = BN_CTX_new() ) )
+  { return unify_curve(tcurve, curve);
+  } else
+  { BN_CTX_free(curve->ctx);
+    EC_GROUP_free(curve->group);
+    free(curve);
+
+    return raise_ssl_error(ERR_get_error());
+  }
+}
+
+static foreign_t
+pl_crypto_curve_order(term_t tcurve, term_t torder)
+{ PL_CRYPTO_CURVE *curve = NULL;
+  BIGNUM *order = NULL;
+  char *hex = NULL;
+  int rc = FALSE, ssl_err = FALSE;
+
+  if ( !get_curve(tcurve, &curve) )
+    return FALSE;
+
+  if ( ( order = BN_new() ) &&
+       EC_GROUP_get_order(curve->group, order, curve->ctx) &&
+       ( hex = BN_bn2hex(order) ) )
+  { rc = PL_unify_chars(torder, PL_STRING|REP_ISO_LATIN_1, strlen(hex), hex);
+  } else
+  { ssl_err = TRUE;
+  }
+
+  OPENSSL_free(hex);
+  BN_free(order);
+
+  if ( ssl_err )
+  { return raise_ssl_error(ERR_get_error());
+  }
+
+  return rc;
+}
+
+
+static foreign_t
+pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
+{ PL_CRYPTO_CURVE *curve = NULL;
+  BIGNUM *x = NULL, *y = NULL;
+  char *xhex = NULL, *yhex = NULL;
+  int rc = FALSE, ssl_err = FALSE;
+
+  if ( !get_curve(tcurve, &curve) )
+    return FALSE;
+
+  if ( ( x = BN_new() ) &&
+       ( y = BN_new() ) &&
+       EC_POINT_get_affine_coordinates_GFp(curve->group,
+                                           EC_GROUP_get0_generator(curve->group),
+                                           x, y, curve->ctx) &&
+       ( xhex = BN_bn2hex(x) ) &&
+       ( yhex = BN_bn2hex(y) ) )
+  { rc = PL_unify_chars(tx, PL_STRING|REP_ISO_LATIN_1, strlen(xhex), xhex)
+      && PL_unify_chars(ty, PL_STRING|REP_ISO_LATIN_1, strlen(yhex), yhex);
+  } else
+  { ssl_err = TRUE;
+  }
+
+  OPENSSL_free(xhex); OPENSSL_free(yhex);
+  BN_free(x); BN_free(y);
+
+  if ( ssl_err )
+  { return raise_ssl_error(ERR_get_error());
+  }
+
+  return rc;
+}
+
+
+
+static foreign_t
+pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
+                           term_t tx, term_t ty, term_t ta, term_t tb)
+{ BIGNUM *s = NULL, *x = NULL, *y = NULL, *a = NULL, *b = NULL;
+  EC_POINT *r = NULL, *q = NULL;
+  char *ahex = NULL, *bhex = NULL;
+  PL_CRYPTO_CURVE *curve = NULL;
+  int rc, ssl_err = FALSE;
+
+  if ( !get_curve(tcurve, &curve) )
+    return FALSE;
+
+  if ( get_bn_arg(1, ts, &s) &&
+       get_bn_arg(1, tx, &x) &&
+       get_bn_arg(1, ty, &y)  &&
+       ( q = EC_POINT_new(curve->group) ) &&
+       EC_POINT_set_affine_coordinates_GFp(curve->group, q, x, y, curve->ctx) &&
+       ( r = EC_POINT_new(curve->group) ) &&
+       EC_POINT_mul(curve->group, r, NULL, q, s, curve->ctx) &&
+       ( a = BN_new() ) &&
+       ( b = BN_new() ) &&
+       EC_POINT_get_affine_coordinates_GFp(curve->group, r, a, b, curve->ctx) &&
+       ( ahex = BN_bn2hex(a) ) &&
+       ( bhex = BN_bn2hex(b) ) )
+  { rc = PL_unify_chars(ta, PL_STRING|REP_ISO_LATIN_1, strlen(ahex), ahex)
+      && PL_unify_chars(tb, PL_STRING|REP_ISO_LATIN_1, strlen(bhex), bhex);
+  } else
+  { ssl_err = TRUE;
+  }
+
+  OPENSSL_free(ahex); OPENSSL_free(bhex);
+  BN_free(a); BN_free(b);
+  BN_free(s); BN_free(x); BN_free(y);
+  EC_POINT_free(q); EC_POINT_free(r);
+
+  if ( ssl_err )
+  { return raise_ssl_error(ERR_get_error());
+  }
+
+  return rc;
+}
+
+
+                /*******************************
                 *            THREADING         *
                 *******************************/
 
@@ -1488,8 +1724,6 @@ install_crypto4pl(void)
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
 
   PL_register_foreign("crypto_n_random_bytes", 2, pl_crypto_n_random_bytes, 0);
-  PL_register_foreign("_crypto_modular_inverse", 3,
-                      pl_crypto_modular_inverse, 0);
 
   PL_register_foreign("crypto_context_new", 2, pl_crypto_context_new, 0);
   PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
@@ -1510,6 +1744,16 @@ install_crypto4pl(void)
   PL_register_foreign("rsa_verify", 5, pl_rsa_verify, 0);
   PL_register_foreign("evp_decrypt", 6, pl_evp_decrypt, 0);
   PL_register_foreign("evp_encrypt", 6, pl_evp_encrypt, 0);
+
+  PL_register_foreign("_crypto_modular_inverse", 3,
+                      pl_crypto_modular_inverse, 0);
+
+  PL_register_foreign("crypto_name_curve", 2, pl_crypto_name_curve, 0);
+  PL_register_foreign("_crypto_curve_order", 2, pl_crypto_curve_order, 0);
+  PL_register_foreign("_crypto_curve_generator", 3,
+                      pl_crypto_curve_generator, 0);
+  PL_register_foreign("_crypto_curve_scalar_mult", 6,
+                      pl_crypto_curve_scalar_mult, 0);
 
   /*
    * Initialize crypto library
