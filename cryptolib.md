@@ -101,6 +101,7 @@ cryptographic applications, complementing the existing built-ins and GMP
 bindings:
 
    * [[crypto_modular_inverse/3]]
+   * [[crypto_generate_prime/3]]
 
 ## Elliptic curves {#crypto-ec}
 

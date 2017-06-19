@@ -53,6 +53,7 @@
             rsa_sign/4,                 % +Key, +Data, -Signature, +Options
             rsa_verify/4,               % +Key, +Data, +Signature, +Options
             crypto_modular_inverse/3,   % +X, +M, -Y
+            crypto_generate_prime/3,    % +N, -P, +Options
             crypto_name_curve/2,        % +Name, -Curve
             crypto_curve_order/2,       % +Curve, -Order
             crypto_curve_generator/2,   % +Curve, -Generator
@@ -523,6 +524,22 @@ hex_to_integer(Hex, N) :-
     reverse(Bytes0, Bytes),
     foldl(pow256, Bytes, 0-0, N-_).
 
+%%  crypto_generate_prime(+N, -P, +Options) is det
+%
+%   Generate a prime P with at least N bits. Options is a list of options.
+%   Currently, the only supported option is:
+%
+%   * safe(Boolean)
+%     If `Boolean` is `true` (default is `false`), then a _safe_ prime
+%     is generated. This means that P is of the form 2*Q + 1 where Q
+%     is also prime.
+
+crypto_generate_prime(Bits, P, Options) :-
+        must_be(list, Options),
+        option(safe(Safe), Options, false),
+        '_crypto_generate_prime'(Bits, Hex, Safe, Options),
+        hex_to_integer(Hex, P).
+
 %%  crypto_name_curve(+Name, -Curve) is det
 %
 %   Obtain a handle for a _named_ elliptic curve. Name is an atom, and
@@ -598,6 +615,7 @@ sandbox:safe_primitive(crypto:evp_decrypt(_,_,_,_,_,_)).
 sandbox:safe_primitive(crypto:evp_encrypt(_,_,_,_,_,_)).
 
 sandbox:safe_primitive(crypto:crypto_modular_inverse(_,_,_)).
+sandbox:safe_primitive(crypto:crypto_generate_prime(_,_,_)).
 
 sandbox:safe_primitive(crypto:crypto_name_curve(_,_)).
 sandbox:safe_primitive(crypto:crypto_curve_order(_,_)).
