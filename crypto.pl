@@ -54,6 +54,7 @@
             rsa_verify/4,               % +Key, +Data, +Signature, +Options
             crypto_modular_inverse/3,   % +X, +M, -Y
             crypto_generate_prime/3,    % +N, -P, +Options
+            crypto_is_prime/2,          % +P, +Options
             crypto_name_curve/2,        % +Name, -Curve
             crypto_curve_order/2,       % +Curve, -Order
             crypto_curve_generator/2,   % +Curve, -Generator
@@ -540,6 +541,23 @@ crypto_generate_prime(Bits, P, Options) :-
         '_crypto_generate_prime'(Bits, Hex, Safe, Options),
         hex_to_integer(Hex, P).
 
+%%  crypto_is_prime(+P, +Options) is semidet
+%
+%   True iff P passes a probabilistic primality test. Options is a
+%   list of options. Currently, the only supported option is:
+%
+%   * iterations(N)
+%     N is the number of iterations that are performed. If this option
+%     is not specified, a number of iterations is used such that the
+%     probability of a false positive is at most 2^(-80).
+
+crypto_is_prime(P0, Options) :-
+        must_be(integer, P0),
+        must_be(list, Options),
+        option(iterations(N), Options, -1),
+        integer_serialized(P0, P),
+        '_crypto_is_prime'(P, N).
+
 %%  crypto_name_curve(+Name, -Curve) is det
 %
 %   Obtain a handle for a _named_ elliptic curve. Name is an atom, and
@@ -616,6 +634,7 @@ sandbox:safe_primitive(crypto:evp_encrypt(_,_,_,_,_,_)).
 
 sandbox:safe_primitive(crypto:crypto_modular_inverse(_,_,_)).
 sandbox:safe_primitive(crypto:crypto_generate_prime(_,_,_)).
+sandbox:safe_primitive(crypto:crypto_is_prime(_,_)).
 
 sandbox:safe_primitive(crypto:crypto_name_curve(_,_)).
 sandbox:safe_primitive(crypto:crypto_curve_order(_,_)).

@@ -94,14 +94,15 @@ The following predicates provide _symmetric_ encryption and decryption:
   * [[evp_decrypt/6]]
   * [[evp_encrypt/6]]
 
-## Arithmetic {#crypto-arithmetic}
+## Number theory {#crypto-numbertheory}
 
-This  library provides  arithmetic operations  that frequently  arise in
-cryptographic applications, complementing the existing built-ins and GMP
-bindings:
+This  library provides  operations  from number  theory that  frequently
+arise   in  cryptographic   applications,  complementing   the  existing
+built-ins and GMP bindings:
 
    * [[crypto_modular_inverse/3]]
    * [[crypto_generate_prime/3]]
+   * [[crypto_is_prime/2]]
 
 ## Elliptic curves {#crypto-ec}
 
@@ -181,3 +182,9 @@ described above relies on the hardness of this so-called _elliptic curve
 discrete logarithm  problem_ (ECDLP).   On the other  hand, some  of the
 named curves have  been suspected to be  chosen in such a  way that they
 could be prone to attacks that are not publicly known.
+
+As an  alternative to  ECDH, you  can use the  original DH  key exchange
+scheme,  where the  prime field  GF(p) is  used instead  of an  elliptic
+curve, and _exponentiation_  of a suitable generator is  used instead of
+scalar multiplication.  You can  use crypto_generate_prime/3 to generate
+a sufficiently large prime for this purpose.

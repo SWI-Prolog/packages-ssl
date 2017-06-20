@@ -1336,6 +1336,33 @@ pl_crypto_generate_prime(term_t tbits, term_t tprime, term_t tsafe,
   return rc;
 }
 
+static foreign_t
+pl_crypto_is_prime(term_t tprime, term_t tnchecks)
+{ BIGNUM *prime = NULL;
+  BN_CTX *ctx = NULL;
+  int nchecks;
+  int ret = -1;
+
+  if ( !PL_get_integer_ex(tnchecks, &nchecks) )
+    return FALSE;
+
+  nchecks = ( nchecks < 0 ) ? BN_prime_checks : nchecks;
+
+  if ( ( ctx = BN_CTX_new() ) &&
+       get_bn_arg(1, tprime, &prime) )
+  { ret = BN_is_prime_ex(prime, nchecks, ctx, NULL);
+  }
+
+  BN_free(prime);
+  BN_CTX_free(ctx);
+
+  if ( ret == -1 )
+  { return raise_ssl_error(ERR_get_error());
+  }
+
+  return ret;
+}
+
 
                 /*******************************
                 *        ELLIPTIC CURVES       *
@@ -1785,6 +1812,7 @@ install_crypto4pl(void)
                       pl_crypto_modular_inverse, 0);
   PL_register_foreign("_crypto_generate_prime", 4,
                       pl_crypto_generate_prime, 0);
+  PL_register_foreign("_crypto_is_prime", 2, pl_crypto_is_prime, 0);
 
   PL_register_foreign("crypto_name_curve", 2, pl_crypto_name_curve, 0);
   PL_register_foreign("_crypto_curve_order", 2, pl_crypto_curve_order, 0);
