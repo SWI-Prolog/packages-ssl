@@ -128,24 +128,21 @@ typedef struct context
   char           *hmac_key;
 } PL_CRYPTO_CONTEXT;
 
-static int
+static void
 free_crypto_context(PL_CRYPTO_CONTEXT *c)
-{
-  EVP_MD_CTX_free(c->ctx);
+{ EVP_MD_CTX_free(c->ctx);
   free(c->hmac_key);
 #ifdef HAVE_HMAC_CTX_FREE
   HMAC_CTX_free(c->hmac_ctx);
 #endif
   free(c);
-  return TRUE;
 }
 
 static int
 release_context(atom_t atom)
-{ PL_CRYPTO_CONTEXT *c;
-  size_t size;
+{ PL_CRYPTO_CONTEXT **cp = PL_blob_data(atom, NULL, NULL);
+  PL_CRYPTO_CONTEXT  *c = *cp;
 
-  c = PL_blob_data(atom, &size, NULL);
   ssl_deb(4, "Releasing PL_CRYPTO_CONTEXT %p\n", c);
   free_crypto_context(c);
   return TRUE;
@@ -153,8 +150,10 @@ release_context(atom_t atom)
 
 static int
 compare_context(atom_t a, atom_t b)
-{ PL_CRYPTO_CONTEXT* *c1 = PL_blob_data(a, NULL, NULL);
-  PL_CRYPTO_CONTEXT* *c2 = PL_blob_data(b, NULL, NULL);
+{ PL_CRYPTO_CONTEXT **cp1 = PL_blob_data(a, NULL, NULL);
+  PL_CRYPTO_CONTEXT **cp2 = PL_blob_data(b, NULL, NULL);
+  PL_CRYPTO_CONTEXT  *c1 = *cp1;
+  PL_CRYPTO_CONTEXT  *c2 = *cp2;
 
   return ( c1 > c2 ?  1 :
            c1 < c2 ? -1 : 0
@@ -163,7 +162,8 @@ compare_context(atom_t a, atom_t b)
 
 static int
 write_context(IOSTREAM *s, atom_t symbol, int flags)
-{ PL_CRYPTO_CONTEXT *c = PL_blob_data(symbol, NULL, NULL);
+{ PL_CRYPTO_CONTEXT **cp = PL_blob_data(symbol, NULL, NULL);
+  PL_CRYPTO_CONTEXT  *c  = *cp;
 
   Sfprintf(s, "<crypto_context>(%p)", c);
 
@@ -172,12 +172,15 @@ write_context(IOSTREAM *s, atom_t symbol, int flags)
 
 static void
 acquire_context(atom_t atom)
-{ ssl_deb(4, "Acquire on atom %d\n", atom);
+{ PL_CRYPTO_CONTEXT **cp = PL_blob_data(atom, NULL, NULL);
+  PL_CRYPTO_CONTEXT  *c  = *cp;
+
+  c->atom = atom;
 }
 
 static PL_blob_t crypto_context_type =
 { PL_BLOB_MAGIC,
-  PL_BLOB_NOCOPY,
+  0,
   "crypto_context",
   release_context,
   compare_context,
@@ -185,22 +188,19 @@ static PL_blob_t crypto_context_type =
   acquire_context
 };
 
-static int
-put_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
-{ return PL_unify_atom(tcontext, context->atom);
-}
 
 static int
-register_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
-{ term_t blob = PL_new_term_ref();
-  int rc;
+unify_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
+{ if ( PL_unify_blob(tcontext, &context, sizeof(context), &crypto_context_type) )
+    return TRUE;
 
-  PL_put_blob(blob, context, sizeof(void*), &crypto_context_type);
-  rc = PL_get_atom(blob, &context->atom);
-  assert(rc);
-  ssl_deb(4, "Atom created: %d\n", context->atom);
-  return put_context(tcontext, context);
+  free_crypto_context(context);
+  if ( !PL_exception(0) )
+    return PL_uninstantiation_error(tcontext);
+
+  return FALSE;
 }
+
 
 static int
 get_context(term_t tcontext, PL_CRYPTO_CONTEXT **context)
@@ -209,7 +209,7 @@ get_context(term_t tcontext, PL_CRYPTO_CONTEXT **context)
 
   if ( PL_get_blob(tcontext, &data, NULL, &type) &&
        type == &crypto_context_type )
-  { PL_CRYPTO_CONTEXT *c = data;
+  { PL_CRYPTO_CONTEXT *c = *(PL_CRYPTO_CONTEXT**)data;
 
     assert(c->magic == CONTEXT_MAGIC);
     *context = c;
@@ -343,7 +343,7 @@ pl_crypto_context_new(term_t tcontext, term_t options)
     }
   }
 
-  return register_context(tcontext, context);
+  return unify_context(tcontext, context);
 }
 
 static foreign_t
@@ -391,7 +391,7 @@ pl_crypto_context_copy(term_t tin, term_t tout)
   out->hmac_ctx = NULL;
 #endif
 
-  return register_context(tout, out) && rc;
+  return unify_context(tout, out) && rc;
 }
 
 
@@ -576,7 +576,7 @@ pl_crypto_stream_context(term_t stream, term_t tcontext)
 
   if ( PL_get_stream_handle(stream, &s) )
   { PL_CRYPTO_CONTEXT *ctx = s->handle;
-    rc = register_context(tcontext, ctx);
+    rc = unify_context(tcontext, ctx);
     PL_release_stream(s);
     return rc;
   }
@@ -1388,10 +1388,9 @@ free_crypto_curve(PL_CRYPTO_CURVE *c)
 
 static int
 release_curve(atom_t atom)
-{ PL_CRYPTO_CURVE *c;
-  size_t size;
-
-  c = PL_blob_data(atom, &size, NULL);
+{ size_t size;
+  PL_CRYPTO_CURVE **cp = PL_blob_data(atom, &size, NULL);
+  PL_CRYPTO_CURVE *c = *cp;
   ssl_deb(4, "Releasing PL_CRYPTO_CURVE %p\n", c);
   free_crypto_curve(c);
   return TRUE;
@@ -1399,8 +1398,10 @@ release_curve(atom_t atom)
 
 static int
 compare_curve(atom_t a, atom_t b)
-{ PL_CRYPTO_CURVE* *c1 = PL_blob_data(a, NULL, NULL);
-  PL_CRYPTO_CURVE* *c2 = PL_blob_data(b, NULL, NULL);
+{ PL_CRYPTO_CURVE**cp1 = PL_blob_data(a, NULL, NULL);
+  PL_CRYPTO_CURVE**cp2 = PL_blob_data(b, NULL, NULL);
+  PL_CRYPTO_CURVE *c1 = *cp1;
+  PL_CRYPTO_CURVE *c2 = *cp2;
 
   return ( c1 > c2 ?  1 :
            c1 < c2 ? -1 : 0
@@ -1409,7 +1410,8 @@ compare_curve(atom_t a, atom_t b)
 
 static int
 write_curve(IOSTREAM *s, atom_t symbol, int flags)
-{ PL_CRYPTO_CURVE *c = PL_blob_data(symbol, NULL, NULL);
+{ PL_CRYPTO_CURVE **cp = PL_blob_data(symbol, NULL, NULL);
+  PL_CRYPTO_CURVE *c = *cp;
   const char *name = OBJ_nid2sn(EC_GROUP_get_curve_name(c->group));
 
   Sfprintf(s, "<crypto_curve>(%s, %p)", name, c);
@@ -1420,13 +1422,14 @@ write_curve(IOSTREAM *s, atom_t symbol, int flags)
 static void
 acquire_curve(atom_t atom)
 { size_t size;
-  PL_CRYPTO_CURVE *c = PL_blob_data(atom, &size, NULL);
+  PL_CRYPTO_CURVE **cp = PL_blob_data(atom, &size, NULL);
+  PL_CRYPTO_CURVE *c = *cp;
   c->atom = atom;
 }
 
 static PL_blob_t crypto_curve_type =
 { PL_BLOB_MAGIC,
-  PL_BLOB_NOCOPY,
+  0,
   "crypto_curve",
   release_curve,
   compare_curve,
@@ -1436,7 +1439,7 @@ static PL_blob_t crypto_curve_type =
 
 static int
 unify_curve(term_t tcurve, PL_CRYPTO_CURVE *curve)
-{ if ( PL_unify_blob(tcurve, curve, sizeof(void*), &crypto_curve_type) )
+{ if ( PL_unify_blob(tcurve, &curve, sizeof(curve), &crypto_curve_type) )
     return TRUE;
 
   free_crypto_curve(curve);
@@ -1454,7 +1457,7 @@ get_curve(term_t tcurve, PL_CRYPTO_CURVE **curve)
 
   if ( PL_get_blob(tcurve, &data, NULL, &type) &&
        type == &crypto_curve_type )
-  { PL_CRYPTO_CURVE *c = data;
+  { PL_CRYPTO_CURVE *c = *(PL_CRYPTO_CURVE**)data;
 
     assert(c->magic == CURVE_MAGIC);
     *curve = c;
