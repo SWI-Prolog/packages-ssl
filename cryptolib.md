@@ -162,10 +162,10 @@ Alice in turn performs the following steps:
        message with it (using for example evp_encrypt/6).
     4. Send the point _j*G_ and the encrypted message to Bob.
 
-Bob  receives `j*G`  in plain  text and  can arrive  at the  same shared
-secret  by  performing   the  calculation  `k*(j*G)`,  which   is  -  by
+Bob  receives _j*G_  in plain  text and  can arrive  at the  same shared
+secret  by  performing   the  calculation  _k*(j*G)_,  which   is  -  by
 associativity and commutativity of  scalar multiplication - identical to
-the point `j*(k*G)`,  which is again Q from which  the shared secret can
+the point _j*(k*G)_,  which is again Q from which  the shared secret can
 be derived, and the message can be decrypted with evp_decrypt/6.
 
 This method is known as Diffie-Hellman-Merkle key exchange over elliptic
