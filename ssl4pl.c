@@ -1,6 +1,7 @@
 /*  Part of SWI-Prolog
 
-    Author:        Jan van der Steen, Jan Wielemaker and Matt Lilley
+    Author:        Jan van der Steen, Jan Wielemaker, Matt Lilley
+		   and Markus Triska
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
     Copyright (c)  2004-2017, SWI-Prolog Foundation
@@ -1148,9 +1149,16 @@ pl_load_certificate(term_t source, term_t cert)
 }
 
 
+static inline PL_SSL*
+symbol_ssl(atom_t symbol)
+{ PL_SSL **confp = PL_blob_data(symbol, NULL, NULL);
+  return *confp;
+}
+
 static void
 acquire_ssl(atom_t atom)
-{ ssl_deb(4, "Acquire on atom %d\n", atom);
+{ PL_SSL *conf = symbol_ssl(atom);
+  conf->atom = atom;
 }
 
 /*
@@ -1173,11 +1181,7 @@ ssl_exit(PL_SSL *config)
 
 static int
 release_ssl(atom_t atom)
-{ PL_SSL* conf;
-  size_t size;
-
-  conf = PL_blob_data(atom, &size, NULL);
-  ssl_deb(4, "Releasing PL_SSL %p\n", conf);
+{ PL_SSL *conf = symbol_ssl(atom);
   ssl_exit(conf);	/* conf is freed by an internal call from OpenSSL
 	                   via ssl_config_free() */
   return TRUE;
@@ -1185,8 +1189,8 @@ release_ssl(atom_t atom)
 
 static int
 compare_ssl(atom_t a, atom_t b)
-{ PL_SSL* *ssla = PL_blob_data(a, NULL, NULL);
-  PL_SSL* *sslb = PL_blob_data(b, NULL, NULL);
+{ PL_SSL *ssla = symbol_ssl(a);
+  PL_SSL *sslb = symbol_ssl(b);
 
   return ( ssla > sslb ?  1 :
 	   ssla < sslb ? -1 : 0
@@ -1195,7 +1199,7 @@ compare_ssl(atom_t a, atom_t b)
 
 static int
 write_ssl(IOSTREAM *s, atom_t symbol, int flags)
-{ PL_SSL *ssl = PL_blob_data(symbol, NULL, NULL);
+{ PL_SSL *ssl = symbol_ssl(symbol);
 
   Sfprintf(s, "<ssl_context>(%p)", ssl);
 
@@ -1204,7 +1208,7 @@ write_ssl(IOSTREAM *s, atom_t symbol, int flags)
 
 static PL_blob_t ssl_context_type =
 { PL_BLOB_MAGIC,
-  PL_BLOB_NOCOPY,
+  PL_BLOB_UNIQUE,
   "ssl_context",
   release_ssl,
   compare_ssl,
@@ -1214,21 +1218,15 @@ static PL_blob_t ssl_context_type =
 
 
 static int
-put_conf(term_t config, PL_SSL *conf)
-{ return PL_unify_atom(config, conf->atom);
-}
+unify_conf(term_t config, PL_SSL *conf)
+{ if ( PL_unify_blob(config, &conf, sizeof(conf), &ssl_context_type) )
+    return TRUE;
 
+  ssl_exit(conf);
+  if ( !PL_exception(0) )
+    return PL_uninstantiation_error(config);
 
-static int
-register_conf(term_t config, PL_SSL *conf)
-{ term_t blob = PL_new_term_ref();
-  int rc;
-
-  PL_put_blob(blob, conf, sizeof(void*), &ssl_context_type);
-  rc = PL_get_atom(blob, &conf->atom);
-  assert(rc);
-  ssl_deb(4, "Atom created: %d\n", conf->atom);
-  return put_conf(config, conf);
+  return FALSE;
 }
 
 
@@ -1238,7 +1236,8 @@ get_conf(term_t config, PL_SSL **conf)
   void *data;
 
   if ( PL_get_blob(config, &data, NULL, &type) && type == &ssl_context_type )
-  { PL_SSL *ssl = data;
+  { PL_SSL **sslp = data;
+    PL_SSL  *ssl  = *sslp;
 
     assert(ssl->magic == SSL_CONFIG_MAGIC);
     *conf = ssl;
@@ -1268,7 +1267,7 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
    */
   PL_recorded(config->cb_pem_passwd.goal, av+0);
 
-  put_conf(av+1, config);
+  PL_put_atom(av+1, config->atom);
   if ( PL_call_predicate(config->cb_pem_passwd.module, PL_Q_PASS_EXCEPTION, call3, av) )
   { if ( PL_get_nchars(av+2, &len, &passwd, CVT_ALL) )
     { if ( len >= (unsigned int)size )
@@ -1298,7 +1297,7 @@ pl_sni_hook(PL_SSL *config, const char *host)
    * call(CB, +SSL0, +Hostname, -SSL)
    */
   PL_recorded(config->cb_sni.goal, av+0);
-  put_conf(av+1, config);
+  PL_put_atom(av+1, config->atom);
   if ( PL_unify_chars(av+2, PL_ATOM|REP_UTF8, strlen(host), host)
        && PL_call_predicate(config->cb_sni.module,
                             PL_Q_PASS_EXCEPTION, call4, av) )
@@ -1332,7 +1331,7 @@ pl_cert_verify_hook(PL_SSL *config,
    * call(CB, +SSL, +ProblemCert, +AllCerts, +FirstCert, +Error)
    */
 
-  put_conf(av+1, config);
+  PL_put_atom(av+1, config->atom);
   if ( error_unknown )
     val = PL_unify_term(error_term,
                         PL_FUNCTOR, FUNCTOR_unknown1,
@@ -3196,7 +3195,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   if ( !PL_get_nil_ex(tail) )
     return FALSE;
 
-  return register_conf(config, conf) && ssl_config(conf);
+  return unify_conf(config, conf) && ssl_config(conf);
 }
 
 
