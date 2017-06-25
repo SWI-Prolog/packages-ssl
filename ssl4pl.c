@@ -3479,8 +3479,90 @@ add_key_string(term_t list, functor_t f, size_t len, const unsigned char*s)
 
 
 static foreign_t
+pl_system_root_certificates(term_t list)
+{ STACK_OF(X509) *certs;
+  term_t head = PL_new_term_ref();
+  term_t tail = PL_copy_term_ref(list);
+  int index = 0;
+
+  if ( !(certs=system_root_certificates()) )
+    return PL_unify_nil(list);
+
+  while (index < sk_X509_num(certs))
+  { if ( !(PL_unify_list(tail, head, tail) &&
+	   unify_certificate(head, sk_X509_value(certs, index++))) )
+    { return FALSE;
+    }
+  }
+
+  return PL_unify_nil(tail);
+}
+
+static int
+get_ssl_stream(term_t stream_t, IOSTREAM **locked, IOSTREAM **ssl)
+{ IOSTREAM *stream, *ssl_stream;
+
+  if ( !PL_get_stream(stream_t, &stream, SIO_INPUT) )
+    return FALSE;
+
+  for( ssl_stream = stream;
+       ssl_stream && ssl_stream->functions != &ssl_funcs;
+       ssl_stream = ssl_stream->downstream )
+    ;
+
+  if ( ssl_stream )
+  { *locked = stream;
+    *ssl    = ssl_stream;
+
+    return TRUE;
+  }
+
+  PL_release_stream(stream);
+  PL_domain_error("ssl_stream", stream_t);
+
+  return FALSE;
+}
+
+
+static foreign_t
+pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
+{ IOSTREAM *stream, *ssl_stream;
+  PL_SSL_INSTANCE *instance;
+  X509 *cert;
+  int rc = FALSE;
+
+  if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
+    return FALSE;
+
+  instance = ssl_stream->handle;
+  if ( (cert = ssl_peer_certificate(instance)) )
+    rc = unify_certificate(Cert, cert);
+  PL_release_stream(stream);
+
+  return rc;
+}
+
+static foreign_t
+pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
+{ IOSTREAM *stream, *ssl_stream;
+  PL_SSL_INSTANCE *instance;
+  int rc;
+
+  if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
+    return FALSE;
+
+  instance = ssl_stream->handle;
+  rc = unify_certificates_inorder(chain,
+				  SSL_get_peer_cert_chain(instance->ssl));
+  PL_release_stream(stream);
+
+  return rc;
+}
+
+
+static foreign_t
 pl_ssl_session(term_t stream_t, term_t session_t)
-{ IOSTREAM* stream;
+{ IOSTREAM *stream, *ssl_stream;
   PL_SSL_INSTANCE* instance;
   SSL* ssl;
   SSL_SESSION* session;
@@ -3491,14 +3573,10 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   int master_key_length;
   const char *cipher;
 
-  if ( !PL_get_stream_handle(stream_t, &stream) )
+  if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
      return FALSE;
-  if ( stream->functions != &ssl_funcs )
-  { PL_release_stream(stream);
-    return PL_domain_error("ssl_stream", stream_t);
-  }
 
-  instance = stream->handle;
+  instance = ssl_stream->handle;
   PL_release_stream(stream);
 
   if ( !(ssl = instance->ssl) ||
@@ -3580,88 +3658,6 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 err:
   SSL_SESSION_free(session);
   return FALSE;
-}
-
-
-static foreign_t
-pl_system_root_certificates(term_t list)
-{ STACK_OF(X509) *certs;
-  term_t head = PL_new_term_ref();
-  term_t tail = PL_copy_term_ref(list);
-  int index = 0;
-
-  if ( !(certs=system_root_certificates()) )
-    return PL_unify_nil(list);
-
-  while (index < sk_X509_num(certs))
-  { if ( !(PL_unify_list(tail, head, tail) &&
-	   unify_certificate(head, sk_X509_value(certs, index++))) )
-    { return FALSE;
-    }
-  }
-
-  return PL_unify_nil(tail);
-}
-
-static int
-get_ssl_stream(term_t stream_t, IOSTREAM **locked, IOSTREAM **ssl)
-{ IOSTREAM *stream, *ssl_stream;
-
-  if ( !PL_get_stream(stream_t, &stream, SIO_INPUT) )
-    return FALSE;
-
-  for( ssl_stream = stream;
-       ssl_stream && ssl_stream->functions != &ssl_funcs;
-       ssl_stream = ssl_stream->downstream )
-    ;
-
-  if ( ssl_stream )
-  { *locked = stream;
-    *ssl    = ssl_stream;
-
-    return TRUE;
-  }
-
-  PL_release_stream(stream);
-  PL_domain_error("ssl_stream", stream_t);
-
-  return FALSE;
-}
-
-
-static foreign_t
-pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
-{ IOSTREAM *stream, *ssl_stream;
-  PL_SSL_INSTANCE *instance;
-  X509 *cert;
-  int rc = FALSE;
-
-  if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
-    return FALSE;
-
-  instance = ssl_stream->handle;
-  if ( (cert = ssl_peer_certificate(instance)) )
-    rc = unify_certificate(Cert, cert);
-  PL_release_stream(stream);
-
-  return rc;
-}
-
-static foreign_t
-pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
-{ IOSTREAM *stream, *ssl_stream;
-  PL_SSL_INSTANCE *instance;
-  int rc;
-
-  if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
-    return FALSE;
-
-  instance = ssl_stream->handle;
-  rc = unify_certificates_inorder(chain,
-				  SSL_get_peer_cert_chain(instance->ssl));
-  PL_release_stream(stream);
-
-  return rc;
 }
 
 
