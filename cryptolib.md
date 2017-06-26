@@ -122,7 +122,7 @@ curves:
     * [[crypto_curve_generator/2]]
     * [[crypto_curve_scalar_mult/4]]
 
-## Example: Establishing a shared secret
+## Example: Establishing a shared secret {#crypto-shared-secret}
 
 As one example that involves most predicates of this library, we explain
 a way to establish a _shared  secret_ over an insecure channel. We shall
