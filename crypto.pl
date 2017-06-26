@@ -593,7 +593,7 @@ crypto_curve_generator(Curve, point(X,Y)) :-
     hex_to_integer(X0, X),
     hex_to_integer(Y0, Y).
 
-%% crypto_curve_scalar_mult(+Curve, +N, +Point, +R) is det
+%% crypto_curve_scalar_mult(+Curve, +N, +Point, -R) is det
 %
 %  R is the result of N times Point on the elliptic curve Curve. N
 %  must be an integer, and Point must be a point on the curve.
