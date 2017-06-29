@@ -98,14 +98,14 @@ the right address.
 
 Encryption is generally well arranged as long as you ensure that the
 underlying SSL library has all known security patches installed and you
-use an encryption that is not known to be weak. The Windows version of
-SWI-Prolog ships with its own binary of the OpenSSL library. Ensure this
-is up-to-date. Most other systems ship with the OpenSSL library and
-SWI-Prolog uses the system version. This applies for the binaries we
-distribute for MacOSX and Linux, as well as official Linux packages.
-Check the origin and version of the OpenSSL libraries if SWI-Prolog was
-compiled from source. The OpenSSL library version as reported by
-SSLeay_version() is available in the Prolog flag
+use an encryption that is not known to be weak. The Windows version and
+MacOS binaries of SWI-Prolog ships with its own binary of the OpenSSL
+library. Ensure this is up-to-date. On systems that ship with the
+OpenSSL library SWI-Prolog uses the system version. This applies notably
+for all Linux packages. Check the origin and version of the OpenSSL
+libraries and verify there are no more recent security patches regularly
+if security is important to you. The OpenSSL library version as reported
+by SSLeay_version() is available in the Prolog flag
 \const{ssl_library_version} as illustrated below on Ubuntu 14.04.
 
 \begin{code}
