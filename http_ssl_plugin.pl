@@ -78,7 +78,8 @@ SWI-Prolog installation directory.
 thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
     select(ssl(SSLOptions0), Options0, Options1),
     !,
-    add_secure_ciphers(SSLOptions0, SSLOptions),
+    add_secure_ciphers(SSLOptions0, SSLOptions1),
+    disable_sslv3(SSLOptions1, SSLOptions),
     make_socket(Port, Socket, Options1),
     ssl_context(server,
                 SSL0,
@@ -96,12 +97,31 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
               | Options1
               ].
 
+%!  add_secure_ciphers(+SSLOptions0, -SSLOptions)
+%
+%   Add ciphers from ssl_secure_ciphers/1 if no ciphers are provided.
+
 add_secure_ciphers(SSLOptions0, SSLOptions) :-
     (   option(cipher_list(_), SSLOptions0)
     ->  SSLOptions = SSLOptions0
     ;   ssl_secure_ciphers(Ciphers),
         SSLOptions = [cipher_list(Ciphers)|SSLOptions0]
     ).
+
+%!  disable_sslv3(+SSLOptions0, -SSLOptions)
+%
+%   Disable SSLv3, which  is  considered   insecure  unless  the  caller
+%   specifies the allowed versions explicitly, so   we assume s/he knows
+%   what s/he is doing.
+
+disable_sslv3(SSLOptions0, SSLOptions) :-
+    (   option(min_protocol_version(_), SSLOptions0)
+    ;   option(disable_ssl_methods(_), SSLOptions0)
+    ),
+    !,
+    SSLOptions = SSLOptions0.
+disable_sslv3(SSLOptions0, [disable_ssl_methods(sslv3)|SSLOptions0]).
+
 
 make_socket(_Port, Socket, Options) :-
     option(tcp_socket(Socket), Options),
