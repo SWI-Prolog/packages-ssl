@@ -13,11 +13,7 @@
 \begin{document}
 
 \title{SWI-Prolog SSL Interface}
-\author{Jan van der Steen, Matt Lilley and Jan Wielemaker \\
-	\href{http://www.diff.nl}{Diff Automatisering v.o.f} \\[5pt]
-	Jan Wielemaker \\
-        SWI, University of Amsterdam \\
-        The Netherlands \\
+\author{Markus Triska, Jan van der Steen, Matt Lilley and Jan Wielemaker \\[5pt]
         E-mail: \email{jan@swi-prolog.org}
        }
 
