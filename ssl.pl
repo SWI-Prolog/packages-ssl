@@ -49,12 +49,11 @@
                                           %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,       % +Stream, -Certificate
             ssl_peer_certificate_chain/2, % +Stream, -Certificates
-            ssl_session/2                 % +Stream, -Session
+            ssl_session/2,                % +Stream, -Session
+            ssl_secure_ciphers/1          % -Ciphers
           ]).
-:- use_module(library(socket)).
-:- use_module(library(error)).
 :- use_module(library(option)).
-:- use_module(library(debug)).
+:- use_module(library(settings)).
 :- use_module(library(crypto), []).     % force initialization of libcrypto
 
 :- use_foreign_library(foreign(ssl4pl)).
@@ -107,6 +106,10 @@ easily be used.
 
 @see library(socket), library(http/http_open), library(crypto)
 */
+
+:- setting(secure_ciphers, atom,
+           'EECDH+AESGCM:EDH+AESGCM:EECDH+AES256:EDH+AES256:EECDH+CHACHA20:EDH+CHACHA20',
+           "Default set of ciphers considered secure").
 
 %!  ssl_context(+Role, -SSL, :Options) is det.
 %
@@ -484,6 +487,28 @@ ssl_set_sni_hook(SSL0, Goal, SSL) :-
 cert_accept_any(_SSL,
                 _ProblemCertificate, _AllCertificates, _FirstCertificate,
                 _Error).
+
+%!  ssl_secure_ciphers(-Ciphers:atom) is det.
+%
+%   Secure ciphers must guarantee forward secrecy, and must mitigate all
+%   known critical attacks. As of  2017,   using  the  following ciphers
+%   allows you to obtain grade A on https://www.ssllabs.com. For A+, you
+%   must also enable HTTP Strict Transport  Security (HSTS) by sending a
+%   suitable header field in replies.
+%
+%   Note that obsolete ciphers *must* be   disabled  to reliably prevent
+%   protocol downgrade attacks.
+%
+%   The Ciphers list is read from   the setting `ssl:secure_ciphers` and
+%   can be controlled using  set_setting/2   and  other  predicates from
+%   library(settings).
+%
+%   *BEWARE*: This list must be changed when attacks on these ciphers
+%             become known! Keep an eye on this setting and adapt it
+%             as necessary in the future.
+
+ssl_secure_ciphers(Cs) :-
+    setting(secure_ciphers, Cs).
 
 
                  /*******************************

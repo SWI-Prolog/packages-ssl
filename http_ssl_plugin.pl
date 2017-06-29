@@ -76,8 +76,9 @@ SWI-Prolog installation directory.
 %   @see thread_httpd:accept_hook/2 handles the corresponding accept
 
 thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
-    select(ssl(SSLOptions), Options0, Options1),
+    select(ssl(SSLOptions0), Options0, Options1),
     !,
+    add_secure_ciphers(SSLOptions0, SSLOptions),
     make_socket(Port, Socket, Options1),
     ssl_context(server,
                 SSL0,
@@ -94,6 +95,13 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
                 ssl_instance(SSL)
               | Options1
               ].
+
+add_secure_ciphers(SSLOptions0, SSLOptions) :-
+    (   option(cipher_list(_), SSLOptions0)
+    ->  SSLOptions = SSLOptions0
+    ;   ssl_secure_ciphers(Ciphers),
+        SSLOptions = [cipher_list(Ciphers)|SSLOptions0]
+    ).
 
 make_socket(_Port, Socket, Options) :-
     option(tcp_socket(Socket), Options),
