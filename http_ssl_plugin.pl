@@ -120,7 +120,11 @@ disable_sslv3(SSLOptions0, SSLOptions) :-
     ),
     !,
     SSLOptions = SSLOptions0.
-disable_sslv3(SSLOptions0, [disable_ssl_methods(sslv3)|SSLOptions0]).
+disable_sslv3(SSLOptions0,
+              [ disable_ssl_methods([sslv3,sslv23]), % old OpenSSL versions
+                min_protocol_version(tlsv1)          % OpenSSL 1.1.0 and later
+              | SSLOptions0
+              ]).
 
 
 make_socket(_Port, Socket, Options) :-
