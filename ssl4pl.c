@@ -3129,11 +3129,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
     } else if ( name == ATOM_disable_ssl_methods && arity == 1 )
     { term_t opt_head = PL_new_term_ref();
       term_t opt_tail = PL_new_term_ref();
-      int options = 0;
+      long options = 0;
+      long isset;
+
       _PL_get_arg(1, head, opt_tail);
-      while( PL_get_list(opt_tail, opt_head, opt_tail) )
+      while( PL_get_list_ex(opt_tail, opt_head, opt_tail) )
       {  atom_t option_name;
-         if (!PL_get_atom(opt_head, &option_name))
+         if ( !PL_get_atom_ex(opt_head, &option_name) )
             return FALSE;
          if (option_name == ATOM_sslv2)
             options |= SSL_OP_NO_SSLv2;
@@ -3154,8 +3156,11 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
             options |= SSL_OP_NO_TLSv1_2;
 #endif
       }
+      if ( !PL_get_nil_ex(opt_tail) )
+	return FALSE;
 
-      SSL_CTX_set_options(conf->ctx, options);
+      if ( (isset=(SSL_CTX_set_options(conf->ctx, options)&options)) != options )
+	ssl_deb(1, "SSL_CTX_set_options 0x%lx only set 0x%lx\n", options, isset);
     } else if ( name == ATOM_min_protocol_version && arity == 1 )
     { term_t val = PL_new_term_ref();
       int version;
