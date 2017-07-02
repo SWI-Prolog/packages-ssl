@@ -1718,109 +1718,6 @@ ssl_config_free( void *            ctx
     }
 }
 
-static char *
-ssl_set_cacert(PL_SSL *config, const char *cacert)
-/*
- * Store certificate authority location in config storage
- */
-{
-    if (cacert) {
-        if (config->cacert) free(config->cacert);
-        config->cacert = ssl_strdup(cacert);
-    }
-    return config->cacert;
-}
-
-
-static char *
-ssl_set_certificate_file(PL_SSL *config, const char *certificate_file)
-/*
- * Store certificate file location in config storage
- */
-{
-    if (certificate_file) {
-        if (config->certificate_file) free(config->certificate_file);
-        config->certificate_file = ssl_strdup(certificate_file);
-    }
-    return config->certificate_file;
-}
-
-static char *
-ssl_set_keyf(PL_SSL *config, const char *keyf)
-/*
- * Store private key location in config storage
- */
-{
-    if (keyf) {
-        if (config->key_file) free(config->key_file);
-        config->key_file = ssl_strdup(keyf);
-    }
-    return config->key_file;
-}
-
-static STACK_OF(X509_CRL) *
-ssl_set_crl_list(PL_SSL *config, STACK_OF(X509_CRL) *crl)
-/*
- * Store CRL location in config storage
- */
-{
-    if (crl)
-    { if (config->crl_list)
-      { sk_X509_CRL_pop_free(config->crl_list, X509_CRL_free);
-      }
-      config->crl_list = crl;
-    }
-    return config->crl_list;
-}
-
-static char *
-ssl_set_cipher_list(PL_SSL *config, const char *cipher_list)
-{ if ( cipher_list )
-  { if ( config->cipher_list )
-      free(config->cipher_list);
-    config->cipher_list = ssl_strdup(cipher_list);
-  }
-
-  return config->cipher_list;
-}
-
-static char *
-ssl_set_ecdh_curve(PL_SSL *config, const char *ecdh_curve)
-{ if ( ecdh_curve )
-  { if ( config->ecdh_curve )
-      free(config->ecdh_curve);
-    config->ecdh_curve = ssl_strdup(ecdh_curve);
-  }
-
-  return config->ecdh_curve;
-}
-
-static char *
-ssl_set_password(PL_SSL *config, const char *password)
-/*
- * Store supplied private key password in config storage
- */
-{
-    if (password) {
-        if (config->password) free(config->password);
-        config->password = ssl_strdup(password);
-    }
-    return config->password;
-}
-
-static char *
-ssl_set_host(PL_SSL *config, const char *host)
-/*
- * Store supplied host in config storage
- */
-{
-    if (host) {
-        if (config->host) free(config->host);
-        config->host = ssl_strdup(host);
-    }
-    return config->host;
-}
-
 
 static int
 ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
@@ -2968,22 +2865,24 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      ssl_set_cipher_list(conf, s);
+      if (conf->cipher_list) free(conf->cipher_list);
+      conf->cipher_list = ssl_strdup(s);
     } else if ( name == ATOM_ecdh_curve && arity == 1 )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      ssl_set_ecdh_curve(conf, s);
-
+      if (conf->ecdh_curve) free(conf->ecdh_curve);
+      conf->ecdh_curve = ssl_strdup(s);
     } else if ( name == ATOM_host && arity == 1 )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      ssl_set_host(conf, s);
+      if (conf->host) free(conf->host);
+      conf->host = ssl_strdup(s);
     } else if ( name == ATOM_peer_cert && arity == 1 )
     { int val;
 
@@ -3175,7 +3074,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      ssl_set_password(conf, s);
+      if (conf->password) free(conf->password);
+      conf->password = ssl_strdup(s);
     } else if ( name == ATOM_require_crl && arity == 1 )
     { int val;
 
@@ -3200,7 +3100,9 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
             return PL_existence_error("file", list_head);
         }
       }
-      ssl_set_crl_list(conf, crls);
+      if (conf->crl_list)
+        sk_X509_CRL_pop_free(conf->crl_list, X509_CRL_free);
+      conf->crl_list = crls;
     } else if ( name == ATOM_cacert_file && arity == 1 )
     { term_t val = PL_new_term_ref();
       char *file;
@@ -3217,7 +3119,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	else
 	  return PL_domain_error("system_cacert", val);
       } else if ( PL_get_file_name(val, &file, PL_FILE_EXIST) )
-      { ssl_set_cacert(conf, file);
+      { if (conf->cacert) free(conf->cacert);
+        conf->cacert = ssl_strdup(file);
       } else
 	return FALSE;
     } else if ( name == ATOM_certificate_file && arity == 1 )
@@ -3226,7 +3129,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      ssl_set_certificate_file(conf, file);
+      if (conf->certificate_file) free(conf->certificate_file);
+      conf->certificate_file = ssl_strdup(file);
     } else if ( name == ATOM_certificate_key_pairs && arity == 1 )
     { term_t cert_head = PL_new_term_ref();
       term_t cert_tail = PL_new_term_ref();
@@ -3263,7 +3167,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      ssl_set_keyf(conf, file);
+      if (conf->key_file) free(conf->key_file);
+      conf->key_file = ssl_strdup(file);
     } else if ( name == ATOM_pem_password_hook && arity == 1 )
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
