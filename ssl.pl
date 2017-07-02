@@ -44,7 +44,6 @@
                                           % +Error
             ssl_context/3,                % +Role, -Config, :Options
             ssl_add_certificate_key/4,    % +Config, +Cert, +Key, -Config
-            ssl_set_sni_hook/3,           % +Config, +Goal, -Config
             ssl_set_options/3,            % +Config0, -Config, +Options
             ssl_negotiate/5,              % +Config, +PlainRead, +PlainWrite,
                                           %          -SSLRead,   -SSLWrite
@@ -61,8 +60,7 @@
 
 :- meta_predicate
     ssl_context(+, -, :),
-    ssl_set_options(+, -, :),
-    ssl_set_sni_hook(+, 3, -).
+    ssl_set_options(+, -, :).
 
 :- predicate_options(ssl_context/3, 3,
                      [ host(atom),
@@ -308,16 +306,6 @@ ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
 ssl_copy_context(SSL0, SSL) :-
     ssl_context(server, SSL, []),
     '_ssl_init_from_context'(SSL0, SSL).
-
-%!  ssl_set_sni_hook(+SSL0, :Goal, -SSL)
-%
-%   SSL is the same as SSL0, except  that the SNI hook of SSL is Goal.
-%   See  the   sni_hook(:Goal)  option   of  ssl_context/3   for  more
-%   information about this hook.
-
-ssl_set_sni_hook(SSL0, Goal, SSL) :-
-    ssl_copy_context(SSL0, SSL),
-    '_ssl_set_sni_hook'(SSL, Goal).
 
 %!  ssl_set_options(+SSL0, -SSL, +Options)
 %

@@ -3066,6 +3066,10 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
                 conf->role == PL_SSL_SERVER )
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
+
+      if (conf->cb_sni.goal)
+        PL_erase(conf->cb_sni.goal);
+
       conf->cb_sni.goal   = PL_record(cb);
       conf->cb_sni.module = module;
     } else if ( name == ATOM_close_notify && arity == 1 )
@@ -3504,27 +3508,6 @@ pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
   return FALSE;
 }
 
-static foreign_t
-pl_ssl_set_sni_hook(term_t config, term_t t)
-{ PL_SSL *conf;
-  module_t m = NULL;
-  term_t t2 = PL_new_term_ref();
-
-  if ( !get_conf(config, &conf) )
-    return FALSE;
-
-  if ( !PL_strip_module(t, &m, t2) )
-    return FALSE;
-
-  if (conf->cb_sni.goal)
-    PL_erase(conf->cb_sni.goal);
-
-  conf->cb_sni.goal  = PL_record(t2);
-  conf->cb_sni.module = m;
-  ssl_init_sni(conf);
-
-  return TRUE;
-}
 
 static foreign_t
 pl_ssl_debug(term_t level)
@@ -3818,8 +3801,6 @@ install_ssl4pl(void)
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
   PL_register_foreign("_ssl_add_certificate_key",
 					3, pl_ssl_add_certificate_key, 0);
-  PL_register_foreign("_ssl_set_sni_hook",
-					2, pl_ssl_set_sni_hook, 0);
   PL_register_foreign("_ssl_set_options", 2, pl_ssl_set_options, 0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
