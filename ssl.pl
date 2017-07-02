@@ -45,6 +45,7 @@
             ssl_context/3,                % +Role, -Config, :Options
             ssl_add_certificate_key/4,    % +Config, +Cert, +Key, -Config
             ssl_set_sni_hook/3,           % +Config, +Goal, -Config
+            ssl_set_options/3,            % +Config0, -Config, +Options
             ssl_negotiate/5,              % +Config, +PlainRead, +PlainWrite,
                                           %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,       % +Stream, -Certificate
@@ -60,6 +61,7 @@
 
 :- meta_predicate
     ssl_context(+, -, :),
+    ssl_set_options(+, -, :),
     ssl_set_sni_hook(+, 3, -).
 
 :- predicate_options(ssl_context/3, 3,
@@ -316,6 +318,22 @@ ssl_copy_context(SSL0, SSL) :-
 ssl_set_sni_hook(SSL0, Goal, SSL) :-
     ssl_copy_context(SSL0, SSL),
     '_ssl_set_sni_hook'(SSL, Goal).
+
+%!  ssl_set_options(+SSL0, -SSL, +Options)
+%
+%   SSL is the same as SSL0, except for the options specified in
+%   Options.  The following options are supported: close_notify/1,
+%   close_parent/1, host/1, peer_cert/1, ecdh_curve/1,
+%   min_protocol_version/1, max_protocol_version/1,
+%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1. See
+%   ssl_context/3 for more information about these options. This
+%   predicate allows you to tweak existing SSL contexts, which can be
+%   useful in hooks when creating servers with the HTTP
+%   infrastructure.
+
+ssl_set_options(SSL0, SSL, Options) :-
+    ssl_copy_context(SSL0, SSL),
+    '_ssl_set_options'(SSL, Options).
 
 %!  ssl_negotiate(+SSL,
 %!                +PlainRead, +PlainWrite,

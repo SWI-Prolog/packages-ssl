@@ -13,7 +13,7 @@
 \begin{document}
 
 \title{SWI-Prolog SSL Interface}
-\author{Markus Triska, Jan van der Steen, Matt Lilley and Jan Wielemaker \\[5pt]
+\author{\href{https://www.metalevel.at}{Markus Triska}, Jan van der Steen, Matt Lilley and Jan Wielemaker \\[5pt]
         E-mail: \email{jan@swi-prolog.org}
        }
 
@@ -357,7 +357,9 @@ custom definitions:
 \end{itemize}
 
 Important use cases of these hooks are running dual-stack RSA/ECDSA
-servers, and updating certificates while the server keeps running.
+servers, updating certificates while the server keeps running, and
+tweaking SSL~parameters for connections. Use ssl_set_options/3 to
+create and configure copies of existing contexts in these hooks.
 
 The example file \file{https.pl} also provides a server that
 \textit{does} require the client to show its certificate. This

@@ -2611,12 +2611,8 @@ ssl_init_min_max_protocol(PL_SSL *config)
 }
 
 static int
-ssl_config(PL_SSL *config)
-/*
- * Initialize various SSL layer parameters using the supplied
- * config parameters.
- */
-{ static DH *dh_2048 = NULL;
+set_malleable_options(PL_SSL *config)
+{
 
 #ifndef OPENSSL_NO_EC
   EC_KEY *ecdh;
@@ -2634,26 +2630,7 @@ ssl_config(PL_SSL *config)
    */
   char *curve = NULL;
 #endif
-#endif
 
-  ssl_init_verify_locations(config);
-
-  SSL_CTX_set_default_passwd_cb_userdata(config->ctx, config);
-  SSL_CTX_set_default_passwd_cb(config->ctx, ssl_cb_pem_passwd);
-  ssl_deb(1, "password handler installed\n");
-
-  if ( config->certificate_file ||
-       config->key_file ||
-       ( config->num_cert_key_pairs > 0 ) )
-  { if ( !ssl_use_certificates(config) )
-      return FALSE;
-    ssl_deb(1, "certificates installed successfully\n");
-  }
-
-  if ( !dh_2048 ) dh_2048 = get_dh2048();
-  SSL_CTX_set_tmp_dh(config->ctx, dh_2048);
-
-#ifndef OPENSSL_NO_EC
   if (config->ecdh_curve)
     curve = config->ecdh_curve;
 
@@ -2682,6 +2659,35 @@ ssl_config(PL_SSL *config)
   ssl_init_min_max_protocol(config);
 
   return TRUE;
+}
+
+
+static int
+ssl_config(PL_SSL *config)
+/*
+ * Initialize various SSL layer parameters using the supplied
+ * config parameters.
+ */
+{ static DH *dh_2048 = NULL;
+
+  ssl_init_verify_locations(config);
+
+  SSL_CTX_set_default_passwd_cb_userdata(config->ctx, config);
+  SSL_CTX_set_default_passwd_cb(config->ctx, ssl_cb_pem_passwd);
+  ssl_deb(1, "password handler installed\n");
+
+  if ( config->certificate_file ||
+       config->key_file ||
+       ( config->num_cert_key_pairs > 0 ) )
+  { if ( !ssl_use_certificates(config) )
+      return FALSE;
+    ssl_deb(1, "certificates installed successfully\n");
+  }
+
+  if ( !dh_2048 ) dh_2048 = get_dh2048();
+  SSL_CTX_set_tmp_dh(config->ctx, dh_2048);
+
+  return set_malleable_options(config);
 }
 
 
@@ -2919,6 +2925,180 @@ protocol_version_to_integer(const term_t symbol, int *version)
   return TRUE;
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   We call an option *malleable* if it can be set not only when the
+   context is created, but also later via ssl_set_options/3. Not all
+   options fall into this category: Notably, it is not yet documented
+   what OpenSSL does if a certificate and key are later replaced.
+
+   Therefore, we split option processing between malleable options and
+   those that can only be set when the context is being created.
+
+   Note an important design principle:
+
+   We *never* destructively modify an existing Prolog SSL context.
+   ---------------------------------------------------------------
+
+   Instead, when setting any options for an existing context, the
+   context is always first duplicated, and the options are set on the
+   copy! This is critical to ensure that all code stays thread-safe at
+   the Prolog level.
+
+   I mention this explicitly because the OpenSSL API makes it
+   extremely tempting to modify some paramaters destructively.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+static int
+parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
+{ term_t tail;
+  term_t head = PL_new_term_ref();
+
+  tail = PL_copy_term_ref(options);
+
+  while( PL_get_list(tail, head, tail) )
+  { atom_t name;
+    size_t arity;
+
+    if ( !PL_get_name_arity(head, &name, &arity) )
+      return PL_type_error("ssl_option", head);
+
+    if ( name == ATOM_cipher_list && arity == 1 )
+    { char *s;
+
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
+
+      ssl_set_cipher_list(conf, s);
+    } else if ( name == ATOM_ecdh_curve && arity == 1 )
+    { char *s;
+
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
+
+      ssl_set_ecdh_curve(conf, s);
+
+    } else if ( name == ATOM_host && arity == 1 )
+    { char *s;
+
+      if ( !get_char_arg(1, head, &s) )
+	return FALSE;
+
+      ssl_set_host(conf, s);
+    } else if ( name == ATOM_peer_cert && arity == 1 )
+    { int val;
+
+      if ( !get_bool_arg(1, head, &val) )
+	return FALSE;
+
+      conf->peer_cert_required = val;
+    } else if ( name == ATOM_cert_verify_hook && arity == 1 )
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+
+      if (conf->cb_cert_verify.goal)
+        PL_erase(conf->cb_cert_verify.goal);
+
+      conf->cb_cert_verify.goal   = PL_record(cb);
+      conf->cb_cert_verify.module = module;
+    } else if ( name == ATOM_close_parent && arity == 1 )
+    { int val;
+
+      if ( !get_bool_arg(1, head, &val) )
+	return FALSE;
+
+      conf->close_parent = val;
+    } else if ( name == ATOM_disable_ssl_methods && arity == 1 )
+    { term_t opt_head = PL_new_term_ref();
+      term_t opt_tail = PL_new_term_ref();
+      long options = 0;
+      long isset;
+
+      _PL_get_arg(1, head, opt_tail);
+      while( PL_get_list_ex(opt_tail, opt_head, opt_tail) )
+      {  atom_t option_name;
+         if ( !PL_get_atom_ex(opt_head, &option_name) )
+            return FALSE;
+         if (option_name == ATOM_sslv2)
+            options |= SSL_OP_NO_SSLv2;
+         else if (option_name == ATOM_sslv23)
+            options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;
+         else if (option_name == ATOM_sslv3)
+            options |= SSL_OP_NO_SSLv3;
+#ifdef SSL_OP_NO_TLSv1
+         else if (option_name == ATOM_tlsv1)
+            options |= SSL_OP_NO_TLSv1;
+#endif
+#ifdef SSL_OP_NO_TLSv1_1
+         else if (option_name == ATOM_tlsv1_1)
+            options |= SSL_OP_NO_TLSv1_1;
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+         else if (option_name == ATOM_tlsv1_2)
+            options |= SSL_OP_NO_TLSv1_2;
+#endif
+      }
+      if ( !PL_get_nil_ex(opt_tail) )
+	return FALSE;
+
+      if ( (isset=(SSL_CTX_set_options(conf->ctx, options)&options)) != options )
+	ssl_deb(1, "SSL_CTX_set_options 0x%lx only set 0x%lx\n", options, isset);
+    } else if ( name == ATOM_min_protocol_version && arity == 1 )
+    { term_t val = PL_new_term_ref();
+      int version;
+
+      _PL_get_arg(1, head, val);
+
+      if ( !protocol_version_to_integer(val, &version) )
+        return FALSE;
+      conf->min_protocol.is_set  = TRUE;
+      conf->min_protocol.version = version;
+    } else if ( name == ATOM_max_protocol_version && arity == 1 )
+    { term_t val = PL_new_term_ref();
+      int version;
+
+      _PL_get_arg(1, head, val);
+
+      if ( !protocol_version_to_integer(val, &version) )
+        return FALSE;
+      conf->max_protocol.is_set  = TRUE;
+      conf->max_protocol.version = version;
+    } else if ( name == ATOM_sni_hook && arity == 1 &&
+                conf->role == PL_SSL_SERVER )
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+      conf->cb_sni.goal   = PL_record(cb);
+      conf->cb_sni.module = module;
+    } else if ( name == ATOM_close_notify && arity == 1 )
+    { int val;
+
+      if ( !get_bool_arg(1, head, &val) )
+	return FALSE;
+
+      conf->close_notify = val;
+    } else
+      continue;
+  }
+
+  return PL_get_nil_ex(tail);
+}
+
+
+static foreign_t
+pl_ssl_set_options(term_t config, term_t options)
+{ PL_SSL *conf;
+  module_t module = NULL;
+
+  if ( !get_conf(config, &conf) )
+    return FALSE;
+
+  if ( !PL_strip_module(options, &module, options) )
+    return FALSE;
+
+  return
+    parse_malleable_options(conf, module, options) &&
+    set_malleable_options(conf);
+}
+
 static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 { atom_t a;
@@ -2992,35 +3172,6 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	return FALSE;
 
       ssl_set_password(conf, s);
-    } else if ( name == ATOM_cipher_list && arity == 1 )
-    { char *s;
-
-      if ( !get_char_arg(1, head, &s) )
-	return FALSE;
-
-      ssl_set_cipher_list(conf, s);
-    } else if ( name == ATOM_ecdh_curve && arity == 1 )
-    { char *s;
-
-      if ( !get_char_arg(1, head, &s) )
-	return FALSE;
-
-      ssl_set_ecdh_curve(conf, s);
-
-    } else if ( name == ATOM_host && arity == 1 )
-    { char *s;
-
-      if ( !get_char_arg(1, head, &s) )
-	return FALSE;
-
-      ssl_set_host(conf, s);
-    } else if ( name == ATOM_peer_cert && arity == 1 )
-    { int val;
-
-      if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
-
-      conf->peer_cert_required = val;
     } else if ( name == ATOM_require_crl && arity == 1 )
     { int val;
 
@@ -3114,90 +3265,11 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       _PL_get_arg(1, head, cb);
       conf->cb_pem_passwd.goal   = PL_record(cb);
       conf->cb_pem_passwd.module = module;
-    } else if ( name == ATOM_cert_verify_hook && arity == 1 )
-    { term_t cb = PL_new_term_ref();
-      _PL_get_arg(1, head, cb);
-      conf->cb_cert_verify.goal   = PL_record(cb);
-      conf->cb_cert_verify.module = module;
-    } else if ( name == ATOM_close_parent && arity == 1 )
-    { int val;
-
-      if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
-
-      conf->close_parent = val;
-    } else if ( name == ATOM_disable_ssl_methods && arity == 1 )
-    { term_t opt_head = PL_new_term_ref();
-      term_t opt_tail = PL_new_term_ref();
-      long options = 0;
-      long isset;
-
-      _PL_get_arg(1, head, opt_tail);
-      while( PL_get_list_ex(opt_tail, opt_head, opt_tail) )
-      {  atom_t option_name;
-         if ( !PL_get_atom_ex(opt_head, &option_name) )
-            return FALSE;
-         if (option_name == ATOM_sslv2)
-            options |= SSL_OP_NO_SSLv2;
-         else if (option_name == ATOM_sslv23)
-            options |= SSL_OP_NO_SSLv3 | SSL_OP_NO_SSLv2;
-         else if (option_name == ATOM_sslv3)
-            options |= SSL_OP_NO_SSLv3;
-#ifdef SSL_OP_NO_TLSv1
-         else if (option_name == ATOM_tlsv1)
-            options |= SSL_OP_NO_TLSv1;
-#endif
-#ifdef SSL_OP_NO_TLSv1_1
-         else if (option_name == ATOM_tlsv1_1)
-            options |= SSL_OP_NO_TLSv1_1;
-#endif
-#ifdef SSL_OP_NO_TLSv1_2
-         else if (option_name == ATOM_tlsv1_2)
-            options |= SSL_OP_NO_TLSv1_2;
-#endif
-      }
-      if ( !PL_get_nil_ex(opt_tail) )
-	return FALSE;
-
-      if ( (isset=(SSL_CTX_set_options(conf->ctx, options)&options)) != options )
-	ssl_deb(1, "SSL_CTX_set_options 0x%lx only set 0x%lx\n", options, isset);
-    } else if ( name == ATOM_min_protocol_version && arity == 1 )
-    { term_t val = PL_new_term_ref();
-      int version;
-
-      _PL_get_arg(1, head, val);
-
-      if ( !protocol_version_to_integer(val, &version) )
-        return FALSE;
-      conf->min_protocol.is_set  = TRUE;
-      conf->min_protocol.version = version;
-    } else if ( name == ATOM_max_protocol_version && arity == 1 )
-    { term_t val = PL_new_term_ref();
-      int version;
-
-      _PL_get_arg(1, head, val);
-
-      if ( !protocol_version_to_integer(val, &version) )
-        return FALSE;
-      conf->max_protocol.is_set  = TRUE;
-      conf->max_protocol.version = version;
-    } else if ( name == ATOM_sni_hook && arity == 1 && r == PL_SSL_SERVER)
-    { term_t cb = PL_new_term_ref();
-      _PL_get_arg(1, head, cb);
-      conf->cb_sni.goal   = PL_record(cb);
-      conf->cb_sni.module = module;
-    } else if ( name == ATOM_close_notify && arity == 1 )
-    { int val;
-
-      if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
-
-      conf->close_notify = val;
     } else
       continue;
   }
 
-  if ( !PL_get_nil_ex(tail) )
+  if ( !parse_malleable_options(conf, module, options) )
     return FALSE;
 
   return unify_conf(config, conf) && ssl_config(conf);
@@ -3748,6 +3820,7 @@ install_ssl4pl(void)
 					3, pl_ssl_add_certificate_key, 0);
   PL_register_foreign("_ssl_set_sni_hook",
 					2, pl_ssl_set_sni_hook, 0);
+  PL_register_foreign("_ssl_set_options", 2, pl_ssl_set_options, 0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
   PL_register_foreign("ssl_peer_certificate",
