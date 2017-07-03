@@ -1225,8 +1225,9 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   size_t plain_length;
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
+  int padding = 1;
 
-  if ( !parse_options(options_t, EVP_MODE, &rep, NULL))
+  if ( !parse_options(options_t, EVP_MODE, &rep, &padding))
     return FALSE;
 
   if ( !PL_get_chars(key_t, &key, cvt_flags) ||
@@ -1243,7 +1244,7 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   EVP_CIPHER_CTX_reset(ctx);
   EVP_EncryptInit_ex(ctx, cipher, NULL,
 		     (const unsigned char*)key, (const unsigned char*)iv);
-
+  EVP_CIPHER_CTX_set_padding(ctx, padding);
   ciphertext = PL_malloc(plain_length + EVP_CIPHER_block_size(cipher));
   if ( EVP_EncryptUpdate(ctx, (unsigned char*)ciphertext, &cipher_length,
                          (unsigned char*)plaintext, plain_length) == 1 )
