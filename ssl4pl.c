@@ -2847,12 +2847,10 @@ protocol_version_to_integer(const term_t symbol, int *version)
 
 static int
 parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
-{ term_t tail;
+{ term_t tail = PL_copy_term_ref(options);
   term_t head = PL_new_term_ref();
 
-  tail = PL_copy_term_ref(options);
-
-  while( PL_get_list(tail, head, tail) )
+  while( PL_get_list_ex(tail, head, tail) )
   { atom_t name;
     size_t arity;
 
