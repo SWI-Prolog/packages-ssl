@@ -40,19 +40,34 @@ connections between e.g., Prolog agents.
 \section{Introduction}
 \label{sec:ssl-intro}
 
-Raw TCP/IP networking is dangerous for two reasons.  It is hard to tell
-whether the party you think you are talking to is indeed the right one
-and anyone with access to a subnet through which your data flows can
+Raw TCP/IP networking is dangerous for two reasons:
+
+\begin{enumerate}
+\item It is hard to tell whether the party you think you are talking
+  to is indeed the right one.
+\item  Anyone with access to a subnet through which your data flows can
 `tap' the wire and listen for sensitive information such as passwords,
-credit card numbers, etc. Secure Socket Layer (SSL) deals with both
-problems. It uses certificates to establish the identity of the peer and
-encryption to make it useless to tap into the wire. SSL allows agents to
-talk in private and create secure web services.
+credit card numbers, etc.
+\end{enumerate}
+
+Transport Layer Security~(TLS) and its predecessor Secure Socket
+Layer~(SSL), which are both often collectively called~SSL, solve both
+problems. SSL~uses:
+
+\begin{itemize}
+\item certificates to establish the \textit{identity} of the peer
+\item \textit{encryption} to make it useless to tap into the wire.
+\end{itemize}
+
+SSL allows agents to talk in private and create secure web services.
 
 The SWI-Prolog \pllib{ssl} library provides an API to turn a pair of
 arbitrary Prolog \jargon{wire} streams into SSL powered encrypted
 streams. Note that secure protocols such as secure HTTP simply run the
 plain protocol over (SSL) encrypted streams.
+
+The \pllib{crypto} library provides additional predicates related to
+cryptography and authentication, secure hashes and elliptic~curves.
 
 Cryptography is a difficult topic. If you just want to download
 documents from an HTTPS server without worrying much about security,
