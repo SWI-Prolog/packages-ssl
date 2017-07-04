@@ -435,19 +435,19 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %!              -PlainText,
 %!              +Options).
 %
-%   Decrypt  the  given  CipherText,  using    the  symmetric  algorithm
-%   Algorithm, key Key, and iv IV,   to  give PlainText. CipherText, Key
-%   and IV should all be strings, and   PlainText is created as a string
-%   as well. Algorithm should be an algorithm which your copy of OpenSSL
-%   knows about. Examples are:
+%   Decrypt  the   given  CipherText,  using  the   symmetric  algorithm
+%   Algorithm, key Key, and initialization vector IV, to give PlainText.
+%   CipherText, Key and IV should all be strings or atoms, and PlainText
+%   is created as a string.  Algorithm should be an algorithm which your
+%   copy of OpenSSL knows about. Examples are:
 %
 %       * aes-128-cbc
 %       * aes-256-cbc
 %       * des3
 %
-%   If the IV is not  needed  for   your  decryption  algorithm (such as
-%   aes-128-ecb) then any string can be provided   as it will be ignored
-%   by the underlying implementation
+%   If  the  initalization vector  is  not  needed for  your  decryption
+%   algorithm (such as  aes-128-ecb) then any string can  be provided as
+%   it will be ignored by the underlying implementation.
 %
 %   Options:
 %
@@ -457,20 +457,32 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %
 %     - padding(+PaddingScheme)
 %     Padding scheme to use.  Default is `block`.  You can disable padding
-%     by supplying
-%     `none` here.
+%     by supplying `none` here.
 %
 %   Example of aes-128-cbc encryption:
 %
 %     ```
-%     ?- evp_encrypt("this is some input", 'aes-128-cbc', "sixteenbyteofkey",
-%                    "sixteenbytesofiv", CipherText, []),
+%     ?- crypto_n_random_bytes(16, Bs),
+%        atom_codes(IV, Bs),
+%        evp_encrypt("this is some input", 'aes-128-cbc',
+%                    "sixteenbyteofkey", IV, CipherText, []),
 %        evp_decrypt(CipherText, 'aes-128-cbc',
-%                    "sixteenbyteofkey", "sixteenbytesofiv",
-%                    RecoveredText, []).
+%                    "sixteenbyteofkey", IV, RecoveredText, []).
+%     Bs = [244, 240, 64, 101, 117, 42, 115, 154, 30|...],
+%     IV = <binary atom>
 %     CipherText = <binary string>
 %     RecoveredText = "this is some input".
 %     ```
+%
+%   Note   the  use   of   crypto_n_random_bytes/2   to  generate   an
+%   initialization   vector  from   cryptographically  secure   random
+%   numbers.   This  ensures  _semantic   security_:  With  very  high
+%   probability,  even  identical  plain texts  will  yield  different
+%   cipher  texts.   It  is  safe  to  store  and  transfer  the  used
+%   initialization vector (in plain  text) together with the encrypted
+%   data.  You   can  use  crypto_data_hash/3  to   create  keys  from
+%   user-supplied passwords. To slow  down dictionary attacks, you can
+%   re-hash the result iteratively, as often as you can tolerate.
 
 %!  evp_encrypt(+PlainText,
 %!              +Algorithm,
