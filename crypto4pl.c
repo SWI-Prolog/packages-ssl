@@ -1251,8 +1251,10 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   { int last_chunk;
     int rc;
 
-    EVP_EncryptFinal_ex(ctx, (unsigned char*)(ciphertext + cipher_length),
-			&last_chunk);
+    if ( !EVP_EncryptFinal_ex(ctx, (unsigned char*)(ciphertext + cipher_length),
+                              &last_chunk) )
+      return raise_ssl_error(ERR_get_error());
+
     EVP_CIPHER_CTX_free(ctx);
     rc = PL_unify_chars(ciphertext_t,  PL_STRING|REP_ISO_LATIN_1,
 			cipher_length + last_chunk, ciphertext);
@@ -1263,7 +1265,7 @@ pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
   PL_free(ciphertext);
   EVP_CIPHER_CTX_free(ctx);
 
-  return FALSE;
+  return raise_ssl_error(ERR_get_error());
 }
 
 
