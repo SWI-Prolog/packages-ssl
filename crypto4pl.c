@@ -1196,6 +1196,10 @@ pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
     int rc;
     rc = EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
                               &last_chunk);
+
+    if ( !rc )
+      return raise_ssl_error(ERR_get_error());
+
     EVP_CIPHER_CTX_free(ctx);
     ERR_print_errors_fp(stderr);
     rc &= PL_unify_chars(plaintext_t, rep | PL_STRING, plain_length + last_chunk,
@@ -1207,7 +1211,7 @@ pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
   PL_free(plaintext);
   EVP_CIPHER_CTX_free(ctx);
 
-  return FALSE;
+  return raise_ssl_error(ERR_get_error());
 }
 
 static foreign_t
