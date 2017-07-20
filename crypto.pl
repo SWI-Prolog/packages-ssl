@@ -462,8 +462,7 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %   Example of aes-128-cbc encryption:
 %
 %     ```
-%     ?- crypto_n_random_bytes(16, Bs),
-%        atom_codes(IV, Bs),
+%     ?- crypto_n_random_bytes(16, IV),
 %        evp_encrypt("this is some input", 'aes-128-cbc',
 %                    "sixteenbyteofkey", IV, CipherText, []),
 %        evp_decrypt(CipherText, 'aes-128-cbc',
