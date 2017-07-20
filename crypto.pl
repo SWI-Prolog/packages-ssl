@@ -437,9 +437,10 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %
 %   Decrypt  the   given  CipherText,  using  the   symmetric  algorithm
 %   Algorithm, key Key, and initialization vector IV, to give PlainText.
-%   CipherText, Key and IV should all be strings or atoms, and PlainText
-%   is created as a string.  Algorithm should be an algorithm which your
-%   copy of OpenSSL knows about. Examples are:
+%   CipherText, Key  and IV  should all  be strings,  atoms or  lists of
+%   codes  or  characters,  and  PlainText   is  created  as  a  string.
+%   Algorithm should  be an algorithm  which your copy of  OpenSSL knows
+%   about. Examples are:
 %
 %       * aes-128-cbc
 %       * aes-256-cbc
