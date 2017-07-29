@@ -3,6 +3,17 @@
 rm -rf test_certs
 mkdir test_certs
 
+# Emulate seq(1) as much as we need it, which is not available for
+# OpenBSD.
+fseq()
+{ from=$1
+  to=$2
+  while test $from -le $to; do
+    echo $from
+    from=$(($from+1))
+  done
+}
+
 # First make the root CA
 mkdir -p test_certs/rootCA/{certs,crl,newcerts,private}
 touch test_certs/rootCA/index.txt
@@ -12,7 +23,7 @@ openssl req -new -config rootCA.cnf -keyout test_certs/rootCA/private/cakey.pem 
 openssl ca -config rootCA.cnf -notext -create_serial -selfsign -batch -key apenoot -extensions v3_ca -out test_certs/rootCA/cacert.pem -infiles test_certs/rootCA/careq.pem
 
 # Certificates 1-17 are all signed by the CA, except 14
-for i in $(seq 1 13); do
+for i in $(fseq 1 13); do
     # Generate a CSR
     openssl req -new -config ${i}.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
     # Sign the CSR. We need our own config here because we want copy_extensions on so we can preserve SubjectAltNames
@@ -29,7 +40,7 @@ openssl ca -config 14.cnf -notext -create_serial -selfsign -batch -key apenoot -
 openssl req -new -config 14_tail.cnf -out 14.csr -nodes -keyout test_certs/14-key.pem
 openssl ca -config 14_tail.cnf -notext -batch -key apenoot -policy policy_anything -out test_certs/14-cert.pem -infiles 14.csr
 
-for i in $(seq 15 17); do
+for i in $(fseq 15 17); do
     # Generate a CSR
     openssl req -new -config ${i}.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
     # Sign the CSR. We need our own config here because we want copy_extensions on so we can preserve SubjectAltNames
@@ -60,7 +71,7 @@ openssl req -outform PEM -inform DER -in 11.der -out 11.csr
 openssl ca -config 11.cnf -batch -key apenoot -policy policy_anything -out test_certs/11-cert.pem -infiles 11.csr
 
 # Certificates 18-22 are all about intermediaries
-for i in $(seq 18 22); do
+for i in $(fseq 18 22); do
     # First, generate the intermediary
     mkdir -p test_certs/${i}_CA/{certs,crl,newcerts,private}
     touch test_certs/${i}_CA/index.txt
@@ -68,7 +79,7 @@ for i in $(seq 18 22); do
     echo 1000 > test_certs/${i}_CA/serial
     openssl req -new -config ${i}.cnf -nodes -keyout test_certs/${i}_CA/private/cakey.pem -out test_certs/${i}_CA/careq.pem
     openssl ca -config ${i}.cnf -notext -create_serial -batch -key apenoot -extensions v3_ca -out test_certs/${i}_CA/cacert.pem -infiles test_certs/${i}_CA/careq.pem
-    
+
     # Generate a CSR (All of these tests relate to the intermediate CA, not the certificate at the end of the chain
     openssl req -new -config ${i}_tail.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
     # Sign the CSR. We need our own config here because we want copy_extensions on so we can preserve SubjectAltNames
@@ -78,7 +89,7 @@ for i in $(seq 18 22); do
 done
 
 # Certificates 23-24 are about CRLs
-for i in $(seq 23 24); do
+for i in $(fseq 23 24); do
     openssl req -new -config ${i}.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
     openssl ca -config ${i}.cnf -batch -notext -key apenoot -policy policy_anything -out test_certs/${i}-cert.pem -infiles ${i}.csr
 done
@@ -88,7 +99,7 @@ done
 openssl ca -config 24.cnf -revoke test_certs/24-cert.pem -batch -notext -key apenoot
 
 # Certificates 25-27 needs their own CA
-for i in $(seq 25 27); do
+for i in $(fseq 25 27); do
     # First, generate the intermediary
     mkdir -p test_certs/${i}_CA/{certs,crl,newcerts,private}
     touch test_certs/${i}_CA/index.txt
@@ -96,7 +107,7 @@ for i in $(seq 25 27); do
     echo 1000 > test_certs/${i}_CA/serial
     openssl req -new -config ${i}.cnf -nodes -keyout test_certs/${i}_CA/private/cakey.pem -out test_certs/${i}_CA/careq.pem
     openssl ca -config ${i}.cnf -notext -create_serial -batch -key apenoot -extensions v3_ca -out test_certs/${i}_CA/cacert.pem -infiles test_certs/${i}_CA/careq.pem
-    
+
     # Generate a CSR (All of these tests relate to the intermediate CA, not the certificate at the end of the chain
     openssl req -new -config ${i}_tail.cnf -out ${i}.csr -nodes -keyout test_certs/${i}-key.pem
     # Sign the CSR. We need our own config here because we want copy_extensions on so we can preserve SubjectAltNames
@@ -115,7 +126,7 @@ openssl ca -config 26_tail.cnf -revoke test_certs/26-tail-cert.pem -batch -notex
 openssl ca -config 23.cnf -gencrl -out test_certs/rootCA-crl.pem
 
 # Generate the 25-27 CA CRLS
-for i in $(seq 25 27); do
+for i in $(fseq 25 27); do
     openssl ca -config ${i}_tail.cnf -gencrl -out test_certs/${i}-crl.pem
 done
 
