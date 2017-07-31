@@ -6,14 +6,14 @@ connections, sockets or streams.
 
 ## Cryptographically secure random numbers {#crypto-random}
 
-Many cryptographic applications require the availability of numbers that
-are  sufficiently unpredictable.   Examples  are the  creation of  keys,
-nonces and salts.  With this library, you can generate cryptographically
-strong pseudo-random numbers for such use cases:
+Almost  all  cryptographic  applications  require  the  availability  of
+numbers that are sufficiently  unpredictable.  Examples are the creation
+of  keys,  nonces  and  salts.   With this  library,  you  can  generate
+cryptographically strong pseudo-random numbers for such use cases:
 
   * [[crypto_n_random_bytes/2]]
 
-## Hashes and digests {#crypto-hash}
+## Hashes {#crypto-hash}
 
 A **hash**, also called **digest**, is  a way to verify the integrity of
 data.  In typical  cases, a hash is significantly shorter  than the data
@@ -31,18 +31,25 @@ hashing without increasing the memory  footprint of your application. In
 other cases, the specialised hashing  libraries are more lightweight but
 less general alternatives to `library(crypto)`.
 
+### Hashes of data and files {#crypto-hash-basic}
+
 The most important predicates to compute hashes are:
 
   * [[crypto_data_hash/3]]
   * [[crypto_file_hash/3]]
 
-For further reasoning and conversion of digests in hexadecimal notation,
-the following bidirectional relation is provided:
+### Hashes of passwords {#crypto-hash-password}
 
-  * [[hex_bytes/2]]
+For  the  important  case  of  deriving  hashes  from  _passwords_,  the
+following specialised predicates are provided:
 
-In addition, the  following predicates are provided  for building hashes
-_incrementally_.  This  works  by  first  creating  a  **context**  with
+  * [[crypto_password_hash/2]]
+  * [[crypto_password_hash/3]]
+
+### Hashing incrementally {#crypto-hash-incremental}
+
+The   following   predicates   are    provided   for   building   hashes
+_incrementally_.   This  works  by  first creating  a  **context**  with
 crypto_context_new/2, then using this context with crypto_data_context/3
 to  incrementally  obtain  further  contexts, and  finally  extract  the
 resulting hash with crypto_context_hash/2.
@@ -55,6 +62,14 @@ The following hashing predicates work over _streams_:
 
   * [[crypto_open_hash_stream/3]]
   * [[crypto_stream_hash/2]]
+
+## Representing binary data {#crypto-binary-data}
+
+In the context of this library, _bytes_ can be represented as lists of
+integers between 0 and 255. Such lists can be converted to and from
+_hexadecimal notation_ with the following bidirectional relation:
+
+  * [[hex_bytes/2]]
 
 ## Digital signatures {#crypto-signatures}
 
@@ -69,15 +84,20 @@ load_public_key/2 to load keys from files and streams.
 In typical cases, we use this mechanism  to sign the _hash_ of data. See
 [hashing](<#crypto-hash>).  For this  reason,  the following  predicates
 work on the _hexadecimal_ representation of  hashes that is also used by
-crypto_data_hash/3 and related predicates:
-
-  * [[ecdsa_sign/4]]
-  * [[ecdsa_verify/4]]
-  * [[rsa_sign/4]]
-  * [[rsa_verify/4]]
+crypto_data_hash/3 and related predicates.
 
 Signatures are also  represented in hexadecimal notation,  and you can
 use hex_bytes/2 to convert them to and from lists of bytes (integers).
+
+### ECDSA
+
+  * [[ecdsa_sign/4]]
+  * [[ecdsa_verify/4]]
+
+### RSA
+
+  * [[rsa_sign/4]]
+  * [[rsa_verify/4]]
 
 ## Asymmetric encryption and decryption {#crypto-asymmetric}
 

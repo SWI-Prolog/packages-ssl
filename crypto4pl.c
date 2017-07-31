@@ -585,6 +585,27 @@ pl_crypto_stream_context(term_t stream, term_t tcontext)
 }
 
 
+static foreign_t
+pl_crypto_password_hash(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
+{ char *pw, *salt;
+  size_t pwlen, saltlen;
+  int iter;
+  const int DIGEST_LEN = 64;
+  unsigned char digest[DIGEST_LEN];
+
+  if ( !PL_get_nchars(tpw, &pwlen, &pw,
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) ||
+       !PL_get_nchars(tsalt, &saltlen, &salt, CVT_LIST) ||
+       !PL_get_integer_ex(titer, &iter) )
+    return FALSE;
+
+  PKCS5_PBKDF2_HMAC((const char *) pw, pwlen,
+                    (const unsigned char *) salt, saltlen,
+                    iter, EVP_sha512(), DIGEST_LEN, digest);
+
+  return PL_unify_list_ncodes(tdigest, DIGEST_LEN, (char *) digest);
+}
+
                  /***************************
                  *       Bignums & Keys     *
                  ****************************/
@@ -1805,6 +1826,8 @@ install_crypto4pl(void)
   PL_register_foreign("_crypto_open_hash_stream", 3,
                       pl_crypto_open_hash_stream, 0);
   PL_register_foreign("_crypto_stream_context", 2, pl_crypto_stream_context, 0);
+
+  PL_register_foreign("_crypto_password_hash", 4, pl_crypto_password_hash, 0);
 
   PL_register_foreign("_crypto_ecdsa_sign", 4, pl_ecdsa_sign, 0);
   PL_register_foreign("_crypto_ecdsa_verify", 4, pl_ecdsa_verify, 0);

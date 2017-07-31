@@ -41,6 +41,8 @@
             crypto_context_hash/2,      % +Context, -Hash
             crypto_open_hash_stream/3,  % +InStream, -HashStream, +Options
             crypto_stream_hash/2,       % +HashStream, -Hash
+            crypto_password_hash/2,     % +Password, ?Hash
+            crypto_password_hash/3,     % +Password, ?Hash, +Options
             ecdsa_sign/4,               % +Key, +Data, -Signature, +Options
             ecdsa_verify/4,             % +Key, +Data, +Signature, +Options
             evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
@@ -245,6 +247,123 @@ crypto_open_hash_stream(OrgStream, HashStream, Options) :-
 crypto_stream_hash(Stream, Hash) :-
     '_crypto_stream_context'(Stream, Context),
     crypto_context_hash(Context, Hash).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   The so-called modular crypt format (MCF) is a standard for encoding
+   password hash strings. However, there's no official specification
+   document describing it. Nor is there a central registry of
+   identifiers or rules. This page describes what is known about it:
+
+   https://pythonhosted.org/passlib/modular_crypt_format.html
+
+   As of 2016, the MCF is deprecated in favor of the PHC String Format:
+
+   https://github.com/P-H-C/phc-string-format/blob/master/phc-sf-spec.md
+
+   This is what we are using below. For the time being, it is best to
+   treat these hashes as opaque atoms in applications. Please let me
+   know if you need to rely on any specifics of this format.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+%!  crypto_password_hash(+Password, ?Hash) is semidet.
+%
+%   If  Hash is  instantiated,  the predicate  succeeds  _iff_ the  hash
+%   matches the  given password.  Otherwise, the  call is  equivalent to
+%   crypto_password_hash(Password,    Hash,   [])    and   computes    a
+%   password-based hash using the default options.
+
+crypto_password_hash(Password, Hash) :-
+    (   nonvar(Hash) ->
+        must_be(atom, Hash),
+        split_string(Hash, "$", "$", ["pbkdf2-sha512",Ps,SaltB64,HashB64]),
+        atom_to_term(Ps, t=Iterations, []),
+        bytes_base64(SaltBytes, SaltB64),
+        bytes_base64(HashBytes, HashB64),
+        '_crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes)
+    ;   crypto_password_hash(Password, Hash, [])
+    ).
+
+%!  crypto_password_hash(+Password, -Hash, +Options) is det.
+%
+%   Derive  Hash  based  on  Password.  This  predicate  is  similar  to
+%   crypto_data_hash/3  in  that it  derives  a  hash from  given  data.
+%   However,   it   is  tailored   for   the   specific  use   case   of
+%   _passwords_. One  essential distinction is  that for this  use case,
+%   the  derivation  of a  hash  should  be  _as  slow as  possible_  to
+%   counteract brute-force attacks over possible passwords.
+%
+%   Another important  distinction is  that equal passwords  must yield,
+%   with  very high  probability, _different_  hashes. For  this reason,
+%   cryptographically strong  random numbers are automatically  added to
+%   the password before a hash is derived.
+%
+%   Hash is unified with an atom that contains the computed hash and all
+%   parameters  that were  used, except  for the  password.  Instead  of
+%   storing passwords,  store these  hashes. Later,  you can  verify the
+%   validity of  a password  with crypto_password_hash/2,  comparing the
+%   then entered password to the stored hash. If you need to export this
+%   atom, you should treat it as opaque  ASCII data with up to 255 bytes
+%   of length. The maximal length may increase in the future.
+%
+%   Admissible options are:
+%
+%     - algorithm(+Algorithm)
+%       The algorithm to use. Currently, the only available algorithm
+%       is =|pbkdf2-sha512|=, which is therefore also the default.
+%     - cost(+C)
+%       C is an integer, denoting the binary logarithm of the number
+%       of _iterations_ used for the derivation of the hash. This
+%       means that the number of iterations is set to 2^C. Currently,
+%       the default is 17, and thus more than one hundred _thousand_
+%       iterations. You should set this option as high as your server
+%       and users can tolerate. The default is subject to change and
+%       will likely increase in the future or adapt to new algorithms.
+%     - salt(+Salt)
+%       Use the given list of bytes as salt. By default,
+%       cryptographically secure random numbers are generated for this
+%       purpose. The default is intended to be secure, and constitutes
+%       the typical use case of this predicate.
+%
+%   Currently,  PBKDF2  with SHA-512  is  used  as the  hash  derivation
+%   function, using 128 bits of  salt. All default parameters, including
+%   the algorithm, are subject to change, and other algorithms will also
+%   become available  in the  future.  Since  computed hashes  store all
+%   parameters that were used during their derivation, such changes will
+%   not affect the  operation of existing deployments.  Note though that
+%   new hashes will then be computed with the new default parameters.
+
+crypto_password_hash(Password, Hash, Options) :-
+    must_be(list, Options),
+    option(cost(C), Options, 17),
+    Iterations is 2^C,
+    Algorithm = 'pbkdf2-sha512', % current default and only option
+    option(algorithm(Algorithm), Options, Algorithm),
+    (   option(salt(SaltBytes), Options) ->
+        true
+    ;   crypto_n_random_bytes(16, SaltBytes)
+    ),
+    '_crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes),
+    bytes_base64(HashBytes, HashB64),
+    bytes_base64(SaltBytes, SaltB64),
+    format(atom(Hash),
+           "$pbkdf2-sha512$t=~d$~w$~w", [Iterations,SaltB64,HashB64]).
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Bidirectional Bytes <-> Base64 conversion as required by PHC format.
+
+   Note that *no padding* must be used, and that we must be able
+   to encode the whole range of bytes, not only UTF-8 sequences!
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+bytes_base64(Bytes, Base64) :-
+    (   var(Bytes) ->
+        base64_encoded(Atom, Base64, [padding(false)]),
+        atom_codes(Atom, Bytes)
+    ;   atom_codes(Atom, Bytes),
+        base64_encoded(Atom, Base64, [padding(false)])
+    ).
+
 
 %!  ecdsa_sign(+Key, +Data, -Signature, +Options)
 %
@@ -480,9 +599,8 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %   probability,  even  identical  plain texts  will  yield  different
 %   cipher  texts.   It  is  safe  to  store  and  transfer  the  used
 %   initialization vector (in plain  text) together with the encrypted
-%   data.  You   can  use  crypto_data_hash/3  to   create  keys  from
-%   user-supplied passwords. To slow  down dictionary attacks, you can
-%   re-hash the result iteratively, as often as you can tolerate.
+%   data.   You can  use  crypto_password_hash/3 to  create keys  from
+%   user-supplied passwords.
 
 %!  evp_encrypt(+PlainText,
 %!              +Algorithm,
@@ -630,6 +748,9 @@ sandbox:safe_primitive(crypto:crypto_data_hash(_,_,_)).
 sandbox:safe_primitive(crypto:crypto_data_context(_,_,_)).
 sandbox:safe_primitive(crypto:crypto_context_new(_,_)).
 sandbox:safe_primitive(crypto:crypto_context_hash(_,_)).
+
+sandbox:safe_primitive(crypto:crypto_password_hash(_,_)).
+sandbox:safe_primitive(crypto:crypto_password_hash(_,_,_)).
 
 sandbox:safe_primitive(crypto:ecdsa_sign(_,_,_,_)).
 sandbox:safe_primitive(crypto:ecdsa_verify(_,_,_,_)).
