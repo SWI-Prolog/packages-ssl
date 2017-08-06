@@ -154,8 +154,9 @@ AC_CHECK_MEMBERS(X509_VERIFY_PARAM.id,
 AC_MSG_CHECKING(system certificate file)
 SYSTEM_CACERT_FILENAME=/etc/ssl/certs/ca-certificates.crt
 cert_candidates="/etc/ssl/certs/ca-certificates.crt"
-cert_candidates+=" /etc/pki/tls/certs/ca-bundle.crt"
-cert_candidates+=" /etc/ssl/ca-bundle.pem"
+cert_candidates="$cert_candidates /etc/pki/tls/certs/ca-bundle.crt"
+cert_candidates="$cert_candidates /etc/ssl/ca-bundle.pem"
+cert_candidates="$cert_candidates /etc/ssl/cert.pem"
 
 for f in $cert_candidates; do
   if test -f $f; then
@@ -165,7 +166,11 @@ for f in $cert_candidates; do
 done
 AC_DEFINE_UNQUOTED(SYSTEM_CACERT_FILENAME, "$SYSTEM_CACERT_FILENAME",
 		   [Location of the system certificate file])
-AC_MSG_RESULT($SYSTEM_CACERT_FILENAME)
+if test -f $SYSTEM_CACERT_FILENAME; then
+  AC_MSG_RESULT($SYSTEM_CACERT_FILENAME)
+else
+  AC_MSG_RESULT($SYSTEM_CACERT_FILENAME [(does not exist)])
+fi
 
 AC_OUTPUT(Makefile)
 
