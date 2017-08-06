@@ -1615,7 +1615,8 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
   { rc = PL_unify_chars(ta, PL_STRING|REP_ISO_LATIN_1, strlen(ahex), ahex)
       && PL_unify_chars(tb, PL_STRING|REP_ISO_LATIN_1, strlen(bhex), bhex);
   } else
-  { ssl_err = TRUE;
+  { rc = FALSE;					/* silence compiler */
+    ssl_err = TRUE;
   }
 
   OPENSSL_free(ahex); OPENSSL_free(bhex);
@@ -1624,8 +1625,7 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
   EC_POINT_free(q); EC_POINT_free(r);
 
   if ( ssl_err )
-  { return raise_ssl_error(ERR_get_error());
-  }
+    return raise_ssl_error(ERR_get_error());
 
   return rc;
 }
