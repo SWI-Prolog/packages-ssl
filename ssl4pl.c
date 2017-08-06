@@ -44,7 +44,6 @@
 #include <pthread.h>
 #endif
 
-
 #include <openssl/x509v3.h>
 #include <openssl/ssl.h>
 #include <openssl/bn.h>
@@ -53,6 +52,10 @@
 #define NEED_SSL_ERR 1
 #define NEED_SSL_SET_DEBUG 1
 #include "cryptolib.c"
+
+#ifdef LIBRESSL_VERSION_NUMBER
+#undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */
+#endif
 
 #include "../clib/nonblockio.h"
 
