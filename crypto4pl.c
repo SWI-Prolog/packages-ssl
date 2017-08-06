@@ -672,7 +672,7 @@ static int
 recover_rsa(term_t t, RSA** rsap)
 { RSA *rsa = RSA_new();
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
   if ( get_bn_arg(1, t, &rsa->n) &&
        get_bn_arg(2, t, &rsa->e) &&
        get_bn_arg(3, t, &rsa->d) &&
