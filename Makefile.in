@@ -117,7 +117,7 @@ check::		tests/test_certs
 		$(PL) -q -f test_ssl.pl -F none -g test_ssl -t halt
 
 tests/test_certs:
-		(cd tests && bash mkcerts.sh 2> /dev/null)
+		(cd tests && bash mkcerts.sh > /dev/null 2>&1)
 
 ################################################################
 # Clean
