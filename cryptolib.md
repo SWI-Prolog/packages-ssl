@@ -89,12 +89,12 @@ crypto_data_hash/3 and related predicates.
 Signatures are also  represented in hexadecimal notation,  and you can
 use hex_bytes/2 to convert them to and from lists of bytes (integers).
 
-### ECDSA
+### ECDSA {#crypto-ECDSA}
 
   * [[ecdsa_sign/4]]
   * [[ecdsa_verify/4]]
 
-### RSA
+### RSA {#crypto-RSA}
 
   * [[rsa_sign/4]]
   * [[rsa_verify/4]]
