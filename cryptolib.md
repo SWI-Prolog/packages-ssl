@@ -46,6 +46,18 @@ following specialised predicates are provided:
   * [[crypto_password_hash/2]]
   * [[crypto_password_hash/3]]
 
+### HMAC-based key derivation function (HKDF) {#crypto-hkdf}
+
+The following  predicate implements  the _Hashed  Message Authentication
+Code  (HMAC)-based key  derivation function_,  abbreviated as  HKDF.  It
+supports a wide range of  applications and requirements by concentrating
+possibly  dispersed  entropy  of  the input  keying  material  and  then
+expanding it to the desired length. The number and lengths of the output
+keys depend on the specific  cryptographic algorithms for which the keys
+are needed.
+
+  * [[crypto_data_hkdf/4]]
+
 ### Hashing incrementally {#crypto-hash-incremental}
 
 The   following   predicates   are    provided   for   building   hashes
@@ -178,7 +190,7 @@ Alice in turn performs the following steps:
        of `C` as obtained via crypto_curve_generator/2.
     3. Further, compute the scalar product _j*R_, which is a point on
        the curve that we shall call Q. We can derive a _shared secret_
-       from `Q`, using for example crypto_data_hash/3, and encrypt any
+       from `Q`, using for example crypto_data_hkdf/4, and encrypt any
        message with it (using for example evp_encrypt/6).
     4. Send the point _j*G_ and the encrypted message to Bob.
 

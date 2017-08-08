@@ -43,6 +43,7 @@
             crypto_stream_hash/2,       % +HashStream, -Hash
             crypto_password_hash/2,     % +Password, ?Hash
             crypto_password_hash/3,     % +Password, ?Hash, +Options
+            crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
             ecdsa_sign/4,               % +Key, +Data, -Signature, +Options
             ecdsa_verify/4,             % +Key, +Data, +Signature, +Options
             evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
@@ -154,6 +155,7 @@ less general alternatives to `library(crypto)`.
 %  @param Hash is an atom that represents the hash.
 %
 %  @see hex_bytes/2 for conversion between hashes and lists.
+%  @see crypto_password_hash/2 for the important use case of passwords.
 
 crypto_data_hash(Data, Hash, Options) :-
     crypto_context_new(Context0, Options),
@@ -331,6 +333,8 @@ crypto_password_hash(Password, Hash) :-
 %   parameters that were used during their derivation, such changes will
 %   not affect the  operation of existing deployments.  Note though that
 %   new hashes will then be computed with the new default parameters.
+%
+%   @see crypto_data_hkdf/4 for generating keys from Hash.
 
 crypto_password_hash(Password, Hash, Options) :-
     must_be(list, Options),
@@ -364,6 +368,42 @@ bytes_base64(Bytes, Base64) :-
         base64_encoded(Atom, Base64, [padding(false)])
     ).
 
+
+%!  crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
+%
+%   Concentrate possibly dispersed entropy of Data and then expand it to
+%   the desired  length.  Bytes  is unified  with a  list of  _bytes_ of
+%   length  Length,  and  is  suitable  as  input  keying  material  and
+%   initialization vectors to the symmetric encryption predicates.
+%
+%   Admissible options are:
+%
+%      - algorithm(+Algorithm)
+%        A hashing algorithm as specified to crypto_data_hash/3. The
+%        default is =|sha256|=.
+%      - info(+Atom)
+%        Optional context and application specific information. The
+%        default is the zero length atom ''.
+%      - salt(+List)
+%        Optionally, a list of _bytes_ that are used as salt. The
+%        default is all zeroes.
+%      - encoding(+Atom)
+%        Either =|utf8|= (default) or =|octet|=, denoting
+%        the representation of Data as in crypto_data_hash/3.
+%
+%   The `info/1`  option can be  used to  generate multiple keys  from a
+%   single  master key,  using for  example values  such as  =|key|= and
+%   =|iv|=, or the name of a file that is to be encrypted.
+%
+%   @see crypto_n_random_bytes/2 to obtain a suitable salt.
+
+
+crypto_data_hkdf(Data, L, Bytes, Options) :-
+        option(algorithm(Algorithm), Options, sha256),
+        option(salt(SaltBytes), Options, []),
+        option(info(Info), Options, ''),
+        option(encoding(Enc), Options, utf8),
+        '_crypto_data_hkdf'(Data, SaltBytes, Info, Algorithm, Enc, L, Bytes).
 
 %!  ecdsa_sign(+Key, +Data, -Signature, +Options)
 %
@@ -599,8 +639,8 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %   probability,  even  identical  plain texts  will  yield  different
 %   cipher  texts.   It  is  safe  to  store  and  transfer  the  used
 %   initialization vector (in plain  text) together with the encrypted
-%   data.   You can  use  crypto_password_hash/3 to  create keys  from
-%   user-supplied passwords.
+%   data.   You can  use  crypto_password_hash/3  in combination  with
+%   crypto_data_hkdf/4 to create keys from user-supplied passwords.
 
 %!  evp_encrypt(+PlainText,
 %!              +Algorithm,
@@ -751,6 +791,7 @@ sandbox:safe_primitive(crypto:crypto_context_hash(_,_)).
 
 sandbox:safe_primitive(crypto:crypto_password_hash(_,_)).
 sandbox:safe_primitive(crypto:crypto_password_hash(_,_,_)).
+sandbox:safe_primitive(crypto:crypto_data_hkdf(_,_,_,_)).
 
 sandbox:safe_primitive(crypto:ecdsa_sign(_,_,_,_)).
 sandbox:safe_primitive(crypto:ecdsa_verify(_,_,_,_)).

@@ -39,6 +39,7 @@
 #include <SWI-Prolog.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
+#include <openssl/kdf.h>
 #include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
@@ -220,6 +221,50 @@ get_context(term_t tcontext, PL_CRYPTO_CONTEXT **context)
   return PL_type_error("crypto_context", tcontext);
 }
 
+typedef struct algorithm_pair {
+  atom_t a_algorithm;
+  const EVP_MD *algorithm;
+} ALGORITHM_PAIR;
+
+#define ALGO(a) { ATOM_## a , EVP_## a() }
+#define NELEMS(array) (sizeof(array)/sizeof((array)[0]))
+
+static int
+get_hash_algorithm(atom_t a_algorithm, const EVP_MD **algorithm)
+{ int i;
+  ALGORITHM_PAIR algorithms[] =
+    { ALGO(md5), ALGO(ripemd160),
+#if defined(HAVE_EVP_BLAKE2B512) && defined(HAVE_EVP_BLAKE2S256)
+      ALGO(blake2s256), ALGO(blake2b512),
+#endif
+      ALGO(sha1), ALGO(sha224), ALGO(sha256), ALGO(sha384), ALGO(sha512)
+    };
+
+  for (i = 0; i < NELEMS(algorithms); i++)
+  { if (a_algorithm == algorithms[i].a_algorithm)
+    { *algorithm = algorithms[i].algorithm;
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static int
+get_text_representation(term_t t, int *rep)
+{ atom_t a;
+
+  if ( PL_get_atom_ex(t, &a) )
+  { if      ( a == ATOM_octet ) *rep = REP_ISO_LATIN_1;
+    else if ( a == ATOM_utf8  ) *rep = REP_UTF8;
+    else if ( a == ATOM_text  ) *rep = REP_MB;
+    else return PL_domain_error("encoding", t);
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
 
 
 static int
@@ -245,27 +290,8 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
 
         if ( !PL_get_atom_ex(a, &a_algorithm) )
           return FALSE;
-        if ( a_algorithm == ATOM_sha1  )
-        { result->algorithm = EVP_sha1();
-        } else if ( a_algorithm == ATOM_sha224 )
-        { result->algorithm = EVP_sha224();
-        } else if ( a_algorithm == ATOM_sha256 )
-        { result->algorithm = EVP_sha256();
-        } else if ( a_algorithm == ATOM_sha384 )
-        { result->algorithm = EVP_sha384();
-        } else if ( a_algorithm == ATOM_sha512 )
-        { result->algorithm = EVP_sha512();
-        } else if ( a_algorithm == ATOM_md5 )
-        { result->algorithm = EVP_md5();
-#if defined(HAVE_EVP_BLAKE2B512) && defined(HAVE_EVP_BLAKE2S256)
-        } else if ( a_algorithm == ATOM_blake2b512 )
-        {  result->algorithm = EVP_blake2b512();
-        } else if ( a_algorithm == ATOM_blake2s256 )
-        { result->algorithm = EVP_blake2s256();
-#endif
-        } else if ( a_algorithm == ATOM_ripemd160 )
-        { result->algorithm = EVP_ripemd160();
-        } else
+
+        if ( !get_hash_algorithm(a_algorithm, &result->algorithm) )
           return PL_domain_error("algorithm", a);
       } else if ( aname == ATOM_hmac )
       { size_t key_len;
@@ -279,16 +305,11 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
       { if ( !PL_get_bool_ex(a, &result->close_parent) )
           return FALSE;
       } else if ( aname == ATOM_encoding )
-      { atom_t a_enc;
+      {  int rep;
+         if ( !get_text_representation(a, &rep) )
+           return PL_domain_error("encoding", a);
 
-        if ( !PL_get_atom_ex(a, &a_enc) )
-          return FALSE;
-        if ( a_enc == ATOM_utf8 )
-          result->encoding = REP_UTF8;
-        else if ( a_enc == ATOM_octet )
-          result->encoding = REP_ISO_LATIN_1;
-        else
-          return PL_domain_error("encoding", a);
+         result->encoding = ( rep == REP_UTF8 ) ? REP_UTF8 : REP_ISO_LATIN_1;
       }
     } else
     { return PL_type_error("option", opt);
@@ -584,6 +605,9 @@ pl_crypto_stream_context(term_t stream, term_t tcontext)
   return FALSE;
 }
 
+                 /***************************
+                 *    Hashes of passwords   *
+                 ****************************/
 
 static foreign_t
 pl_crypto_password_hash(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
@@ -604,6 +628,56 @@ pl_crypto_password_hash(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
                     iter, EVP_sha512(), DIGEST_LEN, digest);
 
   return PL_unify_list_ncodes(tdigest, DIGEST_LEN, (char *) digest);
+}
+
+static foreign_t
+pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
+                    term_t tencoding, term_t toutlen, term_t tout)
+{ EVP_PKEY_CTX *pctx;
+  char *salt, *key, *info;
+  size_t keylen, infolen, outlen, saltlen;
+  int rep;
+  const EVP_MD *alg;
+  unsigned char *out;
+  atom_t a_algorithm;
+
+  if ( !PL_get_nchars(tsalt, &saltlen, &salt, CVT_LIST) ||
+       !PL_get_size_ex(toutlen, &outlen) ||
+       !PL_get_atom_ex(talg, &a_algorithm) )
+    return FALSE;
+
+  if ( !get_text_representation(tencoding, &rep) )
+    return PL_domain_error("encoding", tencoding);
+
+  if ( !PL_get_nchars(tkey, &keylen, &key,
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|rep) ||
+       !PL_get_nchars(tinfo, &infolen, &info,
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+    return FALSE;
+
+  if ( !get_hash_algorithm(a_algorithm, &alg) )
+    return PL_domain_error("algorithm", a_algorithm);
+
+  if ( !(out = malloc(outlen)) )
+    return PL_resource_error("memory");
+
+  pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+
+  if ( (EVP_PKEY_derive_init(pctx) > 0) &&
+       (EVP_PKEY_CTX_set_hkdf_md(pctx, alg) > 0) &&
+       (EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, saltlen) > 0) &&
+       (EVP_PKEY_CTX_set1_hkdf_key(pctx, key, keylen) > 0) &&
+       (EVP_PKEY_CTX_add1_hkdf_info(pctx, info, infolen) > 0) &&
+       (EVP_PKEY_derive(pctx, out, &outlen) > 0) )
+  { int rc = PL_unify_list_ncodes(tout, outlen, (char *) out);
+    free(out);
+    EVP_PKEY_CTX_free(pctx);
+    return rc;
+  }
+
+  free(out);
+  EVP_PKEY_CTX_free(pctx);
+  return raise_ssl_error(ERR_get_error());
 }
 
                  /***************************
@@ -748,22 +822,6 @@ recover_public_key(term_t t, RSA** rsap)
                  /*******************************
                  *       OPTION PROCESSING      *
                  *******************************/
-
-static int
-get_text_representation(term_t t, int *rep)
-{ atom_t a;
-
-  if ( PL_get_atom_ex(t, &a) )
-  { if      ( a == ATOM_octet ) *rep = REP_ISO_LATIN_1;
-    else if ( a == ATOM_utf8  ) *rep = REP_UTF8;
-    else if ( a == ATOM_text  ) *rep = REP_MB;
-    else return PL_domain_error("encoding", t);
-
-    return TRUE;
-  }
-
-  return FALSE;
-}
 
 static int
 get_padding(term_t t, crypt_mode_t mode, int *padding)
@@ -1828,6 +1886,7 @@ install_crypto4pl(void)
   PL_register_foreign("_crypto_stream_context", 2, pl_crypto_stream_context, 0);
 
   PL_register_foreign("_crypto_password_hash", 4, pl_crypto_password_hash, 0);
+  PL_register_foreign("_crypto_data_hkdf", 7, pl_crypto_data_hkdf, 0);
 
   PL_register_foreign("_crypto_ecdsa_sign", 4, pl_ecdsa_sign, 0);
   PL_register_foreign("_crypto_ecdsa_verify", 4, pl_ecdsa_verify, 0);
