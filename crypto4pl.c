@@ -913,8 +913,7 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
   EC_KEY *key;
   ECDSA_SIG *sig;
   unsigned char *signature = NULL;
-  unsigned int signature_len;
-  int rc;
+  int signature_len, rc;
 
   if ( !recover_ec(Private, &key) ||
        !get_enc_text(Data, Enc, &data_len, &data) )
