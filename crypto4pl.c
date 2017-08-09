@@ -39,7 +39,9 @@
 #include <SWI-Prolog.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
+#ifdef HAVE_OPENSSL_KDF_H
 #include <openssl/kdf.h>
+#endif
 #include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
@@ -633,7 +635,9 @@ pl_crypto_password_hash(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
 static foreign_t
 pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
                     term_t tencoding, term_t toutlen, term_t tout)
-{ EVP_PKEY_CTX *pctx;
+{
+#ifdef HAVE_OPENSSL_KDF_H
+  EVP_PKEY_CTX *pctx;
   char *salt, *key, *info;
   size_t keylen, infolen, outlen, saltlen;
   int rep;
@@ -678,6 +682,9 @@ pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
   free(out);
   EVP_PKEY_CTX_free(pctx);
   return raise_ssl_error(ERR_get_error());
+#else
+  return FALSE;
+#endif
 }
 
                  /***************************

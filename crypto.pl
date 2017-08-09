@@ -395,6 +395,8 @@ bytes_base64(Bytes, Base64) :-
 %   single  master key,  using for  example values  such as  =|key|= and
 %   =|iv|=, or the name of a file that is to be encrypted.
 %
+%   This predicate requires OpenSSL 1.1.0 or greater.
+%
 %   @see crypto_n_random_bytes/2 to obtain a suitable salt.
 
 
