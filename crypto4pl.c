@@ -636,7 +636,7 @@ static foreign_t
 pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
                     term_t tencoding, term_t toutlen, term_t tout)
 {
-#ifdef HAVE_OPENSSL_KDF_H
+#if defined(HAVE_OPENSSL_KDF_H) && defined(EVP_PKEY_HKDF)
   EVP_PKEY_CTX *pctx;
   char *salt, *key, *info;
   size_t keylen, infolen, outlen, saltlen;
