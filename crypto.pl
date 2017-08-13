@@ -598,9 +598,10 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %
 %   Decrypt  the   given  CipherText,  using  the   symmetric  algorithm
 %   Algorithm, key Key, and initialization vector IV, to give PlainText.
-%   CipherText, Key  and IV  should all  be strings,  atoms or  lists of
-%   codes  or  characters,  and  PlainText   is  created  as  a  string.
-%   Algorithm should  be an algorithm  which your copy of  OpenSSL knows
+%   CipherText must  be a string, atom  or list of codes  or characters,
+%   and PlainText  is created  as a  string.  Key  and IV  are typically
+%   lists  of _bytes_,  though  atoms and  strings  are also  permitted.
+%   Algorithm  must be  an algorithm  which your  copy of  OpenSSL knows
 %   about. Examples are:
 %
 %       * aes-128-cbc
@@ -609,7 +610,8 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %
 %   If  the  initalization vector  is  not  needed for  your  decryption
 %   algorithm (such as  aes-128-ecb) then any string can  be provided as
-%   it will be ignored by the underlying implementation.
+%   it will be ignored by  the underlying implementation. Note that such
+%   algorithms do not provide semantic security and are thus insecure.
 %
 %   Options:
 %
@@ -629,8 +631,7 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %                    "sixteenbyteofkey", IV, CipherText, []),
 %        evp_decrypt(CipherText, 'aes-128-cbc',
 %                    "sixteenbyteofkey", IV, RecoveredText, []).
-%     Bs = [244, 240, 64, 101, 117, 42, 115, 154, 30|...],
-%     IV = <binary atom>
+%     IV = [244, 240, 64, 101, 117, 42, 115, 154, 30|...],
 %     CipherText = <binary string>
 %     RecoveredText = "this is some input".
 %     ```
