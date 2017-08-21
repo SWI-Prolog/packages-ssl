@@ -123,8 +123,8 @@ different from the one used to _decrypt_ the data:
 
 The following predicates provide _symmetric_ encryption and decryption:
 
-  * [[evp_decrypt/6]]
-  * [[evp_encrypt/6]]
+  * [[crypto_data_decrypt/6]]
+  * [[crypto_data_encrypt/6]]
 
 ## Number theory {#crypto-numbertheory}
 
@@ -191,14 +191,14 @@ Alice in turn performs the following steps:
     3. Further, compute the scalar product _j*R_, which is a point on
        the curve that we shall call Q. We can derive a _shared secret_
        from `Q`, using for example crypto_data_hkdf/4, and encrypt any
-       message with it (using for example evp_encrypt/6).
+       message with it (using for example crypto_data_encrypt/6).
     4. Send the point _j*G_ and the encrypted message to Bob.
 
 Bob  receives _j*G_  in plain  text and  can arrive  at the  same shared
 secret  by  performing   the  calculation  _k*(j*G)_,  which   is  -  by
 associativity and commutativity of  scalar multiplication - identical to
 the point _j*(k*G)_,  which is again Q from which  the shared secret can
-be derived, and the message can be decrypted with evp_decrypt/6.
+be derived, and the message can be decrypted with crypto_data_decrypt/6.
 
 This method is known as Diffie-Hellman-Merkle key exchange over elliptic
 curves, abbreviated as  ECDH. It provides forward secrecy  (FS): Even if

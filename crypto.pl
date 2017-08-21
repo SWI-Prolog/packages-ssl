@@ -46,8 +46,8 @@
             crypto_data_hkdf/4,         % +Data, +Length, -Bytes, +Options
             ecdsa_sign/4,               % +Key, +Data, -Signature, +Options
             ecdsa_verify/4,             % +Key, +Data, +Signature, +Options
-            evp_decrypt/6,              % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
-            evp_encrypt/6,              % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
+            crypto_data_decrypt/6,      % +CipherText, +Algorithm, +Key, +IV, -PlainText, +Options
+            crypto_data_encrypt/6,      % +PlainText, +Algorithm, +Key, +IV, -CipherText, +Options
             hex_bytes/2,                % ?Hex, ?List
             rsa_private_decrypt/4,      % +Key, +Ciphertext, -Plaintext, +Enc
             rsa_private_encrypt/4,      % +Key, +Plaintext, -Ciphertext, +Enc
@@ -589,12 +589,12 @@ rsa_verify(Key, Data0, Signature0, Options) :-
     hex_bytes(Signature0, Signature),
     rsa_verify(Key, Type, Enc, Data, Signature).
 
-%!  evp_decrypt(+CipherText,
-%!              +Algorithm,
-%!              +Key,
-%!              +IV,
-%!              -PlainText,
-%!              +Options).
+%!  crypto_data_decrypt(+CipherText,
+%!                      +Algorithm,
+%!                      +Key,
+%!                      +IV,
+%!                      -PlainText,
+%!                      +Options).
 %
 %   Decrypt  the   given  CipherText,  using  the   symmetric  algorithm
 %   Algorithm, key Key, and initialization vector IV, to give PlainText.
@@ -627,9 +627,9 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %
 %     ```
 %     ?- crypto_n_random_bytes(16, IV),
-%        evp_encrypt("this is some input", 'aes-128-cbc',
+%        crypto_data_encrypt("this is some input", 'aes-128-cbc',
 %                    "sixteenbyteofkey", IV, CipherText, []),
-%        evp_decrypt(CipherText, 'aes-128-cbc',
+%        crypto_data_decrypt(CipherText, 'aes-128-cbc',
 %                    "sixteenbyteofkey", IV, RecoveredText, []).
 %     IV = [244, 240, 64, 101, 117, 42, 115, 154, 30|...],
 %     CipherText = <binary string>
@@ -645,16 +645,16 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %   data.   You can  use  crypto_password_hash/3  in combination  with
 %   crypto_data_hkdf/4 to create keys from user-supplied passwords.
 
-%!  evp_encrypt(+PlainText,
-%!              +Algorithm,
-%!              +Key,
-%!              +IV,
-%!              -CipherTExt,
-%!              +Options).
+%!  crypto_data_encrypt(+PlainText,
+%!                      +Algorithm,
+%!                      +Key,
+%!                      +IV,
+%!                      -CipherTExt,
+%!                      +Options).
 %
 %   Encrypt  the  given  PlainText,  using    the   symmetric  algorithm
 %   Algorithm,  key  Key,  and  iv   IV,    to   give   CipherText.  See
-%   evp_decrypt/6.
+%   crypto_data_decrypt/6.
 
 
 %%  crypto_modular_inverse(+X, +M, -Y) is det
@@ -806,8 +806,8 @@ sandbox:safe_primitive(crypto:rsa_public_decrypt(_,_,_,_)).
 sandbox:safe_primitive(crypto:rsa_private_encrypt(_,_,_,_)).
 sandbox:safe_primitive(crypto:rsa_private_decrypt(_,_,_,_)).
 
-sandbox:safe_primitive(crypto:evp_decrypt(_,_,_,_,_,_)).
-sandbox:safe_primitive(crypto:evp_encrypt(_,_,_,_,_,_)).
+sandbox:safe_primitive(crypto:crypto_data_decrypt(_,_,_,_,_,_)).
+sandbox:safe_primitive(crypto:crypto_data_encrypt(_,_,_,_,_,_)).
 
 sandbox:safe_primitive(crypto:crypto_modular_inverse(_,_,_)).
 sandbox:safe_primitive(crypto:crypto_generate_prime(_,_,_)).

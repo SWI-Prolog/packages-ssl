@@ -129,7 +129,7 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
            string_codes(IV, IVCodes),
            string_codes(CipherText, CipherCodes),
            length(CipherValueWithIVCodes, _),
-           evp_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
+           crypto_data_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
     ;  memberchk(element(XENC:'CipherReference', CipherReferenceAttributes, CipherReference), CipherData)->
            % However, it is allowed to include CipherReference instead. This is an arbitrary URI and a list of transforms to convert the
            % data identified by that URI into the raw octets that represent the encrypted data
@@ -152,7 +152,7 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
            apply_ciphertext_transforms(RawCipherValue, Transforms, CipherValue),
            sub_string(CipherValue, 0, IVSize, _, IV),
            sub_string(CipherValue, IVSize, _, 0, CipherText),
-           evp_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
+           crypto_data_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
     ),
     % The XML-ENC padding scheme does not comply with RFC-1423. This has been noted a few times by people trying to write
     % XML-ENC decryptors backed by OpenSSL, which insists on compliance. The only recourse we have is to disable padding entirely

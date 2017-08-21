@@ -1240,9 +1240,9 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
 #endif
 
 static foreign_t
-pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
-	       term_t key_t, term_t iv_t, term_t plaintext_t,
-	       term_t options_t)
+pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
+                       term_t key_t, term_t iv_t, term_t plaintext_t,
+                       term_t options_t)
 { EVP_CIPHER_CTX* ctx = NULL;
   const EVP_CIPHER *cipher;
   char* key;
@@ -1300,9 +1300,9 @@ pl_evp_decrypt(term_t ciphertext_t, term_t algorithm_t,
 }
 
 static foreign_t
-pl_evp_encrypt(term_t plaintext_t, term_t algorithm_t,
-               term_t key_t, term_t iv_t, term_t ciphertext_t,
-	       term_t options_t)
+pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
+                       term_t key_t, term_t iv_t, term_t ciphertext_t,
+                       term_t options_t)
 { EVP_CIPHER_CTX* ctx = NULL;
   const EVP_CIPHER *cipher;
   char* key;
@@ -1903,8 +1903,8 @@ install_crypto4pl(void)
   PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("rsa_sign", 5, pl_rsa_sign, 0);
   PL_register_foreign("rsa_verify", 5, pl_rsa_verify, 0);
-  PL_register_foreign("evp_decrypt", 6, pl_evp_decrypt, 0);
-  PL_register_foreign("evp_encrypt", 6, pl_evp_encrypt, 0);
+  PL_register_foreign("crypto_data_decrypt", 6, pl_crypto_data_decrypt, 0);
+  PL_register_foreign("crypto_data_encrypt", 6, pl_crypto_data_encrypt, 0);
 
   PL_register_foreign("_crypto_modular_inverse", 3,
                       pl_crypto_modular_inverse, 0);
