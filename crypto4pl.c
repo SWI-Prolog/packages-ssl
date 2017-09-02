@@ -1241,7 +1241,9 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
 
 static foreign_t
 pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
-                       term_t key_t, term_t iv_t, term_t plaintext_t,
+                       term_t key_t, term_t iv_t,
+                       term_t authtag_t,
+                       term_t plaintext_t,
                        term_t options_t)
 { EVP_CIPHER_CTX* ctx = NULL;
   const EVP_CIPHER *cipher;
@@ -1255,8 +1257,10 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
   int padding = 1;
+  char *authtag;
+  size_t authlen;
 
-  if ( !parse_options(options_t, EVP_MODE, &rep, &padding))
+  if ( !parse_options(options_t, EVP_MODE, &rep, &padding) )
     return FALSE;
 
   if ( !PL_get_chars(key_t, &key, cvt_flags) ||
@@ -1273,6 +1277,15 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
   EVP_CIPHER_CTX_reset(ctx);
   EVP_DecryptInit_ex(ctx, cipher, NULL,
 		     (const unsigned char*)key, (const unsigned char*)iv);
+
+  if ( PL_get_nchars(authtag_t, &authlen, &authtag, CVT_LIST) &&
+       ( authlen > 0 ) )
+  { if ( !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, authlen, authtag) )
+    { EVP_CIPHER_CTX_free(ctx);
+      return raise_ssl_error(ERR_get_error());
+    }
+  }
+
   EVP_CIPHER_CTX_set_padding(ctx, padding);
   plaintext = PL_malloc(cipher_length + EVP_CIPHER_block_size(cipher));
   if ( EVP_DecryptUpdate(ctx, (unsigned char*)plaintext, &plain_length,
@@ -1282,10 +1295,11 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
     rc = EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
                               &last_chunk);
 
+    EVP_CIPHER_CTX_free(ctx);
+
     if ( !rc )
       return raise_ssl_error(ERR_get_error());
 
-    EVP_CIPHER_CTX_free(ctx);
     ERR_print_errors_fp(stderr);
     rc &= PL_unify_chars(plaintext_t, rep | PL_STRING, plain_length + last_chunk,
                          plaintext);
@@ -1301,7 +1315,9 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
 
 static foreign_t
 pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
-                       term_t key_t, term_t iv_t, term_t ciphertext_t,
+                       term_t key_t, term_t iv_t,
+                       term_t authlen_t, term_t authtag_t,
+                       term_t ciphertext_t,
                        term_t options_t)
 { EVP_CIPHER_CTX* ctx = NULL;
   const EVP_CIPHER *cipher;
@@ -1315,8 +1331,13 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
   int padding = 1;
+  int authlen;
+  const int MAX_AUTHLEN = 256;
+  char authtag[MAX_AUTHLEN];
 
-  if ( !parse_options(options_t, EVP_MODE, &rep, &padding))
+  if ( !parse_options(options_t, EVP_MODE, &rep, &padding) ||
+       !PL_get_integer_ex(authlen_t, &authlen) ||
+       ( authlen > MAX_AUTHLEN ) )
     return FALSE;
 
   if ( !PL_get_chars(key_t, &key, cvt_flags) ||
@@ -1343,6 +1364,14 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
     if ( !EVP_EncryptFinal_ex(ctx, (unsigned char*)(ciphertext + cipher_length),
                               &last_chunk) )
       return raise_ssl_error(ERR_get_error());
+
+    if ( authlen >= 0 )
+    { if ( !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, authlen, authtag) )
+        return raise_ssl_error(ERR_get_error());
+
+      if ( !PL_unify_list_ncodes(authtag_t, authlen, authtag) )
+        return FALSE;
+    }
 
     EVP_CIPHER_CTX_free(ctx);
     rc = PL_unify_chars(ciphertext_t,  PL_STRING|REP_ISO_LATIN_1,
@@ -1903,8 +1932,8 @@ install_crypto4pl(void)
   PL_register_foreign("rsa_public_encrypt", 4, pl_rsa_public_encrypt, 0);
   PL_register_foreign("rsa_sign", 5, pl_rsa_sign, 0);
   PL_register_foreign("rsa_verify", 5, pl_rsa_verify, 0);
-  PL_register_foreign("crypto_data_decrypt", 6, pl_crypto_data_decrypt, 0);
-  PL_register_foreign("crypto_data_encrypt", 6, pl_crypto_data_encrypt, 0);
+  PL_register_foreign("_crypto_data_decrypt", 7, pl_crypto_data_decrypt, 0);
+  PL_register_foreign("_crypto_data_encrypt", 8, pl_crypto_data_encrypt, 0);
 
   PL_register_foreign("_crypto_modular_inverse", 3,
                       pl_crypto_modular_inverse, 0);

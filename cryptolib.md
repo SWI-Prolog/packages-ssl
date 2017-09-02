@@ -123,8 +123,8 @@ different from the one used to _decrypt_ the data:
 
 The following predicates provide _symmetric_ encryption and decryption:
 
-  * [[crypto_data_decrypt/6]]
   * [[crypto_data_encrypt/6]]
+  * [[crypto_data_decrypt/6]]
 
 ## Number theory {#crypto-numbertheory}
 

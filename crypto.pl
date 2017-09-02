@@ -602,11 +602,64 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %   and PlainText  is created  as a  string.  Key  and IV  are typically
 %   lists  of _bytes_,  though  atoms and  strings  are also  permitted.
 %   Algorithm  must be  an algorithm  which your  copy of  OpenSSL knows
+%   See crypto_data_encrypt/6 for an example.
+%
+%     - encoding(+Encoding)
+%     Encoding to use for Data.  Default is `utf8`.  Alternatives
+%     are `utf8` and `octet`.
+%
+%     - padding(+PaddingScheme)
+%     Padding scheme to use.  Default is `block`.  You can disable padding
+%     by supplying `none` here.
+%
+%     - tag(+Tag)
+%     For authenticated encryption schemes, the tag must be specified as
+%     a list of bytes exactly as they were generated upon encryption.
+%
+%     - min_tag_length(+Length)
+%     If the tag length is smaller than 16, this option must be used
+%     to permit such shorter tags. This is used as a safeguard against
+%     truncation attacks, where an attacker provides a short tag that
+%     is easier to guess.
+
+crypto_data_decrypt(CipherText, Algorithm, Key, IV, PlainText, Options) :-
+        (   option(tag(Tag), Options) ->
+            option(min_tag_length(MinTagLength), Options, 16),
+            length(Tag, TagLength),
+            compare(C, TagLength, MinTagLength),
+            tag_length_ok(C, Tag)
+        ;   Tag = []
+        ),
+        '_crypto_data_decrypt'(CipherText, Algorithm, Key, IV,
+                               Tag, PlainText, Options).
+
+% This test is important to prevent truncation attacks of the tag.
+
+tag_length_ok(=, _).
+tag_length_ok(>, _).
+tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
+
+
+%!  crypto_data_encrypt(+PlainText,
+%!                      +Algorithm,
+%!                      +Key,
+%!                      +IV,
+%!                      -CipherTExt,
+%!                      +Options).
+%
+%   Encrypt  the   given  PlainText,   using  the   symmetric  algorithm
+%   Algorithm,  key   Key,  and   initialization  vector  IV,   to  give
+%   CipherText.
+%
+%   PlainText must  be a string, atom  or list of codes  or characters,
+%   and CipherText  is created  as a  string.  Key  and IV  are typically
+%   lists  of _bytes_,  though  atoms and  strings  are also  permitted.
+%   Algorithm  must be  an algorithm  which your  copy of  OpenSSL knows
 %   about. Examples are:
 %
 %       * aes-128-cbc
-%       * aes-256-cbc
-%       * des3
+%       * aes-128-gcm
+%       * chacha20-poly1305
 %
 %   If  the  initalization vector  is  not  needed for  your  decryption
 %   algorithm (such as  aes-128-ecb) then any string can  be provided as
@@ -620,41 +673,62 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %     are `utf8` and `octet`.
 %
 %     - padding(+PaddingScheme)
-%     Padding scheme to use.  Default is `block`.  You can disable padding
-%     by supplying `none` here.
+%     Padding scheme to use.  Default is `block`.  You can disable
+%     padding by supplying `none` here. If padding is disabled for block
+%     ciphers, then the length of the ciphertext must be a multiple of
+%     the block size.
 %
-%   Example of aes-128-cbc encryption:
+%     - tag(-List)
+%     For authenticated encryption schemes, List is unified with a list
+%     of _bytes_ holding the tag. This tag must be provided for
+%     decryption.
+%
+%     - tag_length(+Length)
+%     For authenticated encryption schemes, the desired length of the
+%     tag, specified as the number of bytes.  The default is
+%     16. Smaller numbers are not recommended.
+%
+%   For example, with OpenSSL 1.1.0 and greater, we can use the
+%   ChaCha20 stream cipher with the Poly1305 authenticator. This
+%   cipher uses a 256-bit key and a 96-bit initialization vector,
+%   i.e., 32 and 12 _bytes_, respectively:
 %
 %     ```
-%     ?- crypto_n_random_bytes(16, IV),
-%        crypto_data_encrypt("this is some input", 'aes-128-cbc',
-%                    "sixteenbyteofkey", IV, CipherText, []),
-%        crypto_data_decrypt(CipherText, 'aes-128-cbc',
-%                    "sixteenbyteofkey", IV, RecoveredText, []).
-%     IV = [244, 240, 64, 101, 117, 42, 115, 154, 30|...],
-%     CipherText = <binary string>
+%     ?- Algorithm = 'chacha20-poly1305',
+%        crypto_n_random_bytes(32, Key),
+%        crypto_n_random_bytes(12, IV),
+%        crypto_data_encrypt("this is some input", Algorithm,
+%                    Key, IV, CipherText, [tag(Tag)]),
+%        crypto_data_decrypt(CipherText, Algorithm,
+%                    Key, IV, RecoveredText, [tag(Tag)]).
+%     Algorithm = 'chacha20-poly1305',
+%     Key = [65, 147, 140, 197, 27, 60, 198, 50, 218|...],
+%     IV = [253, 232, 174, 84, 168, 208, 218, 168, 228|...],
+%     CipherText = <binary string>,
+%     Tag = [248, 220, 46, 62, 255, 9, 178, 130, 250|...],
 %     RecoveredText = "this is some input".
 %     ```
 %
-%   Note   the  use   of   crypto_n_random_bytes/2   to  generate   an
-%   initialization   vector  from   cryptographically  secure   random
-%   numbers.   This  ensures  _semantic   security_:  With  very  high
-%   probability,  even  identical  plain texts  will  yield  different
-%   cipher  texts.   It  is  safe  to  store  and  transfer  the  used
-%   initialization vector (in plain  text) together with the encrypted
-%   data.   You can  use  crypto_password_hash/3  in combination  with
-%   crypto_data_hkdf/4 to create keys from user-supplied passwords.
-
-%!  crypto_data_encrypt(+PlainText,
-%!                      +Algorithm,
-%!                      +Key,
-%!                      +IV,
-%!                      -CipherTExt,
-%!                      +Options).
+%   Note the use of crypto_n_random_bytes/2 to generate a key and
+%   initialization vector from cryptographically secure random
+%   numbers.  It is safe to store and transfer the used initialization
+%   vector (in plain text) together with the encrypted data, but the
+%   key _must be kept secret_.  You can use crypto_password_hash/3 in
+%   combination with crypto_data_hkdf/4 to create keys from
+%   user-supplied passwords. Note that for authenticated encryption
+%   schemes, the _tag_ that was computed during encryption is
+%   necessary for decryption.
 %
-%   Encrypt  the  given  PlainText,  using    the   symmetric  algorithm
-%   Algorithm,  key  Key,  and  iv   IV,    to   give   CipherText.  See
-%   crypto_data_decrypt/6.
+%   @see crypto_data_decrypt/6.
+
+crypto_data_encrypt(PlainText, Algorithm, Key, IV, CipherText, Options) :-
+        (   option(tag(AuthTag), Options) ->
+            option(tag_length(AuthLength), Options, 16)
+        ;   AuthTag = _,
+            AuthLength = -1
+        ),
+        '_crypto_data_encrypt'(PlainText, Algorithm, Key, IV,
+                               AuthLength, AuthTag, CipherText, Options).
 
 
 %%  crypto_modular_inverse(+X, +M, -Y) is det
