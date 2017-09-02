@@ -1257,8 +1257,10 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
   int padding = 1;
+#ifdef EVP_CTRL_AEAD_SET_TAG
   char *authtag;
   size_t authlen;
+#endif
 
   if ( !parse_options(options_t, EVP_MODE, &rep, &padding) )
     return FALSE;
@@ -1278,6 +1280,7 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
   EVP_DecryptInit_ex(ctx, cipher, NULL,
 		     (const unsigned char*)key, (const unsigned char*)iv);
 
+#ifdef EVP_CTRL_AEAD_SET_TAG
   if ( PL_get_nchars(authtag_t, &authlen, &authtag, CVT_LIST) &&
        ( authlen > 0 ) )
   { if ( !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, authlen, authtag) )
@@ -1285,6 +1288,7 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
       return raise_ssl_error(ERR_get_error());
     }
   }
+#endif
 
   EVP_CIPHER_CTX_set_padding(ctx, padding);
   plaintext = PL_malloc(cipher_length + EVP_CIPHER_block_size(cipher));
@@ -1333,7 +1337,9 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
   int padding = 1;
   int authlen;
   const int MAX_AUTHLEN = 256;
+#ifdef EVP_CTRL_AEAD_SET_TAG
   char authtag[MAX_AUTHLEN];
+#endif
 
   if ( !parse_options(options_t, EVP_MODE, &rep, &padding) ||
        !PL_get_integer_ex(authlen_t, &authlen) ||
@@ -1365,6 +1371,7 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
                               &last_chunk) )
       return raise_ssl_error(ERR_get_error());
 
+#ifdef EVP_CTRL_AEAD_SET_TAG
     if ( authlen >= 0 )
     { if ( !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, authlen, authtag) )
         return raise_ssl_error(ERR_get_error());
@@ -1372,6 +1379,7 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
       if ( !PL_unify_list_ncodes(authtag_t, authlen, authtag) )
         return FALSE;
     }
+#endif
 
     EVP_CIPHER_CTX_free(ctx);
     rc = PL_unify_chars(ciphertext_t,  PL_STRING|REP_ISO_LATIN_1,

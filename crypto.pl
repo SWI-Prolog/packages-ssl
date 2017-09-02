@@ -615,6 +615,7 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %     - tag(+Tag)
 %     For authenticated encryption schemes, the tag must be specified as
 %     a list of bytes exactly as they were generated upon encryption.
+%     This option requires OpenSSL 1.1.0 or greater.
 %
 %     - min_tag_length(+Length)
 %     If the tag length is smaller than 16, this option must be used
@@ -679,9 +680,10 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %     the block size.
 %
 %     - tag(-List)
-%     For authenticated encryption schemes, List is unified with a list
-%     of _bytes_ holding the tag. This tag must be provided for
-%     decryption.
+%     For authenticated encryption schemes, List is unified with a
+%     list of _bytes_ holding the tag. This tag must be provided for
+%     decryption. Authenticated encryption requires OpenSSL 1.1.0 or
+%     greater.
 %
 %     - tag_length(+Length)
 %     For authenticated encryption schemes, the desired length of the
