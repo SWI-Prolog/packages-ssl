@@ -35,7 +35,8 @@
 
 
 :-module(xmlenc,
-         [ decrypt_xml/4   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
+         [ decrypt_xml/4,   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
+           load_certificate_from_base64_string/2 % +Base64String, -Certificate
          ]).
 :- use_module(library(ssl)).
 :- use_module(library(crypto)).
@@ -262,11 +263,7 @@ resolve_key(KeyInfo, Key, KeyCallback, _Options):-
     memberchk(element(DS:'X509Data', _, X509Data), KeyInfo),
     memberchk(element(DS:'X509Certificate', _, [X509Certificate]), X509Data),
     !,
-    string_concat("-----BEGIN CERTIFICATE-----\n", X509Certificate, X509CertificateWithHeader),
-    string_concat(X509CertificateWithHeader, "\n-----END CERTIFICATE-----", X509CertificateWithHeaderAndFooter),
-    setup_call_cleanup(open_string(X509CertificateWithHeaderAndFooter, X509Stream),
-                       load_certificate(X509Stream, Certificate),
-                       close(X509Stream)),
+    load_certificate_from_base64_string(X509Certificate, Certificate),
     call(KeyCallback, certificate, Certificate, Key).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
     % PGPData. FIXME: Not implemented
@@ -325,3 +322,29 @@ delete_newlines([], []):- !.
 delete_newlines([13|As], B):- !, delete_newlines(As, B).
 delete_newlines([10|As], B):- !, delete_newlines(As, B).
 delete_newlines([A|As], [A|B]):- !, delete_newlines(As, B).
+
+
+
+%!	load_certificate_from_base64_string(+String, -Certificate) is det.
+%
+%	Loads a certificate from a string, adding newlines and header
+%       where appropriate so that OpenSSL 1.0.1+ will be able to parse it
+
+load_certificate_from_base64_string(UnnormalizedData, Certificate):-
+    normalize_space(codes(Codes), UnnormalizedData),
+    % Break into 64-byte chunks
+    chunk_certificate(Codes, Chunks),
+    atomics_to_string(["-----BEGIN CERTIFICATE-----"|Chunks], '\n', CompleteCertificate),
+    setup_call_cleanup(open_string(CompleteCertificate, StringStream),
+                       load_certificate(StringStream, Certificate),
+                       close(StringStream)).
+
+chunk_certificate(Codes, [Chunk|Chunks]):-
+    length(ChunkCodes, 64),
+    append(ChunkCodes, Rest, Codes),
+    !,
+    string_codes(Chunk, ChunkCodes),
+    chunk_certificate(Rest, Chunks).
+chunk_certificate([], ["-----END CERTIFICATE-----\n"]):- !.
+chunk_certificate(LastCodes, [LastChunk, "-----END CERTIFICATE-----\n"]):-
+    string_codes(LastChunk, LastCodes).

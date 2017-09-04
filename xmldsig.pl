@@ -315,12 +315,8 @@ signature_info(DOM, Signature, SignedData, Algorithm, SignatureValue,
     ssl_algorithm(XMLAlgorithm, Algorithm),
     memberchk(element(ns(_, NSRef):'KeyInfo', _, KeyInfo), Signature),
     ( memberchk(element(ns(_, NSRef):'X509Data', _, X509Data), KeyInfo),
-          memberchk(element(ns(_, NSRef):'X509Certificate', _, [X509Certificate]), X509Data)->
-        normalize_space(string(TrimmedCertificate), X509Certificate),
-        format(string(CompleteCertificate), '-----BEGIN CERTIFICATE-----\n~s\n-----END CERTIFICATE-----', [TrimmedCertificate]),
-        setup_call_cleanup(open_string(CompleteCertificate, X509Stream),
-                           load_certificate(X509Stream, Certificate),
-                           close(X509Stream)),
+      memberchk(element(ns(_, NSRef):'X509Certificate', _, [X509Certificate]), X509Data)->
+        load_certificate_from_base64_string(X509Certificate, Certificate),
         memberchk(key(PublicKey), Certificate)
     ; throw(not_implemented)
     ).

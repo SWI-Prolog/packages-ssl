@@ -195,11 +195,7 @@ idp_certificate(IDPSSODescriptor, CertificateUse, Certificate):-
     memberchk(element('http://www.w3.org/2000/09/xmldsig#':'KeyInfo', _, KeyInfo), KeyDescriptor),
     memberchk(element('http://www.w3.org/2000/09/xmldsig#':'X509Data', _, X509Data), KeyInfo),
     memberchk(element('http://www.w3.org/2000/09/xmldsig#':'X509Certificate', _, [X509CertificateData]), X509Data),
-    normalize_space(string(TrimmedCertificate), X509CertificateData),
-    format(string(CompleteCertificate), '-----BEGIN CERTIFICATE-----\n~s\n-----END CERTIFICATE-----', [TrimmedCertificate]),
-    setup_call_cleanup(open_string(CompleteCertificate, StringStream),
-                       load_certificate(StringStream, Certificate),
-                       close(StringStream)).
+    load_certificate_from_base64_string(X509CertificateData, Certificate).
 
 
 process_saml_binding(SingleSignOnServiceAttributes, _, 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect', Location):-
