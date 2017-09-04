@@ -212,7 +212,7 @@ process_saml_binding(SingleSignOnServiceAttributes, _, 'urn:oasis:names:tc:SAML:
 
 form_authn_request(Request, ID, Destination, Date, ServiceProvider, ExtraElements, XML):-
     saml_acs_path(ServiceProvider, Path),
-    select(path(_), Request, Request1),
+    subtract(Request, [path(_), search(_)], Request1),
     parse_url(ACSURL, [path(Path)|Request1]),
     SAMLP = 'urn:oasis:names:tc:SAML:2.0:protocol',
     SAML = 'urn:oasis:names:tc:SAML:2.0:assertion',
@@ -313,6 +313,7 @@ saml_acs_handler(ServiceProvider, Options, Request):-
     ;  true
     ),
     process_saml_response(XML, ServiceProvider, Callback, OriginalURI, Options),
+    debug(saml, 'Redirecting successfully authenticated user to ~w~n', [OriginalURI]),
     http_redirect(moved_temporary, OriginalURI, Request).
 
 
