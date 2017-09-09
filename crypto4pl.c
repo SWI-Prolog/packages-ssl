@@ -300,7 +300,7 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
         char *key;
 
         if ( !PL_get_nchars(a, &key_len, &key,
-                      CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
           return FALSE;
         result->hmac_key = ssl_strdup(key);
       } else if ( aname == ATOM_close_parent )

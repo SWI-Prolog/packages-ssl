@@ -146,15 +146,16 @@ less general alternatives to `library(crypto)`.
 %    * hmac(+Key)
 %    If this option is specified, a _hash-based message authentication
 %    code_ (HMAC) is computed, using the specified Key which is either
-%    an atom or string. Any of the available digest algorithms can be
-%    used with this option. The cryptographic strength of the HMAC
-%    depends on that of the chosen algorithm and also on the key. This
-%    option requires OpenSSL 1.1.0 or greater.
+%    an atom, string or list of _bytes_. Any of the available digest
+%    algorithms can be used with this option. The cryptographic
+%    strength of the HMAC depends on that of the chosen algorithm and
+%    also on the key. This option requires OpenSSL 1.1.0 or greater.
 %
 %  @param Data is either an atom, string or code-list
-%  @param Hash is an atom that represents the hash.
+%  @param Hash is an atom that represents the hash in hexadecimal encoding.
 %
-%  @see hex_bytes/2 for conversion between hashes and lists.
+%  @see hex_bytes/2 for conversion between hexadecimal encoding and
+%  lists of bytes.
 %  @see crypto_password_hash/2 for the important use case of passwords.
 
 crypto_data_hash(Data, Hash, Options) :-
