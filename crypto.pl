@@ -381,9 +381,10 @@ bytes_base64(Bytes, Base64) :-
 %      - algorithm(+Algorithm)
 %        A hashing algorithm as specified to crypto_data_hash/3. The
 %        default is =|sha256|=.
-%      - info(+Atom)
-%        Optional context and application specific information. The
-%        default is the zero length atom ''.
+%      - info(+Info)
+%        Optional context and application specific information,
+%        specified as an atom, string or list of _bytes_. The default
+%        is the zero length atom ''.
 %      - salt(+List)
 %        Optionally, a list of _bytes_ that are used as salt. The
 %        default is all zeroes.
