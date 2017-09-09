@@ -598,21 +598,21 @@ rsa_verify(Key, Data0, Signature0, Options) :-
 %!                      -PlainText,
 %!                      +Options).
 %
-%   Decrypt  the   given  CipherText,  using  the   symmetric  algorithm
-%   Algorithm, key Key, and initialization vector IV, to give PlainText.
-%   CipherText must  be a string, atom  or list of codes  or characters,
-%   and PlainText  is created  as a  string.  Key  and IV  are typically
-%   lists  of _bytes_,  though  atoms and  strings  are also  permitted.
-%   Algorithm  must be  an algorithm  which your  copy of  OpenSSL knows
-%   See crypto_data_encrypt/6 for an example.
+%   Decrypt  the  given  CipherText,  using  the  symmetric  algorithm
+%   Algorithm,  key  Key,  and   initialization  vector  IV,  to  give
+%   PlainText.  CipherText must be a string,  atom or list of codes or
+%   characters, and PlainText is created as  a string.  Key and IV are
+%   typically  lists of  _bytes_, though  atoms and  strings are  also
+%   permitted.   Algorithm must  be an  algorithm which  your copy  of
+%   OpenSSL knows. See crypto_data_encrypt/6 for an example.
 %
 %     - encoding(+Encoding)
-%     Encoding to use for Data.  Default is `utf8`.  Alternatives
-%     are `utf8` and `octet`.
+%     Encoding to use for CipherText.  Default is `utf8`.
+%     Alternatives are `utf8` and `octet`.
 %
 %     - padding(+PaddingScheme)
-%     Padding scheme to use.  Default is `block`.  You can disable padding
-%     by supplying `none` here.
+%     For block ciphers, the padding scheme to use.  Default is
+%     `block`.  You can disable padding by supplying `none` here.
 %
 %     - tag(+Tag)
 %     For authenticated encryption schemes, the tag must be specified as
@@ -647,39 +647,40 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %!                      +Algorithm,
 %!                      +Key,
 %!                      +IV,
-%!                      -CipherTExt,
+%!                      -CipherText,
 %!                      +Options).
 %
 %   Encrypt  the   given  PlainText,   using  the   symmetric  algorithm
-%   Algorithm,  key   Key,  and   initialization  vector  IV,   to  give
+%   Algorithm, key Key, and initialization vector (or nonce) IV, to give
 %   CipherText.
 %
-%   PlainText must  be a string, atom  or list of codes  or characters,
-%   and CipherText  is created  as a  string.  Key  and IV  are typically
-%   lists  of _bytes_,  though  atoms and  strings  are also  permitted.
-%   Algorithm  must be  an algorithm  which your  copy of  OpenSSL knows
+%   PlainText must be a string, atom or list of codes or characters, and
+%   CipherText is created  as a string.  Key and IV  are typically lists
+%   of _bytes_, though atoms and  strings are also permitted.  Algorithm
+%   must   be  an   algorithm   which  your   copy   of  OpenSSL   knows
 %   about. Examples are:
 %
-%       * aes-128-cbc
-%       * aes-128-gcm
-%       * chacha20-poly1305
+%       * =|aes-128-cbc|=
+%       * =|aes-128-gcm|=
+%       * =|chacha20-poly1305|=
 %
 %   If  the  initalization vector  is  not  needed for  your  decryption
-%   algorithm (such as  aes-128-ecb) then any string can  be provided as
-%   it will be ignored by  the underlying implementation. Note that such
-%   algorithms do not provide semantic security and are thus insecure.
+%   algorithm (such as  =|aes-128-ecb|=) then any value  can be provided
+%   as it  will be ignored  by the underlying implementation.  Note that
+%   such  algorithms do  not provide  _semantic security_  and are  thus
+%   insecure.
 %
 %   Options:
 %
 %     - encoding(+Encoding)
-%     Encoding to use for Data.  Default is `utf8`.  Alternatives
+%     Encoding to use for PlainText.  Default is `utf8`.  Alternatives
 %     are `utf8` and `octet`.
 %
 %     - padding(+PaddingScheme)
-%     Padding scheme to use.  Default is `block`.  You can disable
-%     padding by supplying `none` here. If padding is disabled for block
-%     ciphers, then the length of the ciphertext must be a multiple of
-%     the block size.
+%     For block ciphers, the padding scheme to use.  Default is
+%     `block`.  You can disable padding by supplying `none` here. If
+%     padding is disabled for block ciphers, then the length of the
+%     ciphertext must be a multiple of the block size.
 %
 %     - tag(-List)
 %     For authenticated encryption schemes, List is unified with a
@@ -692,10 +693,10 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %     tag, specified as the number of bytes.  The default is
 %     16. Smaller numbers are not recommended.
 %
-%   For example, with OpenSSL 1.1.0 and greater, we can use the
-%   ChaCha20 stream cipher with the Poly1305 authenticator. This
-%   cipher uses a 256-bit key and a 96-bit initialization vector,
-%   i.e., 32 and 12 _bytes_, respectively:
+%   For example, with OpenSSL 1.1.0 and greater, we can use the ChaCha20
+%   stream cipher  with the Poly1305  authenticator. This cipher  uses a
+%   256-bit  key and  a 96-bit  initialization vector,  i.e., 32  and 12
+%   _bytes_, respectively:
 %
 %     ```
 %     ?- Algorithm = 'chacha20-poly1305',
@@ -713,15 +714,15 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %     RecoveredText = "this is some input".
 %     ```
 %
-%   Note the use of crypto_n_random_bytes/2 to generate a key and
-%   initialization vector from cryptographically secure random
-%   numbers.  It is safe to store and transfer the used initialization
-%   vector (in plain text) together with the encrypted data, but the
-%   key _must be kept secret_.  You can use crypto_password_hash/3 in
-%   combination with crypto_data_hkdf/4 to create keys from
-%   user-supplied passwords. Note that for authenticated encryption
-%   schemes, the _tag_ that was computed during encryption is
-%   necessary for decryption.
+%   Note  the  use of  crypto_n_random_bytes/2  to  generate a  key  and
+%   initialization vector from  cryptographically secure random numbers.
+%   It is safe  to store and transfer the used  initialization vector in
+%   plain  text,  but the  key  _must  be  kept  secret_.  You  can  use
+%   crypto_password_hash/3  in  combination with  crypto_data_hkdf/4  to
+%   create   keys   from   user-supplied  passwords.   Note   that   for
+%   authenticated encryption schemes, the _tag_ that was computed during
+%   encryption  is necessary  for decryption.  It is  safe to  store and
+%   transfer the tag in plain text.
 %
 %   @see crypto_data_decrypt/6.
 
