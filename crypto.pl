@@ -536,7 +536,7 @@ bytes_hex([B|Bs]) -->
 %
 %     - type(+Type)
 %     SHA algorithm used to compute the digest.  Values are
-%     `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`.
+%     `sha1`, `sha224`, `sha256` (default), `sha384` or `sha512`.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for Data.  Default is `hex`.  Alternatives
@@ -564,7 +564,7 @@ bytes_hex([B|Bs]) -->
 %   directly used in rsa_sign/4 as well as ecdsa_sign/4.
 
 rsa_sign(Key, Data0, Signature, Options) :-
-    option(type(Type), Options, sha1),
+    option(type(Type), Options, sha256),
     option(encoding(Enc0), Options, hex),
     hex_encoding(Enc0, Data0, Enc, Data),
     rsa_sign(Key, Type, Enc, Data, Signature).
@@ -578,14 +578,14 @@ rsa_sign(Key, Data0, Signature, Options) :-
 %
 %     - type(+Type)
 %     SHA algorithm used to compute the digest.  Values are
-%     `sha1` (default), `sha224`, `sha256`, `sha384` or `sha512`.
+%     `sha1`, `sha224`, `sha256` (default), `sha384` or `sha512`.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for Data.  Default is `hex`.  Alternatives
 %     are `octet`, `utf8` and `text`.
 
 rsa_verify(Key, Data0, Signature0, Options) :-
-    option(type(Type), Options, sha1),
+    option(type(Type), Options, sha256),
     option(encoding(Enc0), Options, hex),
     hex_encoding(Enc0, Data0, Enc, Data),
     hex_bytes(Signature0, Signature),
