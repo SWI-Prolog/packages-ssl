@@ -637,13 +637,13 @@ rsa_verify(Key, Data0, Signature0, Options0) :-
 %!                      -PlainText,
 %!                      +Options).
 %
-%   Decrypt  the  given  CipherText,  using  the  symmetric  algorithm
-%   Algorithm,  key  Key,  and   initialization  vector  IV,  to  give
-%   PlainText.  CipherText must be a string,  atom or list of codes or
-%   characters, and PlainText is created as  a string.  Key and IV are
-%   typically  lists of  _bytes_, though  atoms and  strings are  also
-%   permitted.   Algorithm must  be an  algorithm which  your copy  of
-%   OpenSSL knows. See crypto_data_encrypt/6 for an example.
+%   Decrypt  the   given  CipherText,  using  the   symmetric  algorithm
+%   Algorithm, key Key, and initialization vector IV, to give PlainText.
+%   CipherText must  be a string, atom  or list of codes  or characters,
+%   and PlainText  is created  as a  string.  Key  and IV  are typically
+%   lists  of _bytes_,  though  atoms and  strings  are also  permitted.
+%   Algorithm must be an algorithm which your copy of OpenSSL knows. See
+%   crypto_data_encrypt/6 for an example.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for CipherText.  Default is `utf8`.
@@ -697,11 +697,32 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %   CipherText is created  as a string.  Key and IV  are typically lists
 %   of _bytes_, though atoms and  strings are also permitted.  Algorithm
 %   must   be  an   algorithm   which  your   copy   of  OpenSSL   knows
-%   about. Examples are:
+%   about.
 %
-%       * =|aes-128-cbc|=
-%       * =|aes-128-gcm|=
-%       * =|chacha20-poly1305|=
+%   Commonly used algorithms include:
+%
+%       $ =|'chacha20-poly1305'|= :
+%       A powerful and efficient _authenticated_ encryption scheme,
+%       providing secrecy and at the same time reliable protection
+%       against undetected _modifications_ of the encrypted data. This
+%       is a very good choice for virtually all use cases. It is a
+%       _stream cipher_ and can encrypt data of any length. Further, the
+%       encrypted data has exactly the same length as the original, and
+%       no padding is used. It requires OpenSSL 1.1.0 or greater. See
+%       below for an example.
+%
+%       $ =|'aes-128-gcm'|= :
+%       Also an authenticated encryption scheme. It uses a 128-bit
+%       (i.e., 16 bytes) key and a 96-bit (i.e., 12 bytes) IV. It
+%       requires OpenSSL 1.1.0 or greater.
+%
+%       $ =|'aes-128-cbc'|= :
+%       A _block cipher_ that provides secrecy, but does not protect
+%       against unintended modifications of the cipher text. This
+%       algorithm uses 128-bit (16 bytes) keys and initialization
+%       vectors.  It works with all supported versions of OpenSSL. If
+%       possible, consider using an authenticated encryption scheme
+%       instead.
 %
 %   If  the  initalization vector  is  not  needed for  your  decryption
 %   algorithm (such as  =|aes-128-ecb|=) then any value  can be provided
