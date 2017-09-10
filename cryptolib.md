@@ -47,6 +47,14 @@ algorithms are  secure. In other words,  if they are _not_  secure, then
 this is a mistake in this library,  and we ask you to please report such
 a situation as an urgent security issue.
 
+## Representing binary data {#crypto-binary-data}
+
+In the context  of this library, _bytes_ can be  represented as lists of
+integers between  0 and  255. Such  lists can be  converted to  and from
+_hexadecimal notation_ with the following bidirectional relation:
+
+  * [[hex_bytes/2]]
+
 ## Cryptographically secure random numbers {#crypto-random}
 
 Almost  all  cryptographic  applications  require  the  availability  of
@@ -117,14 +125,6 @@ The following hashing predicates work over _streams_:
 
   * [[crypto_open_hash_stream/3]]
   * [[crypto_stream_hash/2]]
-
-## Representing binary data {#crypto-binary-data}
-
-In the context of this library, _bytes_ can be represented as lists of
-integers between 0 and 255. Such lists can be converted to and from
-_hexadecimal notation_ with the following bidirectional relation:
-
-  * [[hex_bytes/2]]
 
 ## Digital signatures {#crypto-signatures}
 

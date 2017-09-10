@@ -502,6 +502,9 @@ ecdsa_verify(public_key(ec(Private,Public0,Curve)), Data0, Signature0, Options) 
 %   ?- hex_bytes('501ACE', Bs).
 %   Bs = [80, 26, 206].
 %   ==
+%
+%  @see base64_encoded/3 for Base64 encoding, which is often used to
+%  transfer or embed binary data in applications.
 
 hex_bytes(Hs, Bytes) :-
     (   ground(Hs) ->
