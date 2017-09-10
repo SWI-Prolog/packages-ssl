@@ -4,6 +4,49 @@ This library provides bindings  to  functionality   of  OpenSSL  that is
 related to cryptography and authentication,   not  necessarily involving
 connections, sockets or streams.
 
+## Design principle: Secure default algorithms {#crypto-secure-defaults}
+
+A basic design principle of this library is that its _default algorithms
+are  cryptographically secure_  at the  time of  this writing.   We will
+_change_ the default algorithms if an  attack on them becomes known, and
+replace them by new defaults that are deemed appropriate at that time.
+
+This may mean, for example, that where `sha256` is currently the default
+algorithm, `blake2s256` or  some other algorithm may  become the default
+in the future.
+
+To  preserve interoperability  and compatibility  and at  the same  time
+allow us to transparently update default algorithms of this library, the
+following conventions are used:
+
+    1. If an explicit algorithm is specified as an option, then that
+       algorithm is used.
+    2. If _no_ algorithm is specified, then a cryptographically secure
+       algorithm is used.
+    3. If an option that normally specifies an algorithm is present,
+       and a _logical variable_ appears instead of a concrete algorithm,
+       then that variable is unified with the secure default value.
+
+This  allows application  programmers to  inspect _which_  algorithm was
+actually used, and store it for later reference.
+
+For example:
+
+==
+?- crypto_data_hash(test, Hash, [algorithm(A)]).
+Hash = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+A = sha256.
+==
+
+This  shows that  at  the  time of  this  writing,  `sha256` was  deemed
+sufficiently secure, and was used as default algorithm for hashing.
+
+You therefore must not rely on  _which_ concrete algorithm is being used
+by  default.  However,  you  can  rely on  the  fact  that  the  default
+algorithms are  secure. In other words,  if they are _not_  secure, then
+this is a mistake in this library,  and we ask you to please report such
+a situation as an urgent security issue.
+
 ## Cryptographically secure random numbers {#crypto-random}
 
 Almost  all  cryptographic  applications  require  the  availability  of

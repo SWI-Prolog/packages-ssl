@@ -128,15 +128,40 @@ less general alternatives to `library(crypto)`.
 %   exchanged in your applications. This also works if you have
 %   compiled SWI-Prolog without support for large integers.
 
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   SHA256 is the current default for several hash-related predicates.
+   It is deemed sufficiently secure for the foreseeable future.  Yet,
+   application programmers must be aware that the default may change in
+   future versions. The hash predicates all yield the algorithm they
+   used if a Prolog variable is used for the pertaining option.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+default_hash(sha256).
+
+functor_hash_options(F, Hash, Options0, [Option|Options]) :-
+        Option =.. [F,Hash],
+        (   select(Option, Options0, Options) ->
+            (   var(Hash) ->
+                default_hash(Hash)
+            ;   must_be(atom, Hash)
+            )
+        ;   Options = Options0,
+            default_hash(Hash)
+        ).
+
+
 %%  crypto_data_hash(+Data, -Hash, +Options) is det
 %
 %   Hash is the hash of Data. The conversion is controlled
 %   by Options:
 %
 %    * algorithm(+Algorithm)
-%    One of =md5=, =sha1=, =sha224=, =sha256= (default), =sha384=,
+%    One of =md5=, =sha1=, =sha224=, =sha256=, =sha384=,
 %    =sha512=, =ripemd160=, =blake2s256= or =blake2b512=. The =BLAKE=
-%    digest algorithms require OpenSSL 1.1.0 or greater.
+%    digest algorithms require OpenSSL 1.1.0 or greater. The default
+%    is a cryptographically secure algorithm. If you specify a variable,
+%    then that variable is unified with the algorithm that was used.
 %    * encoding(+Encoding)
 %    If Data is a sequence of character _codes_, this must be
 %    translated into a sequence of _bytes_, because that is what
@@ -195,6 +220,11 @@ update_hash(In, Context0, Context) :-
 %
 %   @param Context is an opaque pure  Prolog term that is subject to
 %          garbage collection.
+
+crypto_context_new(Context, Options0) :-
+    functor_hash_options(algorithm, _, Options0, Options),
+    '_crypto_context_new'(Context, Options).
+
 
 %!  crypto_data_context(+Data, +Context0, -Context) is det
 %
@@ -381,7 +411,9 @@ bytes_base64(Bytes, Base64) :-
 %
 %      - algorithm(+Algorithm)
 %        A hashing algorithm as specified to crypto_data_hash/3. The
-%        default is =|sha256|=.
+%        default is a cryptographically secure algorithm. If you
+%        specify a variable, then it is unified with the algorithm
+%        that was used.
 %      - info(+Info)
 %        Optional context and application specific information,
 %        specified as an atom, string or list of _bytes_. The default
@@ -402,8 +434,8 @@ bytes_base64(Bytes, Base64) :-
 %   @see crypto_n_random_bytes/2 to obtain a suitable salt.
 
 
-crypto_data_hkdf(Data, L, Bytes, Options) :-
-        option(algorithm(Algorithm), Options, sha256),
+crypto_data_hkdf(Data, L, Bytes, Options0) :-
+        functor_hash_options(algorithm, Algorithm, Options0, Options),
         option(salt(SaltBytes), Options, []),
         option(info(Info), Options, ''),
         option(encoding(Enc), Options, utf8),
@@ -536,7 +568,10 @@ bytes_hex([B|Bs]) -->
 %
 %     - type(+Type)
 %     SHA algorithm used to compute the digest.  Values are
-%     `sha1`, `sha224`, `sha256` (default), `sha384` or `sha512`.
+%     `sha1`, `sha224`, `sha256`, `sha384` or `sha512`. The
+%     default is a cryptographically secure algorithm. If you
+%     specify a variable, then it is unified with the algorithm that
+%     was used.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for Data.  Default is `hex`.  Alternatives
@@ -563,8 +598,8 @@ bytes_hex([B|Bs]) -->
 %   Note that a hash that is computed by crypto_data_hash/3 can be
 %   directly used in rsa_sign/4 as well as ecdsa_sign/4.
 
-rsa_sign(Key, Data0, Signature, Options) :-
-    option(type(Type), Options, sha256),
+rsa_sign(Key, Data0, Signature, Options0) :-
+    functor_hash_options(type, Type, Options0, Options),
     option(encoding(Enc0), Options, hex),
     hex_encoding(Enc0, Data0, Enc, Data),
     rsa_sign(Key, Type, Enc, Data, Signature).
@@ -577,15 +612,19 @@ rsa_sign(Key, Data0, Signature, Options) :-
 %   Options:
 %
 %     - type(+Type)
-%     SHA algorithm used to compute the digest.  Values are
-%     `sha1`, `sha224`, `sha256` (default), `sha384` or `sha512`.
+%     SHA algorithm used to compute the digest.  Values are `sha1`,
+%     `sha224`, `sha256`, `sha384` or `sha512`. The default is the
+%     same as for rsa_sign/4.  This option must match the algorithm
+%     that was used for signing. When operating with different parties,
+%     the used algorithm must be communicated over an authenticated
+%     channel.
 %
 %     - encoding(+Encoding)
 %     Encoding to use for Data.  Default is `hex`.  Alternatives
 %     are `octet`, `utf8` and `text`.
 
-rsa_verify(Key, Data0, Signature0, Options) :-
-    option(type(Type), Options, sha256),
+rsa_verify(Key, Data0, Signature0, Options0) :-
+    functor_hash_options(type, Type, Options0, Options),
     option(encoding(Enc0), Options, hex),
     hex_encoding(Enc0, Data0, Enc, Data),
     hex_bytes(Signature0, Signature),

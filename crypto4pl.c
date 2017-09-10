@@ -1920,7 +1920,7 @@ install_crypto4pl(void)
 
   PL_register_foreign("crypto_n_random_bytes", 2, pl_crypto_n_random_bytes, 0);
 
-  PL_register_foreign("crypto_context_new", 2, pl_crypto_context_new, 0);
+  PL_register_foreign("_crypto_context_new", 2, pl_crypto_context_new, 0);
   PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
   PL_register_foreign("_crypto_context_copy", 2, pl_crypto_context_copy, 0);
   PL_register_foreign("_crypto_context_hash", 2, pl_crypto_context_hash, 0);
