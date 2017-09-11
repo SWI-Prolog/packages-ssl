@@ -702,6 +702,24 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %   must   be  an   algorithm   which  your   copy   of  OpenSSL   knows
 %   about.
 %
+%   Different   algorithms   impose   different   constraints   on   the
+%   initialization vector (IV). Some algorithms only require that the IV
+%   be randomly  chosen. For  other algorithms, reusing  an IV  with the
+%   same  Key has  disastrous  results and  can cause  the  loss of  all
+%   properties  that are  otherwise guaranteed.   If an  IV must  not be
+%   reused with the same key, it is called a _nonce_ (number used once).
+%   If   an   IV  is   not   needed   for   your  algorithm   (such   as
+%   =|'aes-128-ecb'|=)  then any  value can  be provided  as it  will be
+%   ignored by the underlying implementation.  Note that such algorithms
+%   do not provide _semantic security_ and are thus insecure. You should
+%   use stronger algorithms instead.
+%
+%   It is safe to store and  transfer the used initialization vector (or
+%   nonce) in  plain text, but the  key _must be kept  secret_.  You can
+%   use crypto_password_hash/3 (with a  specified _salt_) in combination
+%   with crypto_data_hkdf/4  to create  keys and IVs  from user-supplied
+%   passwords.
+%
 %   Commonly used algorithms include:
 %
 %       $ =|'chacha20-poly1305'|= :
@@ -709,14 +727,14 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %       providing secrecy and at the same time reliable protection
 %       against undetected _modifications_ of the encrypted data. This
 %       is a very good choice for virtually all use cases. It is a
-%       _stream cipher_ and can encrypt data of any length. Further, the
-%       encrypted data has exactly the same length as the original, and
-%       no padding is used. It requires OpenSSL 1.1.0 or greater. See
-%       below for an example.
+%       _stream cipher_ and can encrypt data of any length up to 256 GB.
+%       Further, the encrypted data has exactly the same length
+%       as the original, and no padding is used. It requires OpenSSL
+%       1.1.0 or greater. See below for an example.
 %
 %       $ =|'aes-128-gcm'|= :
 %       Also an authenticated encryption scheme. It uses a 128-bit
-%       (i.e., 16 bytes) key and a 96-bit (i.e., 12 bytes) IV. It
+%       (i.e., 16 bytes) key and a 96-bit (i.e., 12 bytes) nonce. It
 %       requires OpenSSL 1.1.0 or greater.
 %
 %       $ =|'aes-128-cbc'|= :
@@ -726,12 +744,6 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %       vectors.  It works with all supported versions of OpenSSL. If
 %       possible, consider using an authenticated encryption scheme
 %       instead.
-%
-%   If  the  initalization vector  is  not  needed for  your  decryption
-%   algorithm (such as  =|aes-128-ecb|=) then any value  can be provided
-%   as it  will be ignored  by the underlying implementation.  Note that
-%   such  algorithms do  not provide  _semantic security_  and are  thus
-%   insecure.
 %
 %   Options:
 %
@@ -758,8 +770,8 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %
 %   For example, with OpenSSL 1.1.0 and greater, we can use the ChaCha20
 %   stream cipher  with the Poly1305  authenticator. This cipher  uses a
-%   256-bit  key and  a 96-bit  initialization vector,  i.e., 32  and 12
-%   _bytes_, respectively:
+%   256-bit  key  and  a  96-bit  _nonce_,  i.e.,  32  and  12  _bytes_,
+%   respectively:
 %
 %     ```
 %     ?- Algorithm = 'chacha20-poly1305',
@@ -777,17 +789,16 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %     RecoveredText = "this is some input".
 %     ```
 %
-%   Note  the  use of  crypto_n_random_bytes/2  to  generate a  key  and
-%   initialization vector from  cryptographically secure random numbers.
-%   It is safe  to store and transfer the used  initialization vector in
-%   plain  text,  but the  key  _must  be  kept  secret_.  You  can  use
-%   crypto_password_hash/3  in  combination with  crypto_data_hkdf/4  to
-%   create   keys   from   user-supplied  passwords.   Note   that   for
-%   authenticated encryption schemes, the _tag_ that was computed during
-%   encryption  is necessary  for decryption.  It is  safe to  store and
-%   transfer the tag in plain text.
+%   Note the use of crypto_n_random_bytes/2  to generate a key and nonce
+%   from   cryptographically  secure   random  numbers.    For  repeated
+%   applications,  you must  ensure that  a  nonce is  only used  _once_
+%   together  with the  same  key. Note  also  that for  _authenticated_
+%   encryption schemes, the _tag_ that was computed during encryption is
+%   necessary for decryption.  It is safe  to store and transfer the tag
+%   in plain text.
 %
 %   @see crypto_data_decrypt/6.
+%   @see hex_bytes/2 for conversion between bytes and hex encoding.
 
 crypto_data_encrypt(PlainText, Algorithm, Key, IV, CipherText, Options) :-
         (   option(tag(AuthTag), Options) ->
