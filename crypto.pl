@@ -702,23 +702,27 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %   must   be  an   algorithm   which  your   copy   of  OpenSSL   knows
 %   about.
 %
-%   Different   algorithms   impose   different   constraints   on   the
-%   initialization vector (IV). Some algorithms only require that the IV
-%   be randomly  chosen. For  other algorithms, reusing  an IV  with the
-%   same  Key has  disastrous  results and  can cause  the  loss of  all
-%   properties  that are  otherwise guaranteed.   If an  IV must  not be
-%   reused with the same key, it is called a _nonce_ (number used once).
-%   If   an   IV  is   not   needed   for   your  algorithm   (such   as
-%   =|'aes-128-ecb'|=)  then any  value can  be provided  as it  will be
-%   ignored by the underlying implementation.  Note that such algorithms
-%   do not provide _semantic security_ and are thus insecure. You should
-%   use stronger algorithms instead.
+%   Keys  and   IVs  can  be   chosen  at  random  (using   for  example
+%   crypto_n_random_bytes/2) or derived from input keying material (IKM)
+%   using for example crypto_data_hkdf/4.  This  input is often a shared
+%   secret, such as a negotiated point on an elliptic curve, or the hash
+%   that was computed from a  password via crypto_password_hash/3 with a
+%   freshly generated and specified _salt_.
+%
+%   Reusing the same combination of Key  and IV typically leaks at least
+%   _some_  information about  the  plaintext.   For example,  identical
+%   plaintexts will  then correspond to identical  ciphertexts. For some
+%   algorithms, reusing an  IV with the same Key  has disastrous results
+%   and  can  cause  the  loss  of all  properties  that  are  otherwise
+%   guaranteed.   Especially in  such  cases,  an IV  is  also called  a
+%   _nonce_  (number used  once).   If  an IV  is  not  needed for  your
+%   algorithm (such as =|'aes-128-ecb'|=) then any value can be provided
+%   as it will  be ignored by the underlying  implementation.  Note that
+%   such  algorithms do  not provide  _semantic security_  and are  thus
+%   insecure. You should use stronger algorithms instead.
 %
 %   It is safe to store and  transfer the used initialization vector (or
-%   nonce) in  plain text, but the  key _must be kept  secret_.  You can
-%   use crypto_password_hash/3 (with a  specified _salt_) in combination
-%   with crypto_data_hkdf/4  to create  keys and IVs  from user-supplied
-%   passwords.
+%   nonce) in plain text, but the key _must be kept secret_.
 %
 %   Commonly used algorithms include:
 %
@@ -789,10 +793,10 @@ tag_length_ok(<, Tag) :- domain_error(tag_is_too_short, Tag).
 %     RecoveredText = "this is some input".
 %     ```
 %
-%   Note the use of crypto_n_random_bytes/2  to generate a key and nonce
-%   from   cryptographically  secure   random  numbers.    For  repeated
-%   applications,  you must  ensure that  a  nonce is  only used  _once_
-%   together  with the  same  key. Note  also  that for  _authenticated_
+%   In this  example, we use  crypto_n_random_bytes/2 to generate  a key
+%   and  nonce  from  cryptographically   secure  random  numbers.   For
+%   repeated applications,  you must  ensure that a  nonce is  only used
+%   _once_ together  with the same  key.  Note that  for _authenticated_
 %   encryption schemes, the _tag_ that was computed during encryption is
 %   necessary for decryption.  It is safe  to store and transfer the tag
 %   in plain text.
