@@ -711,6 +711,7 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
   return FALSE;
 }
 
+#ifndef OPENSSL_NO_EC
 static int
 recover_ec(term_t t, EC_KEY **rec)
 {
@@ -748,6 +749,7 @@ recover_ec(term_t t, EC_KEY **rec)
   EC_KEY_free(ec);
   return FALSE;
 }
+#endif
 
 static int
 recover_rsa(term_t t, RSA** rsap)
@@ -908,7 +910,9 @@ parse_options(term_t options_t, crypt_mode_t mode, int* rep, int* padding)
 
 static foreign_t
 pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
-{ unsigned char *data;
+{
+#ifndef OPENSSL_NO_EC
+  unsigned char *data;
   size_t data_len;
   EC_KEY *key;
   ECDSA_SIG *sig;
@@ -929,11 +933,16 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
   OPENSSL_free(signature);
 
   return rc;
+#else
+  return FALSE;
+#endif
 }
 
 static foreign_t
 pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
-{ unsigned char *data;
+{
+#ifndef OPENSSL_NO_EC
+  unsigned char *data;
   size_t data_len;
   EC_KEY *key;
   ECDSA_SIG *sig;
@@ -961,6 +970,9 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
     return rc;
 
   return raise_ssl_error(ERR_get_error());
+#else
+  return FALSE;
+#endif
 }
 
 
@@ -1497,6 +1509,8 @@ pl_crypto_is_prime(term_t tprime, term_t tnchecks)
                 *        ELLIPTIC CURVES       *
                 *******************************/
 
+#ifndef OPENSSL_NO_EC
+
 #define CURVE_MAGIC (~ 0x51431485L)
 
 typedef struct curve
@@ -1597,10 +1611,13 @@ get_curve(term_t tcurve, PL_CRYPTO_CURVE **curve)
   return PL_type_error("crypto_curve", tcurve);
 }
 
+#endif
 
 static foreign_t
 pl_crypto_name_curve(term_t tname, term_t tcurve)
-{ PL_CRYPTO_CURVE *curve = NULL;
+{
+#ifndef OPENSSL_NO_EC
+  PL_CRYPTO_CURVE *curve = NULL;
   char *name;
 
   if ( !PL_get_chars(tname, &name, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
@@ -1623,11 +1640,16 @@ pl_crypto_name_curve(term_t tname, term_t tcurve)
 
     return raise_ssl_error(ERR_get_error());
   }
+#else
+  return FALSE;
+#endif
 }
 
 static foreign_t
 pl_crypto_curve_order(term_t tcurve, term_t torder)
-{ PL_CRYPTO_CURVE *curve = NULL;
+{
+#ifndef OPENSSL_NO_EC
+  PL_CRYPTO_CURVE *curve = NULL;
   BIGNUM *order = NULL;
   char *hex = NULL;
   int rc = FALSE, ssl_err = FALSE;
@@ -1651,12 +1673,17 @@ pl_crypto_curve_order(term_t tcurve, term_t torder)
   }
 
   return rc;
+#else
+  return FALSE;
+#endif
 }
 
 
 static foreign_t
 pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
-{ PL_CRYPTO_CURVE *curve = NULL;
+{
+#ifndef OPENSSL_NO_EC
+  PL_CRYPTO_CURVE *curve = NULL;
   BIGNUM *x = NULL, *y = NULL;
   char *xhex = NULL, *yhex = NULL;
   int rc = FALSE, ssl_err = FALSE;
@@ -1685,6 +1712,9 @@ pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
   }
 
   return rc;
+#else
+  return FALSE;
+#endif
 }
 
 
@@ -1692,7 +1722,9 @@ pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
 static foreign_t
 pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
                            term_t tx, term_t ty, term_t ta, term_t tb)
-{ BIGNUM *s = NULL, *x = NULL, *y = NULL, *a = NULL, *b = NULL;
+{
+#ifndef OPENSSL_NO_EC
+  BIGNUM *s = NULL, *x = NULL, *y = NULL, *a = NULL, *b = NULL;
   EC_POINT *r = NULL, *q = NULL;
   char *ahex = NULL, *bhex = NULL;
   PL_CRYPTO_CURVE *curve = NULL;
@@ -1729,6 +1761,9 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
     return raise_ssl_error(ERR_get_error());
 
   return rc;
+#else
+  return FALSE;
+#endif
 }
 
 
