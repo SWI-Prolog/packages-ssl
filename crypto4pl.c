@@ -683,7 +683,7 @@ pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
   EVP_PKEY_CTX_free(pctx);
   return raise_ssl_error(ERR_get_error());
 #else
-  return FALSE;
+  return ssl_missing("HKDF");
 #endif
 }
 
