@@ -199,6 +199,15 @@ ssl_deb(int level, char *fmt, ...)
 #endif
 }
 
+static inline int
+ssl_missing(const char *feature)
+{ term_t t = PL_new_term_ref();
+
+  return ( PL_put_atom_chars(t, feature) &&
+	   PL_existence_error("ssl_feature", t) );
+
+}
+
 
 /*
  * BIO routines for SSL over streams

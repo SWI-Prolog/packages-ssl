@@ -911,7 +911,7 @@ parse_options(term_t options_t, crypt_mode_t mode, int* rep, int* padding)
 static foreign_t
 pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
 {
-#ifndef OPENSSL_NO_EC
+#ifndef OPENSSL_NO_ECDSA
   unsigned char *data;
   size_t data_len;
   EC_KEY *key;
@@ -934,14 +934,14 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
 
   return rc;
 #else
-  return FALSE;
+  return ssl_missing("ECDSA");
 #endif
 }
 
 static foreign_t
 pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
 {
-#ifndef OPENSSL_NO_EC
+#ifndef OPENSSL_NO_ECDSA
   unsigned char *data;
   size_t data_len;
   EC_KEY *key;
@@ -971,7 +971,7 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
 
   return raise_ssl_error(ERR_get_error());
 #else
-  return FALSE;
+  return ssl_missing("ECDSA");
 #endif
 }
 
@@ -1641,7 +1641,7 @@ pl_crypto_name_curve(term_t tname, term_t tcurve)
     return raise_ssl_error(ERR_get_error());
   }
 #else
-  return FALSE;
+  return ssl_missing("EC");
 #endif
 }
 
@@ -1674,7 +1674,7 @@ pl_crypto_curve_order(term_t tcurve, term_t torder)
 
   return rc;
 #else
-  return FALSE;
+  return ssl_missing("EC");
 #endif
 }
 
@@ -1713,7 +1713,7 @@ pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
 
   return rc;
 #else
-  return FALSE;
+  return ssl_missing("EC");
 #endif
 }
 
@@ -1762,7 +1762,7 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
 
   return rc;
 #else
-  return FALSE;
+  return ssl_missing("EC");
 #endif
 }
 
