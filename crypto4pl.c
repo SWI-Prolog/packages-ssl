@@ -113,9 +113,9 @@ pl_crypto_n_random_bytes(term_t tn, term_t tout)
                  ****************************/
 
 
-#define CONTEXT_MAGIC (~ 0x53481284L)
+#define HASH_CONTEXT_MAGIC (~ 0x53481284L)
 
-typedef struct context
+typedef struct hash_context
 { int             magic;
   atom_t          atom;
   IOENC           encoding;
@@ -129,10 +129,10 @@ typedef struct context
   EVP_MD_CTX     *ctx;
   HMAC_CTX       *hmac_ctx;
   char           *hmac_key;
-} PL_CRYPTO_CONTEXT;
+} PL_CRYPTO_HASH_CONTEXT;
 
 static void
-free_crypto_context(PL_CRYPTO_CONTEXT *c)
+free_crypto_hash_context(PL_CRYPTO_HASH_CONTEXT *c)
 { EVP_MD_CTX_free(c->ctx);
   free(c->hmac_key);
 #ifdef HAVE_HMAC_CTX_FREE
@@ -142,21 +142,21 @@ free_crypto_context(PL_CRYPTO_CONTEXT *c)
 }
 
 static int
-release_context(atom_t atom)
-{ PL_CRYPTO_CONTEXT **cp = PL_blob_data(atom, NULL, NULL);
-  PL_CRYPTO_CONTEXT  *c = *cp;
+release_hash_context(atom_t atom)
+{ PL_CRYPTO_HASH_CONTEXT **cp = PL_blob_data(atom, NULL, NULL);
+  PL_CRYPTO_HASH_CONTEXT  *c = *cp;
 
-  ssl_deb(4, "Releasing PL_CRYPTO_CONTEXT %p\n", c);
-  free_crypto_context(c);
+  ssl_deb(4, "Releasing PL_CRYPTO_HASH_CONTEXT %p\n", c);
+  free_crypto_hash_context(c);
   return TRUE;
 }
 
 static int
-compare_context(atom_t a, atom_t b)
-{ PL_CRYPTO_CONTEXT **cp1 = PL_blob_data(a, NULL, NULL);
-  PL_CRYPTO_CONTEXT **cp2 = PL_blob_data(b, NULL, NULL);
-  PL_CRYPTO_CONTEXT  *c1 = *cp1;
-  PL_CRYPTO_CONTEXT  *c2 = *cp2;
+compare_hash_context(atom_t a, atom_t b)
+{ PL_CRYPTO_HASH_CONTEXT **cp1 = PL_blob_data(a, NULL, NULL);
+  PL_CRYPTO_HASH_CONTEXT **cp2 = PL_blob_data(b, NULL, NULL);
+  PL_CRYPTO_HASH_CONTEXT  *c1 = *cp1;
+  PL_CRYPTO_HASH_CONTEXT  *c2 = *cp2;
 
   return ( c1 > c2 ?  1 :
            c1 < c2 ? -1 : 0
@@ -164,40 +164,40 @@ compare_context(atom_t a, atom_t b)
 }
 
 static int
-write_context(IOSTREAM *s, atom_t symbol, int flags)
-{ PL_CRYPTO_CONTEXT **cp = PL_blob_data(symbol, NULL, NULL);
-  PL_CRYPTO_CONTEXT  *c  = *cp;
+write_hash_context(IOSTREAM *s, atom_t symbol, int flags)
+{ PL_CRYPTO_HASH_CONTEXT **cp = PL_blob_data(symbol, NULL, NULL);
+  PL_CRYPTO_HASH_CONTEXT  *c  = *cp;
 
-  Sfprintf(s, "<crypto_context>(%p)", c);
+  Sfprintf(s, "<crypto_hash_context>(%p)", c);
 
   return TRUE;
 }
 
 static void
-acquire_context(atom_t atom)
-{ PL_CRYPTO_CONTEXT **cp = PL_blob_data(atom, NULL, NULL);
-  PL_CRYPTO_CONTEXT  *c  = *cp;
+acquire_hash_context(atom_t atom)
+{ PL_CRYPTO_HASH_CONTEXT **cp = PL_blob_data(atom, NULL, NULL);
+  PL_CRYPTO_HASH_CONTEXT  *c  = *cp;
 
   c->atom = atom;
 }
 
-static PL_blob_t crypto_context_type =
+static PL_blob_t crypto_hash_context_type =
 { PL_BLOB_MAGIC,
   0,
-  "crypto_context",
-  release_context,
-  compare_context,
-  write_context,
-  acquire_context
+  "crypto_hash_context",
+  release_hash_context,
+  compare_hash_context,
+  write_hash_context,
+  acquire_hash_context
 };
 
 
 static int
-unify_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
-{ if ( PL_unify_blob(tcontext, &context, sizeof(context), &crypto_context_type) )
+unify_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT *context)
+{ if ( PL_unify_blob(tcontext, &context, sizeof(context), &crypto_hash_context_type) )
     return TRUE;
 
-  free_crypto_context(context);
+  free_crypto_hash_context(context);
   if ( !PL_exception(0) )
     return PL_uninstantiation_error(tcontext);
 
@@ -206,21 +206,21 @@ unify_context(term_t tcontext, PL_CRYPTO_CONTEXT *context)
 
 
 static int
-get_context(term_t tcontext, PL_CRYPTO_CONTEXT **context)
+get_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT **context)
 { PL_blob_t *type;
   void *data;
 
   if ( PL_get_blob(tcontext, &data, NULL, &type) &&
-       type == &crypto_context_type )
-  { PL_CRYPTO_CONTEXT *c = *(PL_CRYPTO_CONTEXT**)data;
+       type == &crypto_hash_context_type )
+  { PL_CRYPTO_HASH_CONTEXT *c = *(PL_CRYPTO_HASH_CONTEXT**)data;
 
-    assert(c->magic == CONTEXT_MAGIC);
+    assert(c->magic == HASH_CONTEXT_MAGIC);
     *context = c;
 
     return TRUE;
   }
 
-  return PL_type_error("crypto_context", tcontext);
+  return PL_type_error("crypto_hash_context", tcontext);
 }
 
 typedef struct algorithm_pair {
@@ -270,7 +270,7 @@ get_text_representation(term_t t, int *rep)
 
 
 static int
-hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
+hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
 { term_t opts = PL_copy_term_ref(options);
   term_t opt = PL_new_term_ref();
 
@@ -326,16 +326,16 @@ hash_options(term_t options, PL_CRYPTO_CONTEXT *result)
 
 
 static foreign_t
-pl_crypto_context_new(term_t tcontext, term_t options)
+pl_crypto_hash_context_new(term_t tcontext, term_t options)
 {
-  PL_CRYPTO_CONTEXT *context = NULL;
+  PL_CRYPTO_HASH_CONTEXT *context = NULL;
 
   context = malloc(sizeof(*context));
 
   if ( !context )
     return FALSE;
 
-  context->magic    = CONTEXT_MAGIC;
+  context->magic    = HASH_CONTEXT_MAGIC;
   context->ctx      = NULL;
   context->hmac_ctx = NULL;
   context->hmac_key = NULL;
@@ -366,16 +366,16 @@ pl_crypto_context_new(term_t tcontext, term_t options)
     }
   }
 
-  return unify_context(tcontext, context);
+  return unify_hash_context(tcontext, context);
 }
 
 static foreign_t
-pl_crypto_context_copy(term_t tin, term_t tout)
+pl_crypto_hash_context_copy(term_t tin, term_t tout)
 {
-  PL_CRYPTO_CONTEXT *in, *out;
+  PL_CRYPTO_HASH_CONTEXT *in, *out;
   int rc = 0;
 
-  if ( !get_context(tin, &in) )
+  if ( !get_hash_context(tin, &in) )
     return FALSE;
 
   out = malloc(sizeof(*out));
@@ -383,7 +383,7 @@ pl_crypto_context_copy(term_t tin, term_t tout)
   if ( !out )
     return FALSE;
 
-  out->magic = CONTEXT_MAGIC;
+  out->magic = HASH_CONTEXT_MAGIC;
   out->hmac_key = ssl_strdup(in->hmac_key);
 
   out->encoding = in->encoding;
@@ -414,12 +414,12 @@ pl_crypto_context_copy(term_t tin, term_t tout)
   out->hmac_ctx = NULL;
 #endif
 
-  return unify_context(tout, out) && rc;
+  return unify_hash_context(tout, out) && rc;
 }
 
 
 static int
-hash_append(PL_CRYPTO_CONTEXT *context, void *data, size_t size)
+hash_append(PL_CRYPTO_HASH_CONTEXT *context, void *data, size_t size)
 {
   if ( context->hmac_ctx )
     return HMAC_Update(context->hmac_ctx, data, size);
@@ -429,13 +429,13 @@ hash_append(PL_CRYPTO_CONTEXT *context, void *data, size_t size)
 
 
 static foreign_t
-pl_crypto_update_context(term_t from, term_t tcontext)
+pl_crypto_update_hash_context(term_t from, term_t tcontext)
 {
-  PL_CRYPTO_CONTEXT *context = NULL;
+  PL_CRYPTO_HASH_CONTEXT *context = NULL;
   size_t datalen;
   char *data;
 
-  if ( !get_context(tcontext, &context) )
+  if ( !get_hash_context(tcontext, &context) )
     return FALSE;
 
   if ( !PL_get_nchars(from, &datalen, &data,
@@ -447,13 +447,13 @@ pl_crypto_update_context(term_t from, term_t tcontext)
 }
 
 static foreign_t
-pl_crypto_context_hash(term_t tcontext, term_t hash)
+pl_crypto_hash_context_hash(term_t tcontext, term_t hash)
 {
-  PL_CRYPTO_CONTEXT *context = NULL;
+  PL_CRYPTO_HASH_CONTEXT *context = NULL;
   unsigned char digest[EVP_MAX_MD_SIZE];
   unsigned int len;
 
-  if ( !get_context(tcontext, &context) )
+  if ( !get_hash_context(tcontext, &context) )
     return FALSE;
 
   if ( context->hmac_ctx )
@@ -472,7 +472,7 @@ pl_crypto_context_hash(term_t tcontext, term_t hash)
 
 static ssize_t                          /* range-limited read */
 hash_read(void *handle, char *buf, size_t size)
-{ PL_CRYPTO_CONTEXT *ctx = handle;
+{ PL_CRYPTO_HASH_CONTEXT *ctx = handle;
   ssize_t rd;
 
   if ( (rd = Sfread(buf, sizeof(char), size, ctx->parent_stream)) >= 0 )
@@ -487,7 +487,7 @@ hash_read(void *handle, char *buf, size_t size)
 
 static ssize_t
 hash_write(void *handle, char *buf, size_t size)
-{ PL_CRYPTO_CONTEXT *ctx = handle;
+{ PL_CRYPTO_HASH_CONTEXT *ctx = handle;
   size_t written = 0;
 
   hash_append(ctx, buf, size);
@@ -507,7 +507,7 @@ hash_write(void *handle, char *buf, size_t size)
 
 static int
 hash_control(void *handle, int op, void *data)
-{ PL_CRYPTO_CONTEXT *ctx = handle;
+{ PL_CRYPTO_HASH_CONTEXT *ctx = handle;
 
   switch(op)
   { case SIO_SETENCODING:
@@ -523,7 +523,7 @@ hash_control(void *handle, int op, void *data)
 static int
 hash_close(void *handle)
 { int rc = 0;
-  PL_CRYPTO_CONTEXT *ctx = handle;
+  PL_CRYPTO_HASH_CONTEXT *ctx = handle;
 
   ctx->parent_stream->encoding = ctx->parent_encoding;
   if ( ctx->parent_stream->upstream )
@@ -532,7 +532,7 @@ hash_close(void *handle)
   if ( ctx->close_parent )
     rc = Sclose(ctx->parent_stream);
 
-  free_crypto_context(ctx);
+  free_crypto_hash_context(ctx);
 
   return rc;
 }
@@ -553,10 +553,10 @@ static IOFUNCTIONS hash_functions =
 
 static foreign_t
 pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
-{ PL_CRYPTO_CONTEXT *context;
+{ PL_CRYPTO_HASH_CONTEXT *context;
   IOSTREAM *s, *s2;
 
-  if ( !get_context(tcontext, &context) )
+  if ( !get_hash_context(tcontext, &context) )
     return FALSE;
 
   if ( !PL_get_stream_handle(org, &s) )
@@ -593,13 +593,13 @@ pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
 
 
 static foreign_t
-pl_crypto_stream_context(term_t stream, term_t tcontext)
+pl_crypto_stream_hash_context(term_t stream, term_t tcontext)
 { IOSTREAM *s;
   int rc;
 
   if ( PL_get_stream_handle(stream, &s) )
-  { PL_CRYPTO_CONTEXT *ctx = s->handle;
-    rc = unify_context(tcontext, ctx);
+  { PL_CRYPTO_HASH_CONTEXT *ctx = s->handle;
+    rc = unify_hash_context(tcontext, ctx);
     PL_release_stream(s);
     return rc;
   }
@@ -1955,13 +1955,19 @@ install_crypto4pl(void)
 
   PL_register_foreign("crypto_n_random_bytes", 2, pl_crypto_n_random_bytes, 0);
 
-  PL_register_foreign("_crypto_context_new", 2, pl_crypto_context_new, 0);
-  PL_register_foreign("_crypto_update_context", 2, pl_crypto_update_context, 0);
-  PL_register_foreign("_crypto_context_copy", 2, pl_crypto_context_copy, 0);
-  PL_register_foreign("_crypto_context_hash", 2, pl_crypto_context_hash, 0);
+  PL_register_foreign("_crypto_context_new", 2,
+                      pl_crypto_hash_context_new, 0);
+  PL_register_foreign("_crypto_update_hash_context", 2,
+                      pl_crypto_update_hash_context, 0);
+  PL_register_foreign("_crypto_hash_context_copy", 2,
+                      pl_crypto_hash_context_copy, 0);
+  PL_register_foreign("_crypto_hash_context_hash", 2,
+                      pl_crypto_hash_context_hash, 0);
+
   PL_register_foreign("_crypto_open_hash_stream", 3,
                       pl_crypto_open_hash_stream, 0);
-  PL_register_foreign("_crypto_stream_context", 2, pl_crypto_stream_context, 0);
+  PL_register_foreign("_crypto_stream_hash_context", 2,
+                      pl_crypto_stream_hash_context, 0);
 
   PL_register_foreign("_crypto_password_hash", 4, pl_crypto_password_hash, 0);
   PL_register_foreign("_crypto_data_hkdf", 7, pl_crypto_data_hkdf, 0);

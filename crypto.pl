@@ -238,8 +238,8 @@ crypto_context_new(Context, Options0) :-
 %   or similar technologies, or simply with big files.
 
 crypto_data_context(Data, Context0, Context) :-
-    '_crypto_context_copy'(Context0, Context),
-    '_crypto_update_context'(Data, Context).
+    '_crypto_hash_context_copy'(Context0, Context),
+    '_crypto_update_hash_context'(Data, Context).
 
 
 %!  crypto_context_hash(+Context, -Hash)
@@ -249,8 +249,8 @@ crypto_data_context(Data, Context0, Context) :-
 %   computation context Context.
 
 crypto_context_hash(Context, Hash) :-
-    '_crypto_context_copy'(Context, Copy),
-    '_crypto_context_hash'(Copy, List),
+    '_crypto_hash_context_copy'(Context, Copy),
+    '_crypto_hash_context_hash'(Copy, List),
     hex_bytes(Hash, List).
 
 %!  crypto_open_hash_stream(+OrgStream, -HashStream, +Options) is det.
@@ -278,7 +278,7 @@ crypto_open_hash_stream(OrgStream, HashStream, Options) :-
 %   the processed input including the already buffered data.
 
 crypto_stream_hash(Stream, Hash) :-
-    '_crypto_stream_context'(Stream, Context),
+    '_crypto_stream_hash_context'(Stream, Context),
     crypto_context_hash(Context, Hash).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
