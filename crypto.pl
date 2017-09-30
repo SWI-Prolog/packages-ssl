@@ -157,10 +157,12 @@ functor_hash_options(F, Hash, Options0, [Option|Options]) :-
 %   by Options:
 %
 %    * algorithm(+Algorithm)
-%    One of =md5=, =sha1=, =sha224=, =sha256=, =sha384=,
-%    =sha512=, =ripemd160=, =blake2s256= or =blake2b512=. The =BLAKE=
-%    digest algorithms require OpenSSL 1.1.0 or greater. The default
-%    is a cryptographically secure algorithm. If you specify a variable,
+%    One of =md5=, =sha1=, =ripemd160=, =sha224=, =sha256=, =sha384=,
+%    =sha512=, =sha3_224=, =sha3_256=, =sha3_384=, =sha3_512=,
+%    =blake2s256= or =blake2b512=. The BLAKE digest algorithms
+%    require OpenSSL 1.1.0 or greater, and the SHA-3 algorithms
+%    require OpenSSL 1.1.1 or greater. The default is a
+%    cryptographically secure algorithm. If you specify a variable,
 %    then that variable is unified with the algorithm that was used.
 %    * encoding(+Encoding)
 %    If Data is a sequence of character _codes_, this must be

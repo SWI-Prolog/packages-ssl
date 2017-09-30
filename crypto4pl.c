@@ -58,6 +58,10 @@ static atom_t ATOM_sha384;
 static atom_t ATOM_sha512;
 static atom_t ATOM_blake2s256;
 static atom_t ATOM_blake2b512;
+static atom_t ATOM_sha3_224;
+static atom_t ATOM_sha3_256;
+static atom_t ATOM_sha3_384;
+static atom_t ATOM_sha3_512;
 static atom_t ATOM_ripemd160;
 
 static atom_t ATOM_pkcs1;
@@ -238,6 +242,10 @@ get_hash_algorithm(atom_t a_algorithm, const EVP_MD **algorithm)
     { ALGO(md5), ALGO(ripemd160),
 #if defined(HAVE_EVP_BLAKE2B512) && defined(HAVE_EVP_BLAKE2S256)
       ALGO(blake2s256), ALGO(blake2b512),
+#endif
+#if defined(HAVE_EVP_SHA3_224) && defined(HAVE_EVP_SHA3_256) && \
+    defined(HAVE_EVP_SHA3_384) && defined(HAVE_EVP_SHA3_512)
+      ALGO(sha3_224), ALGO(sha3_256), ALGO(sha3_384), ALGO(sha3_512),
 #endif
       ALGO(sha1), ALGO(sha224), ALGO(sha256), ALGO(sha384), ALGO(sha512)
     };
@@ -1938,6 +1946,10 @@ install_crypto4pl(void)
   MKATOM(md5);
   MKATOM(blake2b512);
   MKATOM(blake2s256);
+  MKATOM(sha3_224);
+  MKATOM(sha3_256);
+  MKATOM(sha3_384);
+  MKATOM(sha3_512);
   MKATOM(ripemd160);
 
   MKATOM(pkcs1);
