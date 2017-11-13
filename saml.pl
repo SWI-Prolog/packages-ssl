@@ -555,8 +555,9 @@ saml_metadata(ServiceProvider, _Options, Request):-
 
     parse_url(RequestURL, Request),
     http_absolute_location('./auth', ACSLocation, [relative_to(RequestURL)]),
-    string_concat("-----BEGIN CERTIFICATE-----\n", X509CertificateWithoutHeader, X509Certificate),
-    string_concat(PresentableCertificate, "-----END CERTIFICATE-----\n", X509CertificateWithoutHeader),
+    atomic_list_concat([_Preamble,CertificateMain|_], "-----BEGIN CERTIFICATE-----\n", X509Certificate),
+    atomic_list_concat([PresentableCertificate|_Postamble], "\n-----END CERTIFICATE-----", CertificateMain),
+
     format(current_output, 'Content-type: text/xml~n~n', []),
     XML = [element(MD:'EntitiesDescriptor', [], [EntityDescriptor])],
     EntityDescriptor = element(MD:'EntityDescriptor', [entityID=ServiceProvider], [SPSSODescriptor]),
