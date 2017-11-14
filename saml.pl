@@ -555,9 +555,16 @@ saml_metadata(ServiceProvider, _Options, Request):-
 
     parse_url(RequestURL, Request),
     http_absolute_location('./auth', ACSLocation, [relative_to(RequestURL)]),
-    atomic_list_concat([_Preamble,CertificateMain|_], "-----BEGIN CERTIFICATE-----\n", X509Certificate),
-    atomic_list_concat([PresentableCertificate|_Postamble], "\n-----END CERTIFICATE-----", CertificateMain),
 
+    % Extract the part of the certificate between the BEGIN and END delimiters
+    ( sub_string(X509Certificate, CertMarkerStart, CertMarkerLength, _, "-----BEGIN CERTIFICATE-----\n"),
+      sub_string(X509Certificate, CertEnd, _, _, "\n-----END CERTIFICATE-----"),
+      CertStart is CertMarkerStart + CertMarkerLength,
+      CertEnd > CertStart->
+        CertLength is CertEnd - CertStart,
+        sub_string(X509Certificate, CertStart, CertLength, _, PresentableCertificate)
+    ; existence_error(certificate_data, X509Certificate)
+    ),
     format(current_output, 'Content-type: text/xml~n~n', []),
     XML = [element(MD:'EntitiesDescriptor', [], [EntityDescriptor])],
     EntityDescriptor = element(MD:'EntityDescriptor', [entityID=ServiceProvider], [SPSSODescriptor]),
