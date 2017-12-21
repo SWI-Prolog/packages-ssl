@@ -3281,9 +3281,6 @@ pl_ssl_negotiate(term_t config,
     goto out;
   }
 
-  assert(instance->sread = sorg_in);
-  assert(instance->swrite = sorg_out);
-
   if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
   { rc = PL_resource_error("memory");
     goto out;
