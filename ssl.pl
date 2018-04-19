@@ -207,7 +207,7 @@ easily be used.
 %     implementation that accepts any certificate.
 %     * cipher_list(+Atom)
 %     Specify a cipher preference list (one or more cipher strings
-%     separated by colons, commas or spaces).
+%     separated by colons, commas or spaces). See ssl_secure_ciphers/1.
 %     * ecdh_curve(+Atom)
 %     Specify a curve for ECDHE ciphers. If this option is not
 %     specified, the OpenSSL default parameters are used.  With
@@ -496,11 +496,14 @@ cert_accept_any(_SSL,
 
 %!  ssl_secure_ciphers(-Ciphers:atom) is det.
 %
+%   Ciphers is a  secure cipher preference list that can  be used in the
+%   cipher_list/1 option of ssl_context/3.
+%
 %   Secure ciphers must guarantee forward secrecy, and must mitigate all
-%   known critical attacks. As of  2017,   using  the  following ciphers
-%   allows you to obtain grade A on https://www.ssllabs.com. For A+, you
-%   must also enable HTTP Strict Transport  Security (HSTS) by sending a
-%   suitable header field in replies.
+%   known critical attacks.  As of  2018, using these ciphers allows you
+%   to obtain grade A on  https://www.ssllabs.com. For A+, you must also
+%   enable HTTP Strict  Transport Security (HSTS) by  sending a suitable
+%   header field in replies.
 %
 %   Note that obsolete ciphers *must* be   disabled  to reliably prevent
 %   protocol downgrade attacks.
