@@ -4,7 +4,7 @@
 		   and Markus Triska
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2017, SWI-Prolog Foundation
+    Copyright (c)  2004-2018, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -103,6 +103,7 @@ static atom_t ATOM_sslv3;
 static atom_t ATOM_tlsv1;
 static atom_t ATOM_tlsv1_1;
 static atom_t ATOM_tlsv1_2;
+static atom_t ATOM_tlsv1_3;
 static atom_t ATOM_minus;			/* "-" */
 
 static functor_t FUNCTOR_unsupported_hash_algorithm1;
@@ -2816,6 +2817,10 @@ protocol_version_to_integer(const term_t symbol, int *version)
     *version = TLS1_1_VERSION;
   else if ( arg == ATOM_tlsv1_2 )
     *version = TLS1_2_VERSION;
+#ifdef TLS1_3_VERSION
+  else if ( arg == ATOM_tlsv1_3 )
+    *version = TLS1_3_VERSION;
+#endif
   else
     return PL_domain_error("ssl_protocol_version", symbol);
 #else
@@ -3658,6 +3663,7 @@ install_ssl4pl(void)
   MKATOM(tlsv1);
   MKATOM(tlsv1_1);
   MKATOM(tlsv1_2);
+  MKATOM(tlsv1_3);
   MKATOM(require_crl);
   MKATOM(crl);
 

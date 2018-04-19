@@ -230,14 +230,14 @@ easily be used.
 %     very rarely a concern.
 %     * min_protocol_version(+Atom)
 %     Set the _minimum_ protocol version that can be negotiated.
-%     Atom is one of `sslv3`, `tlsv1`, `tlsv1_1` and `tlsv1_2`.
-%     This option is available with OpenSSL 1.1.0 and later, and
-%     should be used instead of `disable_ssl_methods/1`.
+%     Atom is one of `sslv3`, `tlsv1`, `tlsv1_1`, `tlsv1_2` and
+%     `tlsv1_3`. This option is available with OpenSSL 1.1.0 and
+%     later, and should be used instead of `disable_ssl_methods/1`.
 %     * max_protocol_version(+Atom)
 %     Set the _maximum_ protocol version that can be negotiated.
-%     Atom is one of `sslv3`, `tlsv1`, `tlsv1_1` and `tlsv1_2`.
-%     This option is available with OpenSSL 1.1.0 and later, and
-%     should be used instead of `disable_ssl_methods/1`.
+%     Atom is one of `sslv3`, `tlsv1`, `tlsv1_1`, `tlsv1_2` and
+%     `tlsv1_3`. This option is available with OpenSSL 1.1.0 and
+%     later, and should be used instead of `disable_ssl_methods/1`.
 %     * disable_ssl_methods(+List)
 %     A list of methods to disable. Unsupported methods will be
 %     ignored. Methods include `sslv2`, `sslv3`, `sslv23`,
