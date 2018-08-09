@@ -79,7 +79,8 @@
                        peer_cert(boolean),
                        close_parent(boolean),
                        close_notify(boolean),
-                       sni_hook(callable)
+                       sni_hook(callable),
+                       alpn_protocols(any)
                      ]).
 
 /** <module> Secure Socket Layer (SSL) library
@@ -184,6 +185,9 @@ easily be used.
 %     the FileName `system(root_certificates)` uses a list of
 %     trusted root certificates as provided by the OS. See
 %     system_root_certificates/1 for details.
+%     * alpn_protocols(+ListOfProtoIdentifiers)
+%     Provide a list of acceptable ALPN protocol identifiers as atoms.
+%     ALPN support requires OpenSSL 1.0.2 or greater.
 %
 %     Additional verification of the peer certificate as well as
 %     accepting certificates that are not trusted by the given set
@@ -313,10 +317,10 @@ ssl_copy_context(SSL0, SSL) :-
 %   Options.  The following options are supported: close_notify/1,
 %   close_parent/1, host/1, peer_cert/1, ecdh_curve/1,
 %   min_protocol_version/1, max_protocol_version/1,
-%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1. See
-%   ssl_context/3 for more information about these options. This
-%   predicate allows you to tweak existing SSL contexts, which can be
-%   useful in hooks when creating servers with the HTTP
+%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1, and
+%   alpn_protocols/1. See ssl_context/3 for more information about these
+%   options. This predicate allows you to tweak existing SSL contexts,
+%   which can be useful in hooks when creating servers with the HTTP
 %   infrastructure.
 
 ssl_set_options(SSL0, SSL, Options) :-

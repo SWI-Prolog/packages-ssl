@@ -96,6 +96,7 @@ static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
 static atom_t ATOM_root_certificates;
 static atom_t ATOM_sni_hook;
+static atom_t ATOM_alpn_protocols;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -235,6 +236,8 @@ typedef struct pl_ssl {
 #ifndef HAVE_X509_CHECK_HOST
     int                  hostname_check_status;
 #endif
+    unsigned char       *alpn_protos;
+    size_t               alpn_protos_len;
 } PL_SSL;
 
 typedef struct ssl_instance {
@@ -1642,6 +1645,7 @@ ssl_free(PL_SSL *config)
     if (config->cb_sni.goal) PL_erase(config->cb_sni.goal);
     if (config->cb_pem_passwd.goal) PL_erase(config->cb_pem_passwd.goal);
     if (config->cb_cert_verify.goal) PL_erase(config->cb_cert_verify.goal);
+    if (config->alpn_protos) free(config->alpn_protos);
 
     free(config);
     ssl_deb(1, "Released config structure\n");
@@ -2511,6 +2515,16 @@ ssl_init_min_max_protocol(PL_SSL *config)
 #endif
 }
 
+static void
+ssl_init_alpn_protos(PL_SSL *config)
+{
+#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
+  if ( config->alpn_protos ) {
+    SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos, config->alpn_protos_len);
+  }
+#endif
+}
+
 static int
 set_malleable_options(PL_SSL *config)
 {
@@ -2558,6 +2572,7 @@ set_malleable_options(PL_SSL *config)
 
   ssl_init_sni(config);
   ssl_init_min_max_protocol(config);
+  ssl_init_alpn_protos(config);
 
   return TRUE;
 }
@@ -2984,6 +2999,32 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 	return FALSE;
 
       conf->close_notify = val;
+    } else if ( name == ATOM_alpn_protocols && arity == 1 )
+    { term_t protos_tail = PL_new_term_ref();
+      term_t protos_head = PL_new_term_ref();
+      _PL_get_arg(1, head, protos_tail);
+      size_t current_size = 0;
+      unsigned char *protos_vec = NULL;
+      size_t total_length = 0;
+      while( PL_get_list_ex(protos_tail, protos_head, protos_tail) )
+      { char *proto;
+        if ( !PL_get_atom_chars(protos_head, &proto) ) {
+          return FALSE;
+        }
+        size_t proto_len = strlen(proto);
+        total_length += proto_len + 1;
+        if ( total_length > current_size ) {
+          protos_vec = realloc(protos_vec, total_length);
+          if ( protos_vec == NULL ) {
+            return FALSE;
+          }
+        }
+        protos_vec[current_size] = proto_len;
+        memcpy(protos_vec + current_size + 1, proto, proto_len);
+        current_size = total_length;
+      }
+      conf->alpn_protos = protos_vec;
+      conf->alpn_protos_len = current_size;
     } else
       continue;
   }
@@ -3385,6 +3426,12 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
     new->num_cert_key_pairs++;
   }
 
+  if ( old->alpn_protos ) {
+    unsigned char *protos_copy = malloc(old->alpn_protos_len * sizeof(unsigned char));
+    memcpy(old->alpn_protos, protos_copy, old->alpn_protos_len);
+    new->alpn_protos = protos_copy;
+  }
+
   return ssl_config(new);
 }
 
@@ -3666,6 +3713,7 @@ install_ssl4pl(void)
   MKATOM(tlsv1_3);
   MKATOM(require_crl);
   MKATOM(crl);
+  MKATOM(alpn_protocols);
 
   ATOM_minus                = PL_new_atom("-");
 
