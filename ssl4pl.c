@@ -3014,9 +3014,12 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
         size_t proto_len = strlen(proto);
         total_length += proto_len + 1;
         if ( total_length > current_size ) {
-          protos_vec = realloc(protos_vec, total_length);
-          if ( protos_vec == NULL ) {
-            return FALSE;
+          unsigned char* new_protos_vec = realloc(protos_vec, total_length);
+          if ( new_protos_vec == NULL ) {
+            if ( protos_vec != NULL ) free(protos_vec);
+            return PL_resource_error("memory");
+          } else {
+            protos_vec = new_protos_vec;
           }
         }
         protos_vec[current_size] = proto_len;
