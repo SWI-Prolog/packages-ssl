@@ -3428,6 +3428,8 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
 
   if ( old->alpn_protos ) {
     unsigned char *protos_copy = malloc(old->alpn_protos_len * sizeof(unsigned char));
+    if ( protos_copy == NULL )
+      return PL_resource_error("memory");
     memcpy(old->alpn_protos, protos_copy, old->alpn_protos_len);
     new->alpn_protos = protos_copy;
   }
