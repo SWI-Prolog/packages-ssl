@@ -142,6 +142,7 @@ static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_unknown1;
+static functor_t FUNCTOR_alpn_protocol1;
 
 typedef enum
 { PL_SSL_NONE
@@ -3691,6 +3692,17 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   PL_free(master_key);
 #endif
 
+#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
+  { const unsigned char *data;
+    unsigned int len;
+    SSL_get0_alpn_selected(ssl, &data, &len);
+    if ( !add_key_string(list_t, FUNCTOR_alpn_protocol1,
+                         len, data)) {
+      goto err;
+    }
+  }
+#endif
+
   SSL_SESSION_free(session);
   return PL_unify_nil_ex(list_t);
 
@@ -3772,6 +3784,7 @@ install_ssl4pl(void)
   FUNCTOR_session_id1       = PL_new_functor(PL_new_atom("session_id"), 1);
   FUNCTOR_client_random1    = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1    = PL_new_functor(PL_new_atom("server_random"), 1);
+  FUNCTOR_alpn_protocol1    = PL_new_functor(PL_new_atom("alpn_protocol"), 1);
   FUNCTOR_system1           = PL_new_functor(PL_new_atom("system"), 1);
   FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);

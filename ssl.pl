@@ -396,6 +396,9 @@ ssl_set_options(SSL0, SSL, Options) :-
 %     The SSLv3 session ID. Note that if ECDHE is being used (which
 %     is the default for newer versions of OpenSSL), this data will
 %     not actually be sent to the server.
+%     * alpn_protocol(Protocol)
+%     The negotiated ALPN protocol, if supported. If no protocol was
+%     negotiated, this will be an empty string.
 
 %!  load_certificate(+Stream, -Certificate) is det.
 %
