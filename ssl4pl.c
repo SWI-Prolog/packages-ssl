@@ -2515,12 +2515,31 @@ ssl_init_min_max_protocol(PL_SSL *config)
 #endif
 }
 
+int ssl_server_alpn_select_cb(SSL *ssl,
+                              const unsigned char **out, unsigned char *outlen,
+                              const unsigned char *in, unsigned int inlen,
+                              void * arg) {
+  PL_SSL *config = (PL_SSL*)arg;
+  int ret =  SSL_select_next_proto((unsigned char**)out, outlen,
+                                   config->alpn_protos, config->alpn_protos_len,
+                                   in, inlen);
+  if ( ret == OPENSSL_NPN_NEGOTIATED ) {
+    return SSL_TLSEXT_ERR_OK;
+  } else {
+    return SSL_TLSEXT_ERR_ALERT_FATAL;
+  }
+}
+
 static void
 ssl_init_alpn_protos(PL_SSL *config)
 {
 #ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
   if ( config->alpn_protos ) {
-    SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos, config->alpn_protos_len);
+    if ( config->role == PL_SSL_CLIENT ) {
+      SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos, config->alpn_protos_len);
+    } else if ( config->role == PL_SSL_SERVER ) {
+      SSL_CTX_set_alpn_select_cb(config->ctx, &ssl_server_alpn_select_cb, config);
+    }
   }
 #endif
 }
