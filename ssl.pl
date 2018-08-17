@@ -283,7 +283,7 @@ easily be used.
 %     select an ALPN protocol. It will be called as follows:
 %
 %     ===
-%     call(Goal, +ListOfClientProtocols, -SelectedProtocol)
+%     call(Goal, +SSLCtx, +ListOfClientProtocols, -SelectedProtocol)
 %     ===
 %
 %     If this option is unset and the `alpn_protocols/1` option is
