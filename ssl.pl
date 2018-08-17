@@ -80,7 +80,8 @@
                        close_parent(boolean),
                        close_notify(boolean),
                        sni_hook(callable),
-                       alpn_protocols(any)
+                       alpn_protocols(any),
+                       alpn_protocol_hook(callable)
                      ]).
 
 /** <module> Secure Socket Layer (SSL) library
@@ -185,9 +186,6 @@ easily be used.
 %     the FileName `system(root_certificates)` uses a list of
 %     trusted root certificates as provided by the OS. See
 %     system_root_certificates/1 for details.
-%     * alpn_protocols(+ListOfProtoIdentifiers)
-%     Provide a list of acceptable ALPN protocol identifiers as atoms.
-%     ALPN support requires OpenSSL 1.0.2 or greater.
 %
 %     Additional verification of the peer certificate as well as
 %     accepting certificates that are not trusted by the given set
@@ -277,6 +275,20 @@ easily be used.
 %     used, which are those of the encompassing ssl_context/3
 %     call. In that case, if no default certificate and key are
 %     specified, the client connection is rejected.
+%     * alpn_protocols(+ListOfProtoIdentifiers)
+%     Provide a list of acceptable ALPN protocol identifiers as atoms.
+%     ALPN support requires OpenSSL 1.0.2 or greater.
+%     * alpn_protocol_hook(:Goal)
+%     This options provides a callback for a server context to use to
+%     select an ALPN protocol. It will be called as follows:
+%
+%     ===
+%     call(Goal, +ListOfClientProtocols, -SelectedProtocol)
+%     ===
+%
+%     If this option is unset and the `alpn_protocols/1` option is
+%     set, then the first common protocol between client & server will
+%     be selected.
 %
 %   @arg Role is one of `server` or `client` and denotes whether the
 %   SSL  instance  will  have  a  server   or  client  role  in  the

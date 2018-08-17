@@ -97,6 +97,7 @@ static atom_t ATOM_ecdh_curve;
 static atom_t ATOM_root_certificates;
 static atom_t ATOM_sni_hook;
 static atom_t ATOM_alpn_protocols;
+static atom_t ATOM_alpn_protocol_hook;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -234,6 +235,7 @@ typedef struct pl_ssl {
     PL_SSL_CALLBACK      cb_cert_verify;
     PL_SSL_CALLBACK      cb_pem_passwd;
     PL_SSL_CALLBACK      cb_sni;
+    PL_SSL_CALLBACK      cb_alpn_proto;
 #ifndef HAVE_X509_CHECK_HOST
     int                  hostname_check_status;
 #endif
@@ -1608,9 +1610,12 @@ ssl_new(void)
         new->cb_sni.goal         = NULL;
         new->cb_cert_verify.goal = NULL;
         new->cb_pem_passwd.goal  = NULL;
+        new->cb_alpn_proto.goal  = NULL;
 #ifndef HAVE_X509_CHECK_HOST
         new->hostname_check_status = 0;
 #endif
+        new->alpn_protos         = NULL;
+        new->alpn_protos_len     = 0;
         new->magic                 = SSL_CONFIG_MAGIC;
     }
     ssl_deb(1, "Allocated config structure\n");
@@ -1646,6 +1651,7 @@ ssl_free(PL_SSL *config)
     if (config->cb_sni.goal) PL_erase(config->cb_sni.goal);
     if (config->cb_pem_passwd.goal) PL_erase(config->cb_pem_passwd.goal);
     if (config->cb_cert_verify.goal) PL_erase(config->cb_cert_verify.goal);
+    if (config->cb_alpn_proto.goal) PL_erase(config->cb_alpn_proto.goal);
     if (config->alpn_protos) free(config->alpn_protos);
 
     free(config);
@@ -2521,13 +2527,65 @@ int ssl_server_alpn_select_cb(SSL *ssl,
                               const unsigned char *in, unsigned int inlen,
                               void * arg) {
   PL_SSL *config = (PL_SSL*)arg;
-  int ret =  SSL_select_next_proto((unsigned char**)out, outlen,
-                                   config->alpn_protos, config->alpn_protos_len,
-                                   in, inlen);
-  if ( ret == OPENSSL_NPN_NEGOTIATED ) {
-    return SSL_TLSEXT_ERR_OK;
+  if ( config->cb_alpn_proto.goal ) {
+    fid_t fid = PL_open_foreign_frame();
+    term_t av = PL_new_term_refs(3);
+
+    term_t protos_list = PL_new_term_ref();
+    term_t protos_list_tail = PL_copy_term_ref(protos_list);
+    if ( !PL_put_list(protos_list) ) return SSL_TLSEXT_ERR_ALERT_FATAL;
+    unsigned int in_pos = 0;
+    while (in_pos < inlen) {
+      term_t tmp = PL_new_term_ref();
+      unsigned char proto_len = in[in_pos];
+      const unsigned char* proto = in + in_pos + 1;
+      int rc =  PL_unify_list_ex(protos_list_tail, tmp, protos_list_tail)
+        && PL_unify_chars(tmp, PL_ATOM|REP_UTF8, proto_len, (char*)proto);
+      if ( tmp ) PL_reset_term_refs(tmp);
+      in_pos += proto_len + 1;
+      if ( !rc ) {
+        return SSL_TLSEXT_ERR_ALERT_FATAL;
+      }
+    }
+    if( !PL_unify_nil(protos_list_tail) ) return SSL_TLSEXT_ERR_ALERT_FATAL;
+
+    predicate_t call3 = PL_predicate("call", 3, NULL);
+
+    /*
+     * call(CB, +ClientProtos, -SelectedProtocol)
+     */
+    PL_recorded(config->cb_alpn_proto.goal, av+0);
+    if ( !PL_unify(av+1, protos_list) ) return SSL_TLSEXT_ERR_ALERT_FATAL;
+    int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
+                                     PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call3, av);
+    if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE ) {
+      if ( call_ret == PL_S_EXCEPTION ) PL_clear_exception();
+      return SSL_TLSEXT_ERR_ALERT_FATAL;
+    }
+
+    char * str;
+    int ret;
+    if ( PL_get_atom_chars(av+2, &str) ) {
+      *out = (unsigned char*)str;
+      *outlen = strlen(str);
+      ret = SSL_TLSEXT_ERR_OK;
+    } else {
+      ret = SSL_TLSEXT_ERR_ALERT_FATAL;
+    }
+
+    PL_close_foreign_frame(fid);
+
+    return ret;
+
   } else {
-    return SSL_TLSEXT_ERR_ALERT_FATAL;
+    int ret =  SSL_select_next_proto((unsigned char**)out, outlen,
+                                     config->alpn_protos, config->alpn_protos_len,
+                                     in, inlen);
+    if ( ret == OPENSSL_NPN_NEGOTIATED ) {
+      return SSL_TLSEXT_ERR_OK;
+    } else {
+      return SSL_TLSEXT_ERR_ALERT_FATAL;
+    }
   }
 }
 
@@ -2535,7 +2593,8 @@ static void
 ssl_init_alpn_protos(PL_SSL *config)
 {
 #ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
-  if ( config->alpn_protos ) {
+  if ( config->alpn_protos ||
+       ( config->role == PL_SSL_SERVER && config->cb_alpn_proto.goal ) ) {
     if ( config->role == PL_SSL_CLIENT ) {
       SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos, config->alpn_protos_len);
     } else if ( config->role == PL_SSL_SERVER ) {
@@ -3048,6 +3107,13 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       }
       conf->alpn_protos = protos_vec;
       conf->alpn_protos_len = current_size;
+    } else if ( name == ATOM_alpn_protocol_hook && arity == 1 &&
+                conf->role == PL_SSL_SERVER )
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+      if ( conf->cb_alpn_proto.goal ) PL_erase(conf->cb_alpn_proto.goal);
+      conf->cb_alpn_proto.goal = PL_record(cb);
+      conf->cb_alpn_proto.module = module;
     } else
       continue;
   }
@@ -3442,6 +3508,7 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
   ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
   ssl_copy_callback(old->cb_sni, &new->cb_sni);
+  ssl_copy_callback(old->cb_alpn_proto, &new->cb_alpn_proto);
 
   for (idx = 0; idx < old->num_cert_key_pairs; idx++)
   { new->cert_key_pairs[idx].certificate = ssl_strdup(old->cert_key_pairs[idx].certificate);
@@ -3750,6 +3817,7 @@ install_ssl4pl(void)
   MKATOM(require_crl);
   MKATOM(crl);
   MKATOM(alpn_protocols);
+  MKATOM(alpn_protocol_hook);
 
   ATOM_minus                = PL_new_atom("-");
 
