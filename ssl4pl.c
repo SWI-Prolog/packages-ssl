@@ -2560,7 +2560,7 @@ int ssl_server_alpn_select_cb(SSL *ssl,
     predicate_t call4 = PL_predicate("call", 4, NULL);
 
     /*
-     * call(CB, +ClientProtos, -SelectedProtocol)
+     * call(CB, +SSL, +ClientProtos, -SelectedProtocol)
      */
     PL_recorded(config->cb_alpn_proto.goal, av+0);
     PL_put_atom(av+1, config->atom);
