@@ -2530,12 +2530,11 @@ int ssl_server_alpn_select_cb(SSL *ssl,
   if ( config->cb_alpn_proto.goal ) {
     fid_t fid = PL_open_foreign_frame();
     term_t av = PL_new_term_refs(4);
-    int ret;
+    int ret = SSL_TLSEXT_ERR_ALERT_FATAL;
 
     term_t protos_list = PL_new_term_ref();
     term_t protos_list_tail = PL_copy_term_ref(protos_list);
     if ( !PL_put_list(protos_list) ) {
-      ret =  SSL_TLSEXT_ERR_ALERT_FATAL;
       goto out;
     }
     unsigned int in_pos = 0;
@@ -2548,12 +2547,10 @@ int ssl_server_alpn_select_cb(SSL *ssl,
       if ( tmp ) PL_reset_term_refs(tmp);
       in_pos += proto_len + 1;
       if ( !rc ) {
-        ret = SSL_TLSEXT_ERR_ALERT_FATAL;
         goto out;
       }
     }
     if( !PL_unify_nil(protos_list_tail) ) {
-      ret = SSL_TLSEXT_ERR_ALERT_FATAL;
       goto out;
     }
 
@@ -2565,14 +2562,12 @@ int ssl_server_alpn_select_cb(SSL *ssl,
     PL_recorded(config->cb_alpn_proto.goal, av+0);
     PL_put_atom(av+1, config->atom);
     if ( !PL_unify(av+2, protos_list) ) {
-      ret = SSL_TLSEXT_ERR_ALERT_FATAL;
       goto out;
     }
     int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
                                      PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call4, av);
     if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE ) {
       if ( call_ret == PL_S_EXCEPTION ) PL_clear_exception();
-      ret = SSL_TLSEXT_ERR_ALERT_FATAL;
       goto out;
     }
 
@@ -2581,8 +2576,6 @@ int ssl_server_alpn_select_cb(SSL *ssl,
       *out = (unsigned char*)str;
       *outlen = strlen(str);
       ret = SSL_TLSEXT_ERR_OK;
-    } else {
-      ret = SSL_TLSEXT_ERR_ALERT_FATAL;
     }
     out:
 
