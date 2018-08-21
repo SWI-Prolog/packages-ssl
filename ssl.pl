@@ -329,11 +329,11 @@ ssl_copy_context(SSL0, SSL) :-
 %   Options.  The following options are supported: close_notify/1,
 %   close_parent/1, host/1, peer_cert/1, ecdh_curve/1,
 %   min_protocol_version/1, max_protocol_version/1,
-%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1, and
-%   alpn_protocols/1. See ssl_context/3 for more information about these
-%   options. This predicate allows you to tweak existing SSL contexts,
-%   which can be useful in hooks when creating servers with the HTTP
-%   infrastructure.
+%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1,
+%   alpn_protocols/1, and alpn_protocol_hook/1. See ssl_context/3 for
+%   more information about these options. This predicate allows you to
+%   tweak existing SSL contexts, which can be useful in hooks when
+%   creating servers with the HTTP infrastructure.
 
 ssl_set_options(SSL0, SSL, Options) :-
     ssl_copy_context(SSL0, SSL),
