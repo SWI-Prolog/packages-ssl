@@ -2529,7 +2529,7 @@ int ssl_server_alpn_select_cb(SSL *ssl,
   PL_SSL *config = (PL_SSL*)arg;
   if ( config->cb_alpn_proto.goal ) {
     fid_t fid = PL_open_foreign_frame();
-    term_t av = PL_new_term_refs(4);
+    term_t av = PL_new_term_refs(5);
     int ret = SSL_TLSEXT_ERR_ALERT_FATAL;
 
     term_t protos_list = PL_new_term_ref();
@@ -2554,10 +2554,10 @@ int ssl_server_alpn_select_cb(SSL *ssl,
       goto out;
     }
 
-    predicate_t call4 = PL_predicate("call", 4, NULL);
+    predicate_t call5 = PL_predicate("call", 5, NULL);
 
     /*
-     * call(CB, +SSL, +ClientProtos, -SelectedProtocol)
+     * call(CB, +SSL0, +ClientProtos, -SSL1, -SelectedProtocol)
      */
     PL_recorded(config->cb_alpn_proto.goal, av+0);
     PL_put_atom(av+1, config->atom);
@@ -2565,14 +2565,21 @@ int ssl_server_alpn_select_cb(SSL *ssl,
       goto out;
     }
     int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
-                                     PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call4, av);
+                                     PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call5, av);
     if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE ) {
       if ( call_ret == PL_S_EXCEPTION ) PL_clear_exception();
       goto out;
     }
 
+    PL_SSL *new_config = NULL;
+    if ( !get_conf(av+3, &new_config) ) {
+      PL_warning("alpn_protocol_hook return wrong type");
+      goto out;
+    }
+    SSL_set_SSL_CTX(ssl, new_config ? new_config->ctx : config->ctx);
+
     char * str;
-    if ( PL_get_atom_chars(av+3, &str) ) {
+    if ( PL_get_atom_chars(av+4, &str) ) {
       *out = (unsigned char*)str;
       *outlen = strlen(str);
       ret = SSL_TLSEXT_ERR_OK;
