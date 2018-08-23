@@ -1,7 +1,7 @@
 /*  Part of SWI-Prolog
 
-    Author:        Jan van der Steen, Jan Wielemaker, Matt Lilley
-		   and Markus Triska
+    Author:        Jan van der Steen, Jan Wielemaker, Matt Lilley,
+		   Markus Triska and James Cash
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
     Copyright (c)  2004-2018, SWI-Prolog Foundation
