@@ -2586,11 +2586,22 @@ ssl_server_alpn_select_cb(SSL *ssl,
 
       char *str;
       size_t olen;
-      /* FIXME: who frees this string when? */
       if ( PL_get_nchars(av+4, &olen, &str, CVT_ATOM|CVT_STRING|REP_UTF8) )
-      { *out = (unsigned char*)str;
-	*outlen = olen;
-	ret = SSL_TLSEXT_ERR_OK;
+        { unsigned int i = 0;
+          while (i < inlen)
+          {
+            unsigned char plen = in[i];
+            const unsigned char *pstr = in + i + 1;
+            if ( plen == olen && strncmp(str, (const char*)pstr, plen) == 0 )
+            { *out = pstr;
+              *outlen = plen;
+              ret = SSL_TLSEXT_ERR_OK;
+              PL_unregister_atom(av+4);
+              goto out;
+            }
+            i += plen + 1;
+          }
+          PL_unregister_atom(av+4);
       }
 
     out:
