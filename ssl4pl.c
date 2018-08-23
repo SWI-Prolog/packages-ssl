@@ -2526,72 +2526,82 @@ static int
 ssl_server_alpn_select_cb(SSL *ssl,
 			  const unsigned char **out, unsigned char *outlen,
 			  const unsigned char *in, unsigned int inlen,
-			  void * arg)
+			  void *arg)
 { PL_SSL *config = (PL_SSL*)arg;
 
   if ( config->cb_alpn_proto.goal )
-  { fid_t fid = PL_open_foreign_frame();
-    term_t av = PL_new_term_refs(5);
+  { fid_t fid;
     int ret = SSL_TLSEXT_ERR_ALERT_FATAL;
 
-    term_t protos_list = PL_new_term_ref();
-    term_t protos_list_tail = PL_copy_term_ref(protos_list);
-    if ( !PL_put_list(protos_list) )
-      goto out;
-    unsigned int in_pos = 0;
-    while (in_pos < inlen)
-    { term_t tmp = PL_new_term_ref();
-      unsigned char proto_len = in[in_pos];
-      const unsigned char* proto = in + in_pos + 1;
-      int rc =  PL_unify_list_ex(protos_list_tail, tmp, protos_list_tail)
-        && PL_unify_chars(tmp, PL_ATOM|REP_UTF8, proto_len, (char*)proto);
-      if ( tmp ) PL_reset_term_refs(tmp);
-      in_pos += proto_len + 1;
-      if ( !rc )
-        goto out;
+    if ( (fid = PL_open_foreign_frame()) )
+    { term_t av, protos_list, protos_list_tail, head;
+      unsigned int in_pos = 0;
+
+      if ( !(av = PL_new_term_refs(5)) ||
+	   !(protos_list = PL_new_term_ref()) ||
+	   !(protos_list_tail = PL_copy_term_ref(protos_list)) ||\
+	   !(head = PL_new_term_ref()) ||
+	   !PL_put_list(protos_list) )
+	goto out;
+
+      while (in_pos < inlen)
+      { unsigned char proto_len = in[in_pos];
+	const unsigned char* proto = in + in_pos + 1;
+
+	if ( !PL_unify_list_ex(protos_list_tail, head, protos_list_tail) ||
+	     !PL_unify_chars(head, PL_ATOM|REP_UTF8, proto_len, (char*)proto) )
+	  goto out;
+	in_pos += proto_len + 1;
+      }
+      if ( !PL_unify_nil(protos_list_tail) )
+	goto out;
+
+      predicate_t call5 = PL_predicate("call", 5, "system");
+
+      /*
+       * call(CB, +SSL0, +ClientProtos, -SSL1, -SelectedProtocol)
+       */
+      if ( !PL_recorded(config->cb_alpn_proto.goal, av+0) ||
+	   !PL_put_atom(av+1, config->atom) ||
+	   !PL_unify(av+2, protos_list) )
+	goto out;
+
+      /* FIXME: we cannot simply ignore the exception.  Can we return it to
+       * Prolog somehow?
+       */
+      int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
+				       PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call5, av);
+      if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE )
+      { if ( call_ret == PL_S_EXCEPTION )
+	  PL_clear_exception();
+	goto out;
+      }
+
+      PL_SSL *new_config = NULL;
+      if ( !get_conf(av+3, &new_config) )
+      { PL_warning("alpn_protocol_hook return wrong type");
+	goto out;
+      }
+      SSL_set_SSL_CTX(ssl, new_config ? new_config->ctx : config->ctx);
+
+      char *str;
+      size_t olen;
+      /* FIXME: who frees this string when? */
+      if ( PL_get_nchars(av+4, &olen, &str, CVT_ATOM|CVT_STRING|REP_UTF8) )
+      { *out = (unsigned char*)str;
+	*outlen = olen;
+	ret = SSL_TLSEXT_ERR_OK;
+      }
+
+    out:
+      PL_close_foreign_frame(fid);
     }
-    if( !PL_unify_nil(protos_list_tail) )
-      goto out;
-
-    predicate_t call5 = PL_predicate("call", 5, NULL);
-
-    /*
-     * call(CB, +SSL0, +ClientProtos, -SSL1, -SelectedProtocol)
-     */
-    PL_recorded(config->cb_alpn_proto.goal, av+0);
-    PL_put_atom(av+1, config->atom);
-    if ( !PL_unify(av+2, protos_list) )
-      goto out;
-    int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
-                                     PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call5, av);
-    if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE )
-    { if ( call_ret == PL_S_EXCEPTION )
-	PL_clear_exception();
-      goto out;
-    }
-
-    PL_SSL *new_config = NULL;
-    if ( !get_conf(av+3, &new_config) )
-    { PL_warning("alpn_protocol_hook return wrong type");
-      goto out;
-    }
-    SSL_set_SSL_CTX(ssl, new_config ? new_config->ctx : config->ctx);
-
-    char * str;
-    if ( PL_get_atom_chars(av+4, &str) )
-    { *out = (unsigned char*)str;
-      *outlen = strlen(str);
-      ret = SSL_TLSEXT_ERR_OK;
-    }
-
-  out:
-    PL_close_foreign_frame(fid);
 
     return ret;
   } else
-  { int ret =  SSL_select_next_proto((unsigned char**)out, outlen,
-                                     config->alpn_protos, config->alpn_protos_len,
-                                     in, inlen);
+  { int ret = SSL_select_next_proto((unsigned char**)out, outlen,
+				    config->alpn_protos, config->alpn_protos_len,
+				    in, inlen);
     if ( ret == OPENSSL_NPN_NEGOTIATED )
       return SSL_TLSEXT_ERR_OK;
     else
