@@ -3105,12 +3105,14 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       size_t current_size = 0;
       unsigned char *protos_vec = NULL;
       size_t total_length = 0;
+
       while( PL_get_list_ex(protos_tail, protos_head, protos_tail) )
       { char *proto;
-        if ( !PL_get_atom_chars(protos_head, &proto) ) {
+	size_t proto_len;
+
+        if ( !PL_get_nchars(protos_head, &proto_len, &proto,
+			    CVT_ATOM|CVT_STRING|CVT_EXCEPTION|REP_UTF8|BUF_RING) )
           return FALSE;
-        }
-        size_t proto_len = strlen(proto);
         total_length += proto_len + 1;
         if ( total_length > current_size ) {
           unsigned char* new_protos_vec = realloc(protos_vec, total_length);
