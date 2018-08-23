@@ -2566,13 +2566,8 @@ ssl_server_alpn_select_cb(SSL *ssl,
 	   !PL_unify(av+2, protos_list) )
 	goto out;
 
-      /* FIXME: we cannot simply ignore the exception.  Can we return it to
-       * Prolog somehow?
-       */
-      int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
-				       PL_Q_PASS_EXCEPTION, call5, av);
-      if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE )
-      { goto out; }
+      if ( !PL_call_predicate(config->cb_alpn_proto.module,
+	                      PL_Q_NORMAL, call5, av) ) goto out;
 
       PL_SSL *new_config = NULL;
       if ( !get_conf(av+3, &new_config) )
