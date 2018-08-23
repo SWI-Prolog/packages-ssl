@@ -2596,13 +2596,13 @@ ssl_server_alpn_select_cb(SSL *ssl,
             { *out = pstr;
               *outlen = plen;
               ret = SSL_TLSEXT_ERR_OK;
-              PL_unregister_atom(av+4);
               goto out;
             }
             i += plen + 1;
           }
-          PL_unregister_atom(av+4);
-      }
+        } else {
+            PL_domain_error("alpn protocol", av+4);
+        }
 
     out:
       PL_close_foreign_frame(fid);
