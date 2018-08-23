@@ -2579,22 +2579,21 @@ ssl_server_alpn_select_cb(SSL *ssl,
       char *str;
       size_t olen;
       if ( PL_get_nchars(av+4, &olen, &str, CVT_ATOM|CVT_STRING|REP_UTF8) )
-        { unsigned int i = 0;
-          while (i < inlen)
-          {
-            unsigned char plen = in[i];
-            const unsigned char *pstr = in + i + 1;
-            if ( plen == olen && strncmp(str, (const char*)pstr, plen) == 0 )
+      { unsigned int i = 0;
+        while (i < inlen)
+        { unsigned char plen = in[i];
+          const unsigned char *pstr = in + i + 1;
+          if ( plen == olen && strncmp(str, (const char*)pstr, plen) == 0 )
             { *out = pstr;
               *outlen = plen;
               ret = SSL_TLSEXT_ERR_OK;
               goto out;
             }
-            i += plen + 1;
-          }
-        } else {
-            PL_domain_error("alpn protocol", av+4);
+          i += plen + 1;
         }
+      } else {
+        PL_domain_error("alpn protocol", av+4);
+      }
 
     out:
       PL_close_foreign_frame(fid);
