@@ -2570,12 +2570,9 @@ ssl_server_alpn_select_cb(SSL *ssl,
        * Prolog somehow?
        */
       int call_ret = PL_call_predicate(config->cb_alpn_proto.module,
-				       PL_Q_PASS_EXCEPTION | PL_Q_EXT_STATUS, call5, av);
+				       PL_Q_PASS_EXCEPTION, call5, av);
       if ( call_ret == PL_S_EXCEPTION || call_ret == PL_S_FALSE )
-      { if ( call_ret == PL_S_EXCEPTION )
-	  PL_clear_exception();
-	goto out;
-      }
+      { goto out; }
 
       PL_SSL *new_config = NULL;
       if ( !get_conf(av+3, &new_config) )
