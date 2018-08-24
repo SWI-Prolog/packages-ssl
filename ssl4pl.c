@@ -2567,7 +2567,8 @@ ssl_server_alpn_select_cb(SSL *ssl,
 	goto out;
 
       if ( !PL_call_predicate(config->cb_alpn_proto.module,
-	                      PL_Q_NORMAL, call5, av) ) goto out;
+	                      PL_Q_PASS_EXCEPTION, call5, av) )
+	goto out;
 
       PL_SSL *new_config = NULL;
       if ( !get_conf(av+3, &new_config) )
@@ -2578,8 +2579,10 @@ ssl_server_alpn_select_cb(SSL *ssl,
 
       char *str;
       size_t olen;
-      if ( PL_get_nchars(av+4, &olen, &str, CVT_ATOM|CVT_STRING|REP_UTF8) )
+      if ( PL_get_nchars(av+4, &olen, &str,
+			 CVT_ATOM|CVT_STRING|REP_UTF8|CVT_EXCEPTION) )
       { unsigned int i = 0;
+
         while (i < inlen)
         { unsigned char plen = in[i];
           const unsigned char *pstr = in + i + 1;
@@ -2591,8 +2594,8 @@ ssl_server_alpn_select_cb(SSL *ssl,
             }
           i += plen + 1;
         }
-      } else {
-        PL_domain_error("alpn protocol", av+4);
+      } else
+      { PL_domain_error("alpn protocol", av+4);
       }
 
     out:
