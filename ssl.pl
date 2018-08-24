@@ -79,7 +79,9 @@
                        peer_cert(boolean),
                        close_parent(boolean),
                        close_notify(boolean),
-                       sni_hook(callable)
+                       sni_hook(callable),
+                       alpn_protocols(any),
+                       alpn_protocol_hook(callable)
                      ]).
 
 /** <module> Secure Socket Layer (SSL) library
@@ -273,6 +275,20 @@ easily be used.
 %     used, which are those of the encompassing ssl_context/3
 %     call. In that case, if no default certificate and key are
 %     specified, the client connection is rejected.
+%     * alpn_protocols(+ListOfProtoIdentifiers)
+%     Provide a list of acceptable ALPN protocol identifiers as atoms.
+%     ALPN support requires OpenSSL 1.0.2 or greater.
+%     * alpn_protocol_hook(:Goal)
+%     This options provides a callback for a server context to use to
+%     select an ALPN protocol. It will be called as follows:
+%
+%     ===
+%     call(Goal, +SSLCtx0, +ListOfClientProtocols, -SSLCtx1, -SelectedProtocol)
+%     ===
+%
+%     If this option is unset and the `alpn_protocols/1` option is
+%     set, then the first common protocol between client & server will
+%     be selected.
 %
 %   @arg Role is one of `server` or `client` and denotes whether the
 %   SSL  instance  will  have  a  server   or  client  role  in  the
@@ -313,11 +329,11 @@ ssl_copy_context(SSL0, SSL) :-
 %   Options.  The following options are supported: close_notify/1,
 %   close_parent/1, host/1, peer_cert/1, ecdh_curve/1,
 %   min_protocol_version/1, max_protocol_version/1,
-%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1. See
-%   ssl_context/3 for more information about these options. This
-%   predicate allows you to tweak existing SSL contexts, which can be
-%   useful in hooks when creating servers with the HTTP
-%   infrastructure.
+%   disable_ssl_methods/1, sni_hook/1, cert_verify_hook/1,
+%   alpn_protocols/1, and alpn_protocol_hook/1. See ssl_context/3 for
+%   more information about these options. This predicate allows you to
+%   tweak existing SSL contexts, which can be useful in hooks when
+%   creating servers with the HTTP infrastructure.
 
 ssl_set_options(SSL0, SSL, Options) :-
     ssl_copy_context(SSL0, SSL),
@@ -392,6 +408,9 @@ ssl_set_options(SSL0, SSL, Options) :-
 %     The SSLv3 session ID. Note that if ECDHE is being used (which
 %     is the default for newer versions of OpenSSL), this data will
 %     not actually be sent to the server.
+%     * alpn_protocol(Protocol)
+%     The negotiated ALPN protocol, if supported. If no protocol was
+%     negotiated, this will be an empty string.
 
 %!  load_certificate(+Stream, -Certificate) is det.
 %

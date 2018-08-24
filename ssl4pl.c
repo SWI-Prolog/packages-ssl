@@ -1,7 +1,7 @@
 /*  Part of SWI-Prolog
 
-    Author:        Jan van der Steen, Jan Wielemaker, Matt Lilley
-		   and Markus Triska
+    Author:        Jan van der Steen, Jan Wielemaker, Matt Lilley,
+		   Markus Triska and James Cash
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
     Copyright (c)  2004-2018, SWI-Prolog Foundation
@@ -96,6 +96,8 @@ static atom_t ATOM_cipher_list;
 static atom_t ATOM_ecdh_curve;
 static atom_t ATOM_root_certificates;
 static atom_t ATOM_sni_hook;
+static atom_t ATOM_alpn_protocols;
+static atom_t ATOM_alpn_protocol_hook;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -141,6 +143,7 @@ static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_unknown1;
+static functor_t FUNCTOR_alpn_protocol1;
 
 typedef enum
 { PL_SSL_NONE
@@ -232,9 +235,12 @@ typedef struct pl_ssl {
     PL_SSL_CALLBACK      cb_cert_verify;
     PL_SSL_CALLBACK      cb_pem_passwd;
     PL_SSL_CALLBACK      cb_sni;
+    PL_SSL_CALLBACK      cb_alpn_proto;
 #ifndef HAVE_X509_CHECK_HOST
     int                  hostname_check_status;
 #endif
+    unsigned char       *alpn_protos;
+    size_t               alpn_protos_len;
 } PL_SSL;
 
 typedef struct ssl_instance {
@@ -1604,9 +1610,12 @@ ssl_new(void)
         new->cb_sni.goal         = NULL;
         new->cb_cert_verify.goal = NULL;
         new->cb_pem_passwd.goal  = NULL;
+        new->cb_alpn_proto.goal  = NULL;
 #ifndef HAVE_X509_CHECK_HOST
         new->hostname_check_status = 0;
 #endif
+        new->alpn_protos         = NULL;
+        new->alpn_protos_len     = 0;
         new->magic                 = SSL_CONFIG_MAGIC;
     }
     ssl_deb(1, "Allocated config structure\n");
@@ -1642,6 +1651,8 @@ ssl_free(PL_SSL *config)
     if (config->cb_sni.goal) PL_erase(config->cb_sni.goal);
     if (config->cb_pem_passwd.goal) PL_erase(config->cb_pem_passwd.goal);
     if (config->cb_cert_verify.goal) PL_erase(config->cb_cert_verify.goal);
+    if (config->cb_alpn_proto.goal) PL_erase(config->cb_alpn_proto.goal);
+    if (config->alpn_protos) free(config->alpn_protos);
 
     free(config);
     ssl_deb(1, "Released config structure\n");
@@ -2512,6 +2523,113 @@ ssl_init_min_max_protocol(PL_SSL *config)
 }
 
 static int
+ssl_server_alpn_select_cb(SSL *ssl,
+			  const unsigned char **out, unsigned char *outlen,
+			  const unsigned char *in, unsigned int inlen,
+			  void *arg)
+{ PL_SSL *config = (PL_SSL*)arg;
+
+  if ( config->cb_alpn_proto.goal )
+  { fid_t fid;
+    int ret = SSL_TLSEXT_ERR_ALERT_FATAL;
+
+    if ( (fid = PL_open_foreign_frame()) )
+    { term_t av, protos_list, protos_list_tail, head;
+      unsigned int in_pos = 0;
+
+      if ( !(av = PL_new_term_refs(5)) ||
+	   !(protos_list = PL_new_term_ref()) ||
+	   !(protos_list_tail = PL_copy_term_ref(protos_list)) ||\
+	   !(head = PL_new_term_ref()) ||
+	   !PL_put_list(protos_list) )
+	goto out;
+
+      while (in_pos < inlen)
+      { unsigned char proto_len = in[in_pos];
+	const unsigned char* proto = in + in_pos + 1;
+
+	if ( !PL_unify_list_ex(protos_list_tail, head, protos_list_tail) ||
+	     !PL_unify_chars(head, PL_ATOM|REP_UTF8, proto_len, (char*)proto) )
+	  goto out;
+	in_pos += proto_len + 1;
+      }
+      if ( !PL_unify_nil(protos_list_tail) )
+	goto out;
+
+      predicate_t call5 = PL_predicate("call", 5, "system");
+
+      /*
+       * call(CB, +SSL0, +ClientProtos, -SSL1, -SelectedProtocol)
+       */
+      if ( !PL_recorded(config->cb_alpn_proto.goal, av+0) ||
+	   !PL_put_atom(av+1, config->atom) ||
+	   !PL_unify(av+2, protos_list) )
+	goto out;
+
+      if ( !PL_call_predicate(config->cb_alpn_proto.module,
+	                      PL_Q_PASS_EXCEPTION, call5, av) )
+	goto out;
+
+      PL_SSL *new_config = NULL;
+      if ( !get_conf(av+3, &new_config) )
+      { PL_warning("alpn_protocol_hook return wrong type");
+	goto out;
+      }
+      SSL_set_SSL_CTX(ssl, new_config ? new_config->ctx : config->ctx);
+
+      char *str;
+      size_t olen;
+      if ( PL_get_nchars(av+4, &olen, &str,
+			 CVT_ATOM|CVT_STRING|REP_UTF8|CVT_EXCEPTION) )
+      { unsigned int i = 0;
+
+        while (i < inlen)
+        { unsigned char plen = in[i];
+          const unsigned char *pstr = in + i + 1;
+          if ( plen == olen && strncmp(str, (const char*)pstr, plen) == 0 )
+            { *out = pstr;
+              *outlen = plen;
+              ret = SSL_TLSEXT_ERR_OK;
+              goto out;
+            }
+          i += plen + 1;
+        }
+      } else
+      { PL_domain_error("alpn protocol", av+4);
+      }
+
+    out:
+      PL_close_foreign_frame(fid);
+    }
+
+    return ret;
+  } else
+  { int ret = SSL_select_next_proto((unsigned char**)out, outlen,
+				    config->alpn_protos, config->alpn_protos_len,
+				    in, inlen);
+    if ( ret == OPENSSL_NPN_NEGOTIATED )
+      return SSL_TLSEXT_ERR_OK;
+    else
+      return SSL_TLSEXT_ERR_ALERT_FATAL;
+  }
+}
+
+static void
+ssl_init_alpn_protos(PL_SSL *config)
+{
+#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
+  if ( config->alpn_protos ||
+       ( config->role == PL_SSL_SERVER && config->cb_alpn_proto.goal ) ) {
+    if ( config->role == PL_SSL_CLIENT ) {
+      SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos, config->alpn_protos_len);
+    } else if ( config->role == PL_SSL_SERVER ) {
+      SSL_CTX_set_alpn_select_cb(config->ctx, &ssl_server_alpn_select_cb, config);
+    }
+  }
+#endif
+}
+
+static int
 set_malleable_options(PL_SSL *config)
 {
 
@@ -2558,6 +2676,7 @@ set_malleable_options(PL_SSL *config)
 
   ssl_init_sni(config);
   ssl_init_min_max_protocol(config);
+  ssl_init_alpn_protos(config);
 
   return TRUE;
 }
@@ -2984,6 +3103,44 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 	return FALSE;
 
       conf->close_notify = val;
+    } else if ( name == ATOM_alpn_protocols && arity == 1 )
+    { term_t protos_tail = PL_new_term_ref();
+      term_t protos_head = PL_new_term_ref();
+      _PL_get_arg(1, head, protos_tail);
+      size_t current_size = 0;
+      unsigned char *protos_vec = NULL;
+      size_t total_length = 0;
+
+      while( PL_get_list_ex(protos_tail, protos_head, protos_tail) )
+      { char *proto;
+	size_t proto_len;
+
+        if ( !PL_get_nchars(protos_head, &proto_len, &proto,
+			    CVT_ATOM|CVT_STRING|CVT_EXCEPTION|REP_UTF8|BUF_RING) )
+          return FALSE;
+        total_length += proto_len + 1;
+        if ( total_length > current_size ) {
+          unsigned char* new_protos_vec = realloc(protos_vec, total_length);
+          if ( new_protos_vec == NULL ) {
+            if ( protos_vec != NULL ) free(protos_vec);
+            return PL_resource_error("memory");
+          } else {
+            protos_vec = new_protos_vec;
+          }
+        }
+        protos_vec[current_size] = proto_len;
+        memcpy(protos_vec + current_size + 1, proto, proto_len);
+        current_size = total_length;
+      }
+      conf->alpn_protos = protos_vec;
+      conf->alpn_protos_len = current_size;
+    } else if ( name == ATOM_alpn_protocol_hook && arity == 1 &&
+                conf->role == PL_SSL_SERVER )
+    { term_t cb = PL_new_term_ref();
+      _PL_get_arg(1, head, cb);
+      if ( conf->cb_alpn_proto.goal ) PL_erase(conf->cb_alpn_proto.goal);
+      conf->cb_alpn_proto.goal = PL_record(cb);
+      conf->cb_alpn_proto.module = module;
     } else
       continue;
   }
@@ -3378,11 +3535,20 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
   ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
   ssl_copy_callback(old->cb_sni, &new->cb_sni);
+  ssl_copy_callback(old->cb_alpn_proto, &new->cb_alpn_proto);
 
   for (idx = 0; idx < old->num_cert_key_pairs; idx++)
   { new->cert_key_pairs[idx].certificate = ssl_strdup(old->cert_key_pairs[idx].certificate);
     new->cert_key_pairs[idx].key = ssl_strdup(old->cert_key_pairs[idx].key);
     new->num_cert_key_pairs++;
+  }
+
+  if ( old->alpn_protos ) {
+    unsigned char *protos_copy = malloc(old->alpn_protos_len * sizeof(unsigned char));
+    if ( protos_copy == NULL )
+      return PL_resource_error("memory");
+    memcpy(old->alpn_protos, protos_copy, old->alpn_protos_len);
+    new->alpn_protos = protos_copy;
   }
 
   return ssl_config(new);
@@ -3620,6 +3786,17 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   PL_free(master_key);
 #endif
 
+#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
+  { const unsigned char *data;
+    unsigned int len;
+    SSL_get0_alpn_selected(ssl, &data, &len);
+    if ( !add_key_string(list_t, FUNCTOR_alpn_protocol1,
+                         len, data)) {
+      goto err;
+    }
+  }
+#endif
+
   SSL_SESSION_free(session);
   return PL_unify_nil_ex(list_t);
 
@@ -3666,6 +3843,8 @@ install_ssl4pl(void)
   MKATOM(tlsv1_3);
   MKATOM(require_crl);
   MKATOM(crl);
+  MKATOM(alpn_protocols);
+  MKATOM(alpn_protocol_hook);
 
   ATOM_minus                = PL_new_atom("-");
 
@@ -3700,6 +3879,7 @@ install_ssl4pl(void)
   FUNCTOR_session_id1       = PL_new_functor(PL_new_atom("session_id"), 1);
   FUNCTOR_client_random1    = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1    = PL_new_functor(PL_new_atom("server_random"), 1);
+  FUNCTOR_alpn_protocol1    = PL_new_functor(PL_new_atom("alpn_protocol"), 1);
   FUNCTOR_system1           = PL_new_functor(PL_new_atom("system"), 1);
   FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
