@@ -2522,6 +2522,9 @@ ssl_init_min_max_protocol(PL_SSL *config)
 #endif
 }
 
+
+#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
+
 static int
 ssl_server_alpn_select_cb(SSL *ssl,
 			  const unsigned char **out, unsigned char *outlen,
@@ -2617,7 +2620,6 @@ ssl_server_alpn_select_cb(SSL *ssl,
 static void
 ssl_init_alpn_protos(PL_SSL *config)
 {
-#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
   if ( config->alpn_protos ||
        ( config->role == PL_SSL_SERVER && config->cb_alpn_proto.goal ) ) {
     if ( config->role == PL_SSL_CLIENT ) {
@@ -2626,8 +2628,9 @@ ssl_init_alpn_protos(PL_SSL *config)
       SSL_CTX_set_alpn_select_cb(config->ctx, &ssl_server_alpn_select_cb, config);
     }
   }
-#endif
 }
+
+#endif /*HAVE_SSL_CTX_SET_ALPN_PROTOS*/
 
 static int
 set_malleable_options(PL_SSL *config)
@@ -2676,7 +2679,9 @@ set_malleable_options(PL_SSL *config)
 
   ssl_init_sni(config);
   ssl_init_min_max_protocol(config);
+#ifdef HAVE_SSL_CTX_SET_ALPN_PROTOS
   ssl_init_alpn_protos(config);
+#endif
 
   return TRUE;
 }
