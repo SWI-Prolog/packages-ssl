@@ -805,6 +805,10 @@ unify_private_key(EVP_PKEY* key, term_t item)
 #define X509_get0_notAfter(C) X509_get_notAfter(C)
 #endif
 
+#ifndef GET0SIG_CONST_T
+#define GET0SIG_CONST_T
+#endif
+
 static int
 unify_certificate(term_t cert, X509* data)
 { term_t list = PL_copy_term_ref(cert);
@@ -2133,6 +2137,7 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 }
 
 
+#if !defined(__WINDOWS__) && !defined(HAVE_SECURITY_SECURITY_H)
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Extract   the   system   certificate   file   from   the   Prolog   flag
 system_cacert_filename
@@ -2166,6 +2171,7 @@ system_cacert_filename(void)
 
   return cacert_filename;
 }
+#endif
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ssl_system_verify_locations() adds trusted  root   certificates  from OS
