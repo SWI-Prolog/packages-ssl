@@ -437,8 +437,8 @@ the mentioned authors, \href{https://www.metalevel.at}{Markus Triska}
 has submitted several patches, and improved and documented the
 integration of this package with the HTTP infrastructure.
 
-\bibliographystyle{plain}
-\bibliography{odbc}
+%\bibliographystyle{plain}
+%\bibliography{ssl}
 
 \printindex
 
