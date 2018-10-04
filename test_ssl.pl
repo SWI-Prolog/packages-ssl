@@ -76,6 +76,15 @@ test_ssl :-
 run_network_tests :-
     \+ getenv('USE_PUBLIC_NETWORK_TESTS', false).
 
+%!  cert_file(+File, -Absolute)
+%
+%   Find an absolute path to the certificates in the `etc` directory.
+
+cert_file(File, Abs) :-
+    source_file(test_ssl, MyFile),
+    file_directory_name(MyFile, MyDir),
+    atomic_list_concat([MyDir, File], /, Abs).
+
 :- begin_tests(https_open, [condition(run_network_tests)]).
 
 test(readme, Title == "# SWI-Prolog SSL interface") :-
@@ -179,17 +188,23 @@ options_errmsg(Options, Msg) :-
 sni(SSL, _, SSL).
 
 test(cert_mismatch, Msg == 'key values mismatch') :-
-    options_errmsg([certificate_file('etc/server/server-cert.pem'),
-                    key_file('etc/client/client-key.pem'),
+    cert_file('etc/server/server-cert.pem', CertFile),
+    cert_file('etc/client/client-key.pem', KeyFile),
+    options_errmsg([certificate_file(CertFile),
+                    key_file(KeyFile),
                     password(apenoot2)], Msg).
 test(cert_mismatch, Msg == 'key values mismatch') :-
-    read_file_to_string('etc/server/server-key.pem', Key, []),
-    read_file_to_string('etc/client/client-cert.pem', Cert, []),
+    cert_file('etc/server/server-key.pem', KeyFile),
+    cert_file('etc/client/client-cert.pem', CertFile),
+    read_file_to_string(KeyFile, Key, []),
+    read_file_to_string(CertFile, Cert, []),
     options_errmsg([certificate_key_pairs([Cert-Key]),
                     password('apenoot1')], Msg).
 test(cert_mismatch, Msg == 'key values mismatch') :-
-    read_file_to_string('etc/server/server-key.pem', Key, []),
-    read_file_to_string('etc/client/client-cert.pem', Cert, []),
+    cert_file('etc/server/server-key.pem', KeyFile),
+    cert_file('etc/client/client-cert.pem', CertFile),
+    read_file_to_string(KeyFile, Key, []),
+    read_file_to_string(CertFile, Cert, []),
     options_errmsg([certificate_key_pairs([Cert-Key]),
                     password('apenoot1'),
                     sni_hook(sni)], Msg).
@@ -197,19 +212,23 @@ test(cert_mismatch, Msg == 'key values mismatch') :-
 % missing certificate (key specified, with and without sni)
 
 test(missing_cert, Msg == 'no certificate assigned') :-
-    options_errmsg([key_file('etc/server/server-key.pem'),
+    cert_file('etc/server/server-key.pem', KeyFile),
+    options_errmsg([key_file(KeyFile),
                     password(apenoot1)], Msg).
 test(missing_cert, Msg == 'no certificate assigned') :-
-    options_errmsg([key_file('etc/server/server-key.pem'),
+    cert_file('etc/server/server-key.pem', KeyFile),
+    options_errmsg([key_file(KeyFile),
                     password(apenoot1),
                     sni_hook(sni)], Msg).
 
 % missing key (certificate specified, with and without sni)
 
 test(missing_key, Msg == 'no private key assigned') :-
-    options_errmsg([certificate_file('etc/server/server-cert.pem')], Msg).
+    cert_file('etc/server/server-cert.pem', CertFile),
+    options_errmsg([certificate_file(CertFile)], Msg).
 test(missing_key, Msg == 'no private key assigned') :-
-    options_errmsg([certificate_file('etc/server/server-cert.pem'),
+    cert_file('etc/server/server-cert.pem', CertFile),
+    options_errmsg([certificate_file(CertFile),
                     sni_hook(sni)], Msg).
 
 :- end_tests(ssl_options).

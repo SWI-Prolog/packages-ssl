@@ -112,13 +112,15 @@ endif()
 
 configure_file(config.h.cmake config.h)
 
+file(COPY tests DESTINATION .)
+
 add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_certs
-    COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR}/tests &&
-	    bash mkcerts.sh > /dev/null 2>&1)
+    OUTPUT  tests/test_certs
+    COMMAND bash mkcerts.sh > /dev/null 2>&1
+    WORKING_DIRECTORY tests)
 add_custom_target(
     test_certificates ALL
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_certs)
+    DEPENDS tests/test_certs)
 
 swipl_plugin(
     ssl4pl
