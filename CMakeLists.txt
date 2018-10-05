@@ -115,12 +115,13 @@ configure_file(config.h.cmake config.h)
 file(COPY tests DESTINATION .)
 
 add_custom_command(
-    OUTPUT  tests/test_certs
+    OUTPUT  tests/test_certs/generated
     COMMAND bash mkcerts.sh > /dev/null 2>&1
+    COMMAND touch test_certs/generated
     WORKING_DIRECTORY tests)
 add_custom_target(
     test_certificates ALL
-    DEPENDS tests/test_certs)
+    DEPENDS tests/test_certs/generated)
 
 swipl_plugin(
     ssl4pl
