@@ -175,7 +175,7 @@ add_compile_options(-D__SWI_PROLOG__
 # FIXME: Merge into packages/pltotex.pl
 add_custom_command(
     OUTPUT  cryptolib.tex
-    COMMAND ${LIBTOTEX} --lib=crypto --module=crypto
+    COMMAND swipl ${LIBTOTEX} --lib=crypto --module=crypto
 	    --outdir=${CMAKE_CURRENT_BINARY_DIR}
             ${CMAKE_CURRENT_SOURCE_DIR}/cryptolib.md
     DEPENDS cryptolib.md crypto.pl)
