@@ -114,6 +114,12 @@ configure_file(config.h.cmake config.h)
 
 file(COPY tests DESTINATION .)
 
+has_package(http HAVE_HTTP)
+
+add_compile_options(-D__SWI_PROLOG__
+		    -DSERVER_CERT_REQUIRED=TRUE
+		    -DCLIENT_CERT_REQUIRED=TRUE)
+
 add_custom_command(
     OUTPUT  tests/test_certs/generated
     COMMAND bash mkcerts.sh > /dev/null 2>&1
@@ -127,11 +133,13 @@ swipl_plugin(
     ssl4pl
     C_SOURCES ssl4pl.c ../clib/nonblockio.c ../clib/error.c
     C_LIBS ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_OS_LIBS}
+    C_INCLUDE_DIR ${OPENSSL_INCLUDE_DIR}
     PL_LIBS ssl.pl)
 swipl_plugin(
     crypto4pl
     C_SOURCES crypto4pl.c ../clib/nonblockio.c ../clib/error.c
     C_LIBS ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_OS_LIBS}
+    C_INCLUDE_DIR ${OPENSSL_INCLUDE_DIR}
     PL_LIBS crypto.pl)
 if(APPLE)
 target_link_libraries(
@@ -139,22 +147,25 @@ target_link_libraries(
     "-framework CoreFoundation"
     "-framework Security")
 endif()
-target_include_directories(
-    plugin_ssl4pl BEFORE PRIVATE
-    ${OPENSSL_INCLUDE_DIR})
-target_include_directories(
-    plugin_crypto4pl BEFORE PRIVATE
-    ${OPENSSL_INCLUDE_DIR})
 
 install_dll(${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
 
 swipl_plugin(
-    ssl_http_plugin
-    PL_LIB_SUBDIR http
-    PL_LIBS http_ssl_plugin.pl)
-swipl_plugin(
     saml
     PL_LIBS saml.pl xmldsig.pl xmlenc.pl)
+
+add_custom_target(ssl)
+add_dependencies(
+    ssl
+    ssl4pl crypto4pl saml)
+
+if(HAVE_HTTP)
+  swipl_plugin(
+      ssl_http_plugin
+      PL_LIB_SUBDIR http
+      PL_LIBS http_ssl_plugin.pl)
+  add_dependencies(ssl ssl_http_plugin)
+endif()
 
 swipl_examples(client.pl server.pl https.pl)
 
@@ -163,14 +174,12 @@ install_src(pkg_ssl_etc
 	    DESTINATION
 	    ${SWIPL_INSTALL_PREFIX}/doc/packages/examples/${SWIPL_PKG})
 
+
+
 test_libs(
     ssl
     PACKAGES clib sgml http
 )
-
-add_compile_options(-D__SWI_PROLOG__
-		    -DSERVER_CERT_REQUIRED=TRUE
-		    -DCLIENT_CERT_REQUIRED=TRUE)
 
 # cryptolib.tex is created using the main manual libttotex.pl
 # FIXME: Merge into packages/pltotex.pl
