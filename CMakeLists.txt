@@ -174,27 +174,18 @@ install_src(pkg_ssl_etc
 	    DESTINATION
 	    ${SWIPL_INSTALL_PREFIX}/doc/packages/examples/${SWIPL_PKG})
 
-
-
 test_libs(
     ssl
     PACKAGES clib sgml http
 )
 
-# cryptolib.tex is created using the main manual libttotex.pl
-# FIXME: Merge into packages/pltotex.pl
-add_custom_command(
-    OUTPUT  cryptolib.tex
-    COMMAND swipl ${LIBTOTEX} --lib=crypto --module=crypto
-	    --outdir=${CMAKE_CURRENT_BINARY_DIR}
-            ${CMAKE_CURRENT_SOURCE_DIR}/cryptolib.md
-    DEPENDS cryptolib.md crypto.pl)
 
 pkg_doc(ssl
 	SOURCES
-	    crypto.doc cryptolib.tex
+	    crypto.doc
 	SECTION
 	    SOURCE ssl.pl ssllib.tex
+	    SOURCE cryptolib.md --lib=crypto --module=crypto
 	SUBSECTION
 	    saml.pl xmldsig.pl xmlenc.pl)
 
