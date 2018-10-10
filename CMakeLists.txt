@@ -143,7 +143,7 @@ swipl_plugin(
     PL_LIBS crypto.pl)
 if(APPLE)
 target_link_libraries(
-    plugin_ssl4pl
+    plugin_ssl4pl PRIVATE
     "-framework CoreFoundation"
     "-framework Security")
 endif()
