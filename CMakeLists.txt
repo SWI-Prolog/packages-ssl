@@ -132,12 +132,14 @@ add_custom_target(
 swipl_plugin(
     ssl4pl
     C_SOURCES ssl4pl.c ../clib/nonblockio.c ../clib/error.c
+    THREADED
     C_LIBS ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_OS_LIBS}
     C_INCLUDE_DIR ${OPENSSL_INCLUDE_DIR}
     PL_LIBS ssl.pl)
 swipl_plugin(
     crypto4pl
     C_SOURCES crypto4pl.c ../clib/nonblockio.c ../clib/error.c
+    THREADED
     C_LIBS ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_OS_LIBS}
     C_INCLUDE_DIR ${OPENSSL_INCLUDE_DIR}
     PL_LIBS crypto.pl)
