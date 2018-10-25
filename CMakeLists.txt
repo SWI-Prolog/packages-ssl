@@ -190,6 +190,6 @@ pkg_doc(ssl
 	    SOURCE cryptolib.md --lib=crypto --module=crypto
 	SUBSECTION
 	    saml.pl xmldsig.pl xmlenc.pl
-        DEPENDS zlib)
+        DEPENDS ssl zlib)
 
 endif(OPENSSL_FOUND)
