@@ -585,6 +585,8 @@ unify_name(term_t term, X509_NAME* name)
 #define EVP_PKEY_base_id(key) ((key)->type)
 #define X509_CRL_get0_nextUpdate(C) X509_CRL_get_nextUpdate(C)
 #ifndef HAVE_X509_CRL_GET0_SIGNATURE
+/* Avoid conflict if the prototype is there, but the function is not */
+#define X509_CRL_get0_signature my_X509_CRL_get0_signature
 static void
 X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig, const X509_ALGOR **palg)
 {
@@ -594,6 +596,8 @@ X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig, const
 #endif
 
 #ifndef HAVE_X509_GET0_SIGNATURE
+/* Avoid conflict if the prototype is there, but the function is not */
+#define X509_get0_signature my_X509_get0_signature
 static void
 X509_get0_signature(const ASN1_BIT_STRING **psig, const X509_ALGOR **palg, const X509 *data)
 {
