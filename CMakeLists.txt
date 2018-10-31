@@ -117,7 +117,7 @@ configure_file(config.h.cmake config.h)
 
 if(OPENSSL AND EXISTS "${OPENSSL}")
   file(COPY tests DESTINATION .)
-  configure_file(tests/mkcerts.sh.in tests/mkcerts.sh)
+  configure_file(tests/mkcerts.sh.in tests/mkcerts.sh @ONLY)
   set(SSL_TESTS ON)
 else()
   message("-- Could not find openssl program.  Skipping ssl tests")
@@ -130,7 +130,7 @@ add_compile_options(-D__SWI_PROLOG__
 		    -DSERVER_CERT_REQUIRED=TRUE
 		    -DCLIENT_CERT_REQUIRED=TRUE)
 
-if(SLL_TESTS)
+if(SSL_TESTS)
   add_custom_command(
       OUTPUT  tests/test_certs/generated
       COMMAND bash mkcerts.sh > /dev/null 2>&1

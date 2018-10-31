@@ -51,7 +51,7 @@ done
 # Hack certificate 15 by changing 5 characters near the end of the certificate to AAAAA.
 # Obviously if they are already AAAAA then this wont work, but that is pretty unlikely.
 # Do not change the last 3 since base64 coding would require us to work out the length of the file and add appropriate number of = signs
-cat test_certs/15-cert.pem | sed '1!G;h;$!d' | sed '2 s@\(.*\).....\(...\)@\1AAAAA\2@' | sed '1!G;h;$!d' > test_certs/15-cert.tmp && mv test_certs/15-cert.tmp test_certs/15-cert.pem
+cat test_certs/15-cert.pem | sed '1!G;h;$!d' | sed '2 s/\(.*\).....\(...\)/\1AAAAA\2/' | sed '1!G;h;$!d' > test_certs/15-cert.tmp && mv test_certs/15-cert.tmp test_certs/15-cert.pem
 
 # Hack certificate 11 to add in some embedded NULLs. The openssl req utility cannot do this, but we can...
 # First, convert PEM -> DER so we can hack on it
