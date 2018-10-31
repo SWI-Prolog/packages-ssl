@@ -6,6 +6,7 @@ AC_CONFIG_HEADER(config.h)
 
 AC_SUBST(TARGETS)
 AC_SUBST(PLTARGETS)
+AC_SUBST(OPENSSL)
 
 m4_include([../ac_swi_c.m4])
 
@@ -30,6 +31,8 @@ case "$PLARCH" in
         fi
 	;;
 esac
+
+AC_PATH_PROG(OPENSSL, openssl)
 
 AC_CHECK_HEADERS(unistd.h sys/types.h sys/time.h sys/select.h fcntl.h)
 AC_CHECK_HEADERS(Security/Security.h)
@@ -176,7 +179,7 @@ else
   AC_MSG_RESULT($SYSTEM_CACERT_FILENAME [(does not exist)])
 fi
 
-AC_OUTPUT(Makefile)
+AC_OUTPUT(Makefile tests/mkcerts.sh)
 
 
 

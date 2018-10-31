@@ -110,9 +110,20 @@ if(NOT DEFINED SYSTEM_CACERT_FILENAME)
       "Location of the system certificate file")
 endif()
 
+find_program(OPENSSL openssl
+	     HINTS ${OPENSSL_ROOT_DIR}/bin)
+message("-- openssl at ${OPENSSL}")
+
 configure_file(config.h.cmake config.h)
 
-file(COPY tests DESTINATION .)
+if(OPENSSL AND EXISTS "${OPENSSL}")
+  file(COPY tests DESTINATION .)
+  configure_file(tests/mkcerts.sh.in tests/mkcerts.sh)
+  set(SSL_TESTS ON)
+else()
+  message("-- Could not find openssl program.  Skipping ssl tests")
+  set(SSL_TESTS OFF)
+endif()
 
 has_package(http HAVE_HTTP)
 
@@ -120,14 +131,16 @@ add_compile_options(-D__SWI_PROLOG__
 		    -DSERVER_CERT_REQUIRED=TRUE
 		    -DCLIENT_CERT_REQUIRED=TRUE)
 
-add_custom_command(
-    OUTPUT  tests/test_certs/generated
-    COMMAND bash mkcerts.sh > /dev/null 2>&1
-    COMMAND touch test_certs/generated
-    WORKING_DIRECTORY tests)
-add_custom_target(
-    test_certificates ALL
-    DEPENDS tests/test_certs/generated)
+if(SLL_TESTS)
+  add_custom_command(
+      OUTPUT  tests/test_certs/generated
+      COMMAND bash mkcerts.sh > /dev/null 2>&1
+      COMMAND touch test_certs/generated
+      WORKING_DIRECTORY tests)
+  add_custom_target(
+      test_certificates ALL
+      DEPENDS tests/test_certs/generated)
+endif()
 
 swipl_plugin(
     ssl4pl
@@ -176,11 +189,12 @@ install_src(pkg_ssl_etc
 	    DESTINATION
 	    ${SWIPL_INSTALL_PREFIX}/doc/packages/examples/${SWIPL_PKG})
 
-test_libs(
-    ssl
-    PACKAGES clib sgml http
-)
-
+if(SSL_TESTS)
+  test_libs(
+      ssl
+      PACKAGES clib sgml http
+  )
+endif()
 
 pkg_doc(ssl
 	SOURCES
