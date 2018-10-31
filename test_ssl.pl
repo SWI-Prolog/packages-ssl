@@ -3,8 +3,9 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2013-2016, University of Amsterdam
+    Copyright (c)  2013-2018, University of Amsterdam
                               VU University Amsterdam
+                              CWI, Amsterdam
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -273,7 +274,8 @@ ssl_server :-
                  *******************************/
 
 :- dynamic
-    stop_server/0.
+    stop_server/0,
+    server_port/1.
 
 make_server(SSL, Socket) :-
     ssl_context(server, SSL,
@@ -285,10 +287,12 @@ make_server(SSL, Socket) :-
 %                     password('apenoot1'),
                   pem_password_hook(get_server_pwd)
                 ]),
-    Port = 1111,
+%   Port = 1111,
     tcp_socket(Socket),
     tcp_setopt(Socket, reuseaddr),
     tcp_bind(Socket, localhost:Port),
+    retractall(server_port(_)),
+    asserta(server_port(Port)),
     tcp_listen(Socket, 5).
 
 server_loop(SSL, Server) :-
@@ -361,7 +365,7 @@ client :-
     client_loop(SSL).
 
 client_loop(SSL) :-
-    Port = 1111,
+    server_port(Port),
     tcp_connect(localhost:Port, StreamPair, []),
     stream_pair(StreamPair, Read, Write),
     ssl_negotiate(SSL, Read, Write, In, Out),
@@ -416,22 +420,29 @@ get_client_pwd(_SSL, "apenoot2") :-
 
 :- dynamic
     certificate_verification_result/1,
-    stop_server/1.
+    stop_server/1,
+    test_port/1.
 
+:- meta_predicate
+    do_verification_test(+, 0, -, -).
 
 do_verification_test(Key, Goal, VerificationResults, Status) :-
+%   Port = 2443,
     retractall(stop_server(_)),
     tcp_socket(ServerFd),
     tcp_setopt(ServerFd, reuseaddr),
-    tcp_bind(ServerFd, 2443),
+    tcp_bind(ServerFd, Port),
     tcp_listen(ServerFd, 5),
-    ( setup_call_cleanup(thread_create(verification_server(Key, ServerFd, Id), Id, []),
-                         catch(Goal,
-                               Exception,
-                               Status = error(Exception)),
-                         stop_verification_server(Id))->
-        ignore(Status = true)
-    ; Status = fail
+    retractall(test_port(_)),
+    asserta(test_port(Port)),
+    (   setup_call_cleanup(
+            thread_create(verification_server(Key, ServerFd, Id), Id, []),
+            catch(Goal,
+                  Exception,
+                  Status = error(Exception)),
+            stop_verification_server(Id))
+    ->  ignore(Status = true)
+    ;   Status = fail
     ),
     findall(VerificationResult,
             retract(certificate_verification_result(VerificationResult)),
@@ -440,7 +451,8 @@ do_verification_test(Key, Goal, VerificationResults, Status) :-
 stop_verification_server(Id):-
     assert(stop_server(Id)),
     tcp_socket(S),
-    catch((tcp_connect(S, localhost:2443, Read, Write),
+    test_port(Port),
+    catch((tcp_connect(S, localhost:Port, Read, Write),
            close(Write, [force(true)]),
            close(Read, [force(true)])),
           _,
@@ -490,15 +502,22 @@ dispatch_client(SSL, PlainIn, PlainOut):-
     flush_output(SSLOut),
     call_cleanup(close(SSLOut), close(SSLIn)).
 
-try_ssl_client(Hostname, Port, Hook):-
-    try_ssl_client(Hostname, Port, Hook, []).
+:- meta_predicate
+    try_ssl_client(+, 5),
+    try_ssl_client(+, 5, +).
 
-try_ssl_client(Hostname, Port, Hook, Options):-
+try_ssl_client(Hostname, Hook):-
+    try_ssl_client(Hostname, Hook, []).
+
+try_ssl_client(Hostname, Hook, Options):-
+    test_port(Port),
     ssl_context(client, SSL,
                 [ host(Hostname),
                   port(Port),
                   cert_verify_hook(Hook),
-                  cacert_file('tests/test_certs/rootCA/cacert.pem')|Options]),
+                  cacert_file('tests/test_certs/rootCA/cacert.pem')
+                | Options
+                ]),
     % Always connect to localhost
     verify_client(localhost:Port, SSL).
 
@@ -557,34 +576,34 @@ test_crl_hook(_SSL, Cert, _Chain, _Tail, revoked):-
 
 
 test('Valid certificate, correct hostname in CN, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
-    do_verification_test(1, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(1, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, correct hostname in SAN, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
-    do_verification_test(2, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(2, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, incorrect hostname in CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
-    do_verification_test(3, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(3, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, incorrect hostname in SAN and CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
-    do_verification_test(4, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(4, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, correct wildcard hostname in SAN, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
-    do_verification_test(5, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(5, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, incorrect wildcard hostname in SAN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
-    do_verification_test(6, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(6, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, wildcard hostname in SAN with wildcard too high, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
-    do_verification_test(7, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(7, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, wildcard hostname in SAN with wildcard too low, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
-    do_verification_test(8, try_ssl_client('www.bad.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(8, try_ssl_client('www.bad.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, wildcard hostname in SAN with wildcard in right level of domain, signed by trusted CA', VerificationResults:Status == [verified, verified]:true):-
-    do_verification_test(9, try_ssl_client('www.good.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(9, try_ssl_client('www.good.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Valid certificate, illegal wildcard hostname in CN, signed by trusted CA', VerificationResults:Status == [hostname_mismatch, verified, verified]:true):-
-    do_verification_test(10, try_ssl_client('www.good.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(10, try_ssl_client('www.good.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Hostname containing embedded NULL, signed by trusted CA',
      [ true(VerificationResults:Status ==
@@ -592,16 +611,16 @@ test('Hostname containing embedded NULL, signed by trusted CA',
        condition((size_file('tests/test_certs/11-cert.pem', Size),
                   Size > 0))
      ]):-
-    do_verification_test(11, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(11, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [verified, expired, verified]:true):-
-    do_verification_test(12, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(12, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate which is not yet valid, signed by trusted CA', VerificationResults:Status == [verified, not_yet_valid, verified]:true):-
-    do_verification_test(13, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(13, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate is not issued by trusted CA'):-
-    do_verification_test(14, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status),
+    do_verification_test(14, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status),
     ( VerificationResults:Status == [unknown_issuer, unknown_issuer]:true ->
         % OpenSSL 1.0.2 and above
         true
@@ -611,60 +630,60 @@ test('Certificate is not issued by trusted CA'):-
     ).
 
 test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [verified, bad_signature, verified]:true):-
-    do_verification_test(15, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(15, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate is not intended for SSL', VerificationResults:Status == [bad_certificate_use, verified, verified]:true):-
-    do_verification_test(17, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(17, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate signed not-explicitly-trusted intermediary requiring us to follow the chain', VerificationResults:Status == [verified, verified, verified]:true):-
-    do_verification_test(18, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(18, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Chain involving expired intermediary', VerificationResults:Status == [verified, expired, verified, verified]:true):-
-    do_verification_test(20, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(20, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Chain involving not-yet-valid intermediary', VerificationResults:Status == [verified, not_yet_valid, verified, verified]:true):-
-    do_verification_test(21, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(21, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Chain involving intermediary not authorized to sign certificates', VerificationResults:Status == [invalid_ca, bad_certificate_use, verified, verified, verified]:true):-
-    do_verification_test(22, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(22, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Confirm that a failure in the verification callback triggers a connection abort', Status = error(_)):-
-    do_verification_test(17, try_ssl_client('www.example.com', 2443, fail_verify_hook), _, Status).
+    do_verification_test(17, try_ssl_client('www.example.com', fail_verify_hook), _, Status).
 
 test('Confirm that an exception in the verification callback triggers a connection abort', Status = error(_)):-
-    do_verification_test(17, try_ssl_client('www.example.com', 2443, abort_verify_hook), _, Status).
+    do_verification_test(17, try_ssl_client('www.example.com', abort_verify_hook), _, Status).
 
 
 test('Certificate has a CRL but has not been revoked. We do not provide the CRL', VerificationResults:Status == [unknown_crl, unknown_crl, verified, verified]:true):-
-    do_verification_test(23, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true)]), VerificationResults, Status).
+    do_verification_test(23, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true)]), VerificationResults, Status).
 
 test('Certificate has a CRL but has not been revoked. We do provide the CRL', VerificationResults:Status == [verified, verified]:true):-
-    do_verification_test(23, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    do_verification_test(23, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
 
 test('Certificate has a CRL and has been revoked. We do not provide the CRL', VerificationResults:Status == [unknown_crl, unknown_crl, verified, verified]:true):-
-    do_verification_test(24, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true)]), VerificationResults, Status).
+    do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true)]), VerificationResults, Status).
 
 test('Certificate has a CRL and has been revoked. We do provide the CRL', VerificationResults:Status == [revoked, verified, verified]:true):-
-    do_verification_test(24, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
 
 test('Certificate has a CRL but we want to ignore it', VerificationResults:Status == [verified, verified]:true):-
-    do_verification_test(24, try_ssl_client('www.example.com', 2443, test_verify_hook), VerificationResults, Status).
+    do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate has an illegal CRL', VerificationResults:Status == [bad_certificate_use, verified, verified, verified]:true):-
-    do_verification_test(25, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/25-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    do_verification_test(25, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/25-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
 
 test('Intermediate CA has revoked the certificate', VerificationResults:Status == [revoked, verified, verified, verified]:true):-
-    do_verification_test(26, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/26-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    do_verification_test(26, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/26-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
 
 test('root CA has revoked the intermediate CA', VerificationResults:Status == [revoked, verified, verified, verified]:true):-
-    do_verification_test(27, try_ssl_client('www.example.com', 2443, test_verify_hook, [require_crl(true), crl(['tests/test_certs/27-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    do_verification_test(27, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/27-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
 
 
 test('Accept a non-revoked certificate ourselves in a callback', VerificationResults:Status == []:true):-
-    do_verification_test(23, try_ssl_client('www.example.com', 2443, test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    do_verification_test(23, try_ssl_client('www.example.com', test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
 
 test('Reject a revoked certificate ourselves in a callback', Status = error(_)):-
-    do_verification_test(24, try_ssl_client('www.example.com', 2443, test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), _, Status).
+    do_verification_test(24, try_ssl_client('www.example.com', test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), _, Status).
 
 % It would be really nice if there were some way of adding the CRL to the context and retrying, but I dont think this is possible.
 % Looking at the code in x509_vfy.c, once the callback is called for X509_V_ERR_UNABLE_TO_GET_CRL, regardless of the callback status, it goes to err, skipping the
