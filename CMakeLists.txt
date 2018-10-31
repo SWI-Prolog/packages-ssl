@@ -112,7 +112,6 @@ endif()
 
 find_program(OPENSSL openssl
 	     HINTS ${OPENSSL_ROOT_DIR}/bin)
-message("-- openssl at ${OPENSSL}")
 
 configure_file(config.h.cmake config.h)
 
