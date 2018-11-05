@@ -40,3 +40,4 @@ ssl.html
 ssl.pdf
 .gdbinit
 summaries.d
+mkcerts.pl

@@ -24,6 +24,10 @@ main(Argv) :-
     ->  debug(mkcerts)
     ;   true
     ),
+    (   option(dest(Dir), Options)
+    ->  working_directory(_, Dir)
+    ;   true
+    ),
     option(source(SrcDir), Options),
     make_ssl_test_data(SrcDir, test_certs).
 
