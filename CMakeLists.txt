@@ -116,8 +116,7 @@ find_program(OPENSSL openssl
 configure_file(config.h.cmake config.h)
 
 if(OPENSSL AND EXISTS "${OPENSSL}")
-  file(COPY tests DESTINATION .)
-  configure_file(tests/mkcerts.sh.in tests/mkcerts.sh @ONLY)
+  configure_file(mkcerts.pl.in mkcerts.pl @ONLY)
   set(SSL_TESTS ON)
 else()
   message("-- Could not find openssl program.  Skipping ssl tests")
@@ -133,7 +132,8 @@ add_compile_options(-D__SWI_PROLOG__
 if(SSL_TESTS)
   add_custom_command(
       OUTPUT  tests/test_certs/generated
-      COMMAND bash mkcerts.sh > /dev/null 2>&1
+      COMMAND swipl ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
+                    --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
       COMMAND touch test_certs/generated
       WORKING_DIRECTORY tests)
   add_custom_target(

@@ -1,0 +1,381 @@
+:- module(mkcerts,
+          [ make_ssl_test_data/0,
+            make_ssl_test_data/2        % +SrcDir, +CertDir
+          ]).
+
+:- use_module(library(process)).
+:- use_module(library(apply)).
+:- use_module(library(lists)).
+:- use_module(library(filesex)).
+:- use_module(library(pure_input)).
+:- use_module(library(readutil)).
+:- use_module(library(main)).
+:- use_module(library(option)).
+:- use_module(library(debug)).
+:- use_module(library(dcg/basics)).
+
+:- initialization(main, main).
+
+openssl_executable('@OPENSSL@').
+
+main(Argv) :-
+    argv_options(Argv, _, Options),
+    (   option(debug(true), Options)
+    ->  debug(mkcerts)
+    ;   true
+    ),
+    option(source(SrcDir), Options),
+    make_ssl_test_data(SrcDir, test_certs).
+
+make_ssl_test_data :-
+    make_ssl_test_data('../../../packages/ssl/tests', test_certs).
+
+make_ssl_test_data(SrcDir, TestDir) :-
+    clean_output(TestDir),
+    make_ca(TestDir/rootCA, file(SrcDir/'rootCA.cnf'), [], -selfsign),
+    simple_signed_certs(SrcDir, TestDir),
+    make_14(SrcDir, TestDir),
+    modify_11(SrcDir, TestDir),
+    modify_15(SrcDir, TestDir),
+
+    forall(between(18,22,I), intermediary_cert(SrcDir, TestDir, I)),
+    forall(between(23,24,I), crl_cert(SrcDir, TestDir, I)),
+
+    % Certificate 23 has a CRL but has not been revoked
+    % Certificate 24 has a CRL and HAS been revoked
+    openssl([ca, -config, file(SrcDir/'24.cnf'),
+             -revoke, file(TestDir/'24-cert.pem'), -batch, -notext,
+             -key, apenoot]),
+
+    % Certificates 25-27 needs their own CA
+    forall(between(25,27,I), own_ca(SrcDir, TestDir, I)),
+
+    % Revoke the 27 CA certificate from the root
+    openssl([ca, -config, file(SrcDir/'27.cnf'), -revoke,
+             file(TestDir/'27_CA'/'cacert.pem'), -batch,
+             -notext, -key, apenoot]),
+    % Revoke the 26 tail certificate from the 26 CA
+    openssl([ca, -config, file(SrcDir/'26_tail.cnf'),
+             -revoke, file(TestDir/'26-tail-cert.pem'), -batch,
+             -notext, -key, apenoot]),
+    % Generate the root CRL
+    openssl([ca, -config, file(SrcDir/'23.cnf'), -gencrl,
+             -out, file(TestDir/'rootCA-crl.pem')]),
+    % Generate the 25-27 CA CRLS
+    forall(between(25,27,I),
+           openssl([ ca, -config, file(SrcDir/(I+'_tail.cnf')), -gencrl,
+                     -out, file(TestDir/I+'-crl.pem')])),
+
+    % Finally, generate the certificates for all the pre-existing tests:
+    % The server
+    openssl([ req, -new, -config, file(SrcDir/'server.cnf'),
+              -out, file('server.csr'), -nodes,
+              -keyout, file(TestDir/'server-key.pem')]),
+    openssl([ ca, -config, file(SrcDir/'server.cnf'), -batch, -notext,
+              -key, apenoot, -policy, policy_anything,
+              -out, file(TestDir/'server-cert.pem'),
+              -infiles, file('server.csr')]),
+    % The client
+    openssl([ req, -new, -config, file(SrcDir/'client.cnf'),
+              -out, file('client.csr'), -nodes,
+              -keyout, file(TestDir/'client-key.pem')]),
+    openssl([ ca, -config, file(SrcDir/'client.cnf'), -batch, -notext,
+              -key, apenoot, -policy, policy_anything,
+              -out, file(TestDir/'client-cert.pem'),
+              -infiles, file('client.csr')]).
+
+own_ca(SrcDir, TestDir, I) :-
+    atom_concat(I, '_CA', CA),
+    atom_concat(I, '.cnf', Config),
+    make_ca(TestDir/CA, file(SrcDir/Config), [-nodes], []),
+
+    % Generate a CSR (All of these tests relate to the
+    % intermediate CA, not the certificate at the end of the chain)
+    openssl([ req, -new, -config, file(SrcDir/(I+'_tail.cnf')),
+              -out, file(I+'.csr'), -nodes,
+              -keyout, file(TestDir/(I+'-key.pem'))]),
+    % Sign the CSR. We need our own config here because we
+    % want copy_extensions on so we can preserve SubjectAltNames
+    openssl([ ca, -config, file(SrcDir/(I+'_tail.cnf')), -notext, -batch,
+              -key, apenoot, -policy, policy_anything,
+              -out, file(TestDir/(I+'-tail-cert.pem')),
+              -infiles, file(I+'.csr')]),
+    % Finally put the CA and the server cert into one file
+    cat_files([ TestDir/(I+'-tail-cert.pem'),
+                TestDir/(I+'_CA/cacert.pem')
+              ],
+              TestDir/(I+'-cert.pem')).
+
+
+crl_cert(SrcDir, TestDir, I) :-
+    openssl([ req, -new, -config, file(SrcDir/(I+'.cnf')),
+              -out, file(I+'.csr'), -nodes,
+              -keyout, file(TestDir/I+'-key.pem')]),
+    openssl([ ca, -config, file(SrcDir/(I+'.cnf')), -batch, -notext,
+              -key, apenoot, -policy, policy_anything,
+              -out, file(TestDir/(I+'-cert.pem')),
+              -infiles, file(I+'.csr')]).
+
+
+intermediary_cert(SrcDir, TestDir, I) :-
+    atom_concat(I, '_CA', CA),
+    atom_concat(I, '.cnf', Config),
+    make_ca(TestDir/CA, file(SrcDir/Config), [-nodes], []),
+
+    % Generate a CSR (All of these tests relate to the intermediate
+    % CA, not the certificate at the end of the chain
+    openssl([ req, -new, -config, file(SrcDir/(I+'_tail.cnf')),
+              -out, file(I+'.csr'), -nodes,
+              -keyout, file(TestDir/(I+'-key.pem'))]),
+    % Sign the CSR. We need our own config here because we want
+    % copy_extensions on so we can preserve SubjectAltNames
+    openssl([ ca, -config, file(SrcDir/(I+'_tail.cnf')), -notext, -batch,
+              -key, apenoot, -policy, policy_anything,
+              -out, file(TestDir/(I+'-tail-cert.pem')),
+              -infiles, file(I+'.csr')]),
+    % Finally put the CA and the server cert into one file
+    cat_files([ TestDir/(I+'-tail-cert.pem'),
+                TestDir/(I+'_CA/cacert.pem')
+              ],
+              TestDir/(I+'-cert.pem')).
+
+
+%!  modify_11(SrcDir, TestDir)
+%
+%   Hack certificate 11 to add in some   embedded NULLs. The openssl req
+%   utility cannot do this, but we can...
+
+modify_11(SrcDir, TestDir) :-
+    % First, convert PEM -> DER so we can hack on it
+    openssl([ req, -in, file('11.csr'), -out, file('11.der'),
+              -outform, 'DER']),
+    % Then substitute  0x4E,0x55,0x4C,0x4C for the word 0,0,0,0
+    read_file_to_codes('11.der', Codes, [type(binary)]),
+    once(append(Prefix, [0x4E,0x55,0x4C,0x4C|T], Codes)),
+    append(Prefix, [0,0,0,0|T], NewCodes),
+    create_file('11-modified.der', NewCodes, [type(binary)]),
+    % Next we must update the signature. First, get the stuff which is hashed
+    openssl([ asn1parse, -in, file('11-modified.der'), -inform, der,
+              -strparse, 4, -out, '11-hashdata.der']),
+    % Then sign it using our private key
+    openssl([ dgst, -sha256, -sign, file(TestDir/'11-key.pem'),
+              -out, '11-signature.der', '11-hashdata.der' ]),
+    % Then grab the bit of the modified file which is not the
+    % signature and overwrite the original certificate
+    read_but_n_bytes_from_file('11-modified.der', 256, Der11),
+    read_file_to_codes('11-signature.der', Sig11, [type(binary)]),
+    append(Der11, Sig11, Der11b),
+    create_file('11.der', Der11b, [type(binary)]),
+    % Convert back to PEM
+    openssl([ req, -outform, 'PEM', -inform, 'DER',
+              -in, file('11.der'), -out, file('11.csr')]),
+    % Then re-sign it as if nothing unusual has just happened. Easy.
+    openssl([ ca, -config, file(SrcDir/'11.cnf'), -batch, -key, apenoot,
+              -policy, policy_anything,
+              -out, file(TestDir/'11-cert.pem'), -infiles, file('11.csr')]).
+
+
+%!  make_14(+SrcDir, +TestDir)
+%
+%   14 is to be signed by a completely different CA.
+
+make_14(SrcDir, TestDir) :-
+    make_ca(TestDir/'14_CA', file(SrcDir/'14.cnf'), [-nodes], [-selfsign]),
+    I = 14,
+    make_csr(TestDir, I, file(SrcDir/(I+'_tail.cnf'))),
+    sign_csr(TestDir, I, file(SrcDir/(I+'_tail.cnf'))).
+
+%!  modify_15(+SrcDir, +TestDir)
+%
+%   Hack certificate 15 by changing 5  characters   near  the end of the
+%   certificate to AAAAA. Obviously if they  are already AAAAA then this
+%   wont work, but that is pretty  unlikely.   Do  not change the last 3
+%   since base64 coding would require us to   work out the length of the
+%   file and add appropriate number of = signs
+
+modify_15(_SrcDir, TestDir) :-
+    path_file(TestDir/'15-cert.pem', File),
+    phrase_from_file(modify_15(New), File),
+    create_file(File, New).
+
+modify_15(New) -->
+    string(Prefix),
+    [_,_,_,_,_],
+    [A,B,C],
+    `\n-----END CERTIFICATE-----\n`,
+    !,
+    { append([ Prefix, `AAAAA`, [A,B,C],
+               `\n-----END CERTIFICATE-----\n`
+             ], New)
+    }.
+
+
+
+
+% Certificates 1-17 are all signed by the CA, except 14
+
+simple_signed_certs(SrcDir, TestDir) :-
+    forall(( between(1,17,I), I \== 14 ),
+           ( make_csr(TestDir, I, file(SrcDir/(I+'.cnf'))),
+             sign_csr(TestDir, I, file(SrcDir/(I+'.cnf'))) )).
+
+
+make_csr(TestDir, I, Config) :-
+    openssl([ req, -new,
+              -config, Config, -out, file(I+'.csr'),
+              -nodes, -keyout, file(TestDir/(I+'-key.pem'))]).
+
+sign_csr(TestDir, I, Config) :-
+    openssl([ ca, -config, Config, -batch, -notext, -key, apenoot,
+              -policy, policy_anything,
+              -out, file(TestDir/(I+'-cert.pem')),
+              -infiles, file(I+'.csr')]).
+
+
+
+%!  make_ca(+Spec, +Config, +Options1, +Options2)
+%
+%   Create a root CA in Dir.
+
+make_ca(Spec, Config, Options1, Options2) :-
+    path_file(Spec, Dir),
+    forall(ca_dir(SubDir),
+           (   directory_file_path(Dir, SubDir, Path),
+               make_directory_path(Path))),
+    touch(Dir/'index.txt'),
+    create_file(Dir/crlnumber, "01\n"),
+    create_file(Dir/serial,    "1000\n"),
+
+    openssl([req, -new, -config, Config, Options1, % HACK
+             -keyout, file(Dir/'private/cakey.pem'),
+             -out, file(Dir/'careq.pem')]),
+
+    openssl([ca, -config, Config, -notext, -create_serial, Options2,
+             -batch, -key, apenoot, -extensions, v3_ca,
+             -out, file(Dir/'cacert.pem'),
+             -infiles, file(Dir/'careq.pem')]).
+
+ca_dir(certs).
+ca_dir(crl).
+ca_dir(newcerts).
+ca_dir(private).
+
+openssl(Args) :-
+    flatten(Args, Args1),
+    maplist(process_arg, Args1, Args2),
+    debug(mkcerts, 'openssl(~q)', [Args2]),
+    (   openssl_executable(OpenSSL)
+    ->  true
+    ;   OpenSSL = path(openssl)
+    ),
+    process_create(OpenSSL, Args2,
+                   [ stderr(pipe(Error)),
+                     stdout(null),
+                     process(PID)
+                   ]),
+    read_string(Error, _, ErrorMsg),
+    process_wait(PID, Status),
+    (   Status == exit(0)
+    ->  true
+    ;   throw(error(openssl_error(Status, ErrorMsg), _))
+    ).
+
+process_arg(-Arg, Opt) :-
+    !,
+    atom_concat(-, Arg, Opt).
+process_arg(file(Path), file(File)) :-
+    !,
+    path_file(Path, File).
+process_arg(Arg, Arg).
+
+%!  path_file(+Segments, -File)
+%
+%   Expand a term a/b/.. into a file name.  Each segment can be a term
+%   A+B+...
+
+path_file(Segments, File) :-
+    must_be(ground, Segments),
+    phrase(segment_list(Segments), List),
+    atomic_list_concat(List, File).
+
+segment_list(A/B) -->
+    !,
+    segment_list(A),
+    [/],
+    segment_list(B).
+segment_list(A+B) -->
+    !,
+    segment_list(A),
+    segment_list(B).
+segment_list(A) -->
+    [A].
+
+%!  create_file(+Path, +Content) is det.
+%
+%   Create a file at Path that contains Content.
+
+create_file(Path, Content) :-
+    create_file(Path, Content, []).
+
+create_file(Path, Content, Options) :-
+    path_file(Path, File),
+    setup_call_cleanup(
+        open(File, write, Out, Options),
+        format(Out, '~s', [Content]),
+        close(Out)).
+
+touch(Path) :-
+    path_file(Path, File),
+    setup_call_cleanup(
+        open(File, update, Out),
+        true,
+        close(Out)).
+
+clean_output(Dir) :-
+    exists_directory(Dir),
+    !,
+    delete_directory_and_contents(Dir).
+clean_output(_).
+
+%!  read_but_n_bytes_from_file(+File, +Count, -Bytes)
+
+read_but_n_bytes_from_file(File, Count, Bytes) :-
+    size_file(File, Size),
+    Read is Size - Count,
+    setup_call_cleanup(
+        open(File, read, In, [type(binary)]),
+        read_string(In, Read, String),
+        close(In)),
+    string_codes(String, Bytes).
+
+
+%!  cat_files(+Files, +Output)
+
+cat_files(Files, Output) :-
+    path_file(Output, OutFile),
+    setup_call_cleanup(
+        open(OutFile, write, Out, [type(binary)]),
+        maplist(cat_into(Out), Files),
+        close(Out)).
+
+cat_into(Out, Path) :-
+    path_file(Path, File),
+    setup_call_cleanup(
+        open(File, read, In, [type(binary)]),
+        copy_stream_data(In, Out),
+        close(In)).
+
+
+		 /*******************************
+		 *             MESSAGES		*
+		 *******************************/
+
+:- multifile prolog:error_message//1.
+
+prolog:error_message(openssl_error(Status, Message)) -->
+    { split_string(Message, "\n", "", Lines) },
+    [ 'openssl failed with status ~p'-[Status], nl ],
+    lines(Lines).
+
+lines([]) --> [].
+lines([H|T]) --> [nl, '~s'-[H]], lines(T).

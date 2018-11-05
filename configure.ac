@@ -179,7 +179,7 @@ else
   AC_MSG_RESULT($SYSTEM_CACERT_FILENAME [(does not exist)])
 fi
 
-AC_OUTPUT(Makefile tests/mkcerts.sh)
+AC_OUTPUT(Makefile mkcerts.pl)
 
 
 
