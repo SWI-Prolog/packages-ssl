@@ -135,7 +135,8 @@ if(SSL_TESTS)
       COMMAND swipl ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
                     --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
       COMMAND touch test_certs/generated
-      WORKING_DIRECTORY tests)
+      WORKING_DIRECTORY tests
+      DEPENDS prolog_products)
   add_custom_target(
       test_certificates ALL
       DEPENDS tests/test_certs/generated)
