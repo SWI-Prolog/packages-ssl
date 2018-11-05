@@ -110,7 +110,7 @@ if(NOT DEFINED SYSTEM_CACERT_FILENAME)
       "Location of the system certificate file")
 endif()
 
-find_program(OPENSSL openssl
+find_program(OPENSSL openssl${CMAKE_EXECUTABLE_SUFFIX}
 	     HINTS ${OPENSSL_ROOT_DIR}/bin)
 
 configure_file(config.h.cmake config.h)
