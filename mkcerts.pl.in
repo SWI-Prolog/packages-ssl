@@ -50,7 +50,7 @@
 
 :- initialization(main, main).
 
-openssl_executable('@OPENSSL@').
+openssl_executable('@PROG_OPENSSL@').
 
 /** <module> Create SSL test certificates
 

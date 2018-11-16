@@ -110,12 +110,21 @@ if(NOT DEFINED SYSTEM_CACERT_FILENAME)
       "Location of the system certificate file")
 endif()
 
-find_program(OPENSSL openssl${CMAKE_EXECUTABLE_SUFFIX}
-	     HINTS ${OPENSSL_ROOT_DIR}/bin)
+if(CMAKE_CROSSCOMPILING)
+  find_program(PROG_OPENSSL openssl${CMAKE_HOST_EXECUTABLE_SUFFIX}
+	       PATHS /usr/bin /bin /usr/sbin /sbin
+		     /opt/local/bin /opt/local/sbin
+		     /usr/local/bin /usr/local/sbin
+	       NO_DEFAULT_PATH)
+else()
+  find_program(PROG_OPENSSL openssl${CMAKE_EXECUTABLE_SUFFIX}
+	       HINTS ${OPENSSL_ROOT_DIR}/bin)
+endif()
 
 configure_file(config.h.cmake config.h)
 
-if(OPENSSL AND EXISTS "${OPENSSL}")
+if(PROG_OPENSSL)
+  message("-- Using ${PROG_OPENSSL} to create test certifications")
   configure_file(mkcerts.pl.in mkcerts.pl @ONLY)
   set(SSL_TESTS ON)
 else()
