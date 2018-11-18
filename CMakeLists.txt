@@ -138,7 +138,8 @@ add_compile_options(-D__SWI_PROLOG__
 		    -DSERVER_CERT_REQUIRED=TRUE
 		    -DCLIENT_CERT_REQUIRED=TRUE)
 
-if(SSL_TESTS)
+# We want to do SSL tests directly on the target platform
+if(SSL_TESTS AND NOT CMAKE_CROSSCOMPILING)
   add_custom_command(
       OUTPUT  tests/test_certs/generated
       COMMAND ${CMAKE_COMMAND} -E make_directory tests
