@@ -113,7 +113,11 @@ endif()
 configure_file(config.h.cmake config.h)
 
 if(BUILD_TESTING)
-  if(CMAKE_CROSSCOMPILING)
+  if(NOT PROG_OPENSSL)
+    set(prog_openssl_new ON)
+  endif()
+
+  if(CMAKE_CROSSCOMPILING AND SWIPL_NATIVE_FRIEND)
     find_program(PROG_OPENSSL openssl${CMAKE_HOST_EXECUTABLE_SUFFIX}
 		 PATHS /usr/bin /bin /usr/sbin /sbin
 		       /opt/local/bin /opt/local/sbin
@@ -125,7 +129,9 @@ if(BUILD_TESTING)
   endif()
 
   if(PROG_OPENSSL)
-    message("-- Using ${PROG_OPENSSL} to create test certifications")
+    if(prog_openssl_new)
+      message("-- Using ${PROG_OPENSSL} to create test certifications")
+    endif()
     configure_file(mkcerts.pl.in mkcerts.pl @ONLY)
     set(SSL_TESTS ON)
   else()
@@ -133,13 +139,15 @@ if(BUILD_TESTING)
     set(SSL_TESTS OFF)
   endif()
 
+  unset(prog_openssl_new)
+
   if(SSL_TESTS)
     add_custom_command(
 	OUTPUT  tests/test_certs/generated
 	COMMAND ${CMAKE_COMMAND} -E make_directory tests
-	COMMAND swipl ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
-		      --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
-		      --dest=tests
+	COMMAND ${PROG_SWIPL} ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
+		              --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
+		              --dest=tests
 	COMMAND touch tests/test_certs/generated
 	DEPENDS prolog_products)
     add_custom_target(
