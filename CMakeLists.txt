@@ -110,47 +110,54 @@ if(NOT DEFINED SYSTEM_CACERT_FILENAME)
       "Location of the system certificate file")
 endif()
 
-if(CMAKE_CROSSCOMPILING)
-  find_program(PROG_OPENSSL openssl${CMAKE_HOST_EXECUTABLE_SUFFIX}
-	       PATHS /usr/bin /bin /usr/sbin /sbin
-		     /opt/local/bin /opt/local/sbin
-		     /usr/local/bin /usr/local/sbin
-	       NO_DEFAULT_PATH)
-else()
-  find_program(PROG_OPENSSL openssl${CMAKE_EXECUTABLE_SUFFIX}
-	       HINTS ${OPENSSL_ROOT_DIR}/bin)
-endif()
-
 configure_file(config.h.cmake config.h)
 
-if(PROG_OPENSSL)
-  message("-- Using ${PROG_OPENSSL} to create test certifications")
-  configure_file(mkcerts.pl.in mkcerts.pl @ONLY)
-  set(SSL_TESTS ON)
-else()
-  message("-- Could not find openssl program.  Skipping ssl tests")
-  set(SSL_TESTS OFF)
-endif()
+if(BUILD_TESTING)
+  if(CMAKE_CROSSCOMPILING)
+    find_program(PROG_OPENSSL openssl${CMAKE_HOST_EXECUTABLE_SUFFIX}
+		 PATHS /usr/bin /bin /usr/sbin /sbin
+		       /opt/local/bin /opt/local/sbin
+		       /usr/local/bin /usr/local/sbin
+		 NO_DEFAULT_PATH)
+  else()
+    find_program(PROG_OPENSSL openssl${CMAKE_EXECUTABLE_SUFFIX}
+		 HINTS ${OPENSSL_ROOT_DIR}/bin)
+  endif()
+
+  if(PROG_OPENSSL)
+    message("-- Using ${PROG_OPENSSL} to create test certifications")
+    configure_file(mkcerts.pl.in mkcerts.pl @ONLY)
+    set(SSL_TESTS ON)
+  else()
+    message("-- Could not find openssl program.  Skipping ssl tests")
+    set(SSL_TESTS OFF)
+  endif()
+
+  if(SSL_TESTS)
+    add_custom_command(
+	OUTPUT  tests/test_certs/generated
+	COMMAND ${CMAKE_COMMAND} -E make_directory tests
+	COMMAND swipl ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
+		      --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
+		      --dest=tests
+	COMMAND touch tests/test_certs/generated
+	DEPENDS prolog_products)
+    add_custom_target(
+	test_certificates ALL
+	DEPENDS tests/test_certs/generated)
+
+    test_libs(
+	ssl
+	PACKAGES clib sgml http
+    )
+  endif()
+endif(BUILD_TESTING)
 
 has_package(http HAVE_HTTP)
 
 add_compile_options(-D__SWI_PROLOG__
 		    -DSERVER_CERT_REQUIRED=TRUE
 		    -DCLIENT_CERT_REQUIRED=TRUE)
-
-if(SSL_TESTS)
-  add_custom_command(
-      OUTPUT  tests/test_certs/generated
-      COMMAND ${CMAKE_COMMAND} -E make_directory tests
-      COMMAND swipl ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
-                    --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
-		    --dest=tests
-      COMMAND touch tests/test_certs/generated
-      DEPENDS prolog_products)
-  add_custom_target(
-      test_certificates ALL
-      DEPENDS tests/test_certs/generated)
-endif()
 
 swipl_plugin(
     ssl4pl
@@ -198,13 +205,6 @@ install_src(pkg_ssl_etc
 	    DIRECTORY etc
 	    DESTINATION
 	    ${SWIPL_INSTALL_PREFIX}/doc/packages/examples/${SWIPL_PKG})
-
-if(SSL_TESTS)
-  test_libs(
-      ssl
-      PACKAGES clib sgml http
-  )
-endif()
 
 pkg_doc(ssl
 	SOURCES
