@@ -145,7 +145,7 @@ if(BUILD_TESTING)
     add_custom_command(
 	OUTPUT  tests/test_certs/generated
 	COMMAND ${CMAKE_COMMAND} -E make_directory tests
-	COMMAND ${PROG_SWIPL} ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
+	COMMAND ${PROG_SWIPL} -f none ${CMAKE_CURRENT_BINARY_DIR}/mkcerts.pl
 		              --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
 		              --dest=tests
 	COMMAND touch tests/test_certs/generated
