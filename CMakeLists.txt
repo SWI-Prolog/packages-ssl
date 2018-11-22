@@ -122,6 +122,7 @@ if(BUILD_TESTING)
 		 PATHS /usr/bin /bin /usr/sbin /sbin
 		       /opt/local/bin /opt/local/sbin
 		       /usr/local/bin /usr/local/sbin
+		 NO_CMAKE_FIND_ROOT_PATH                   # Do not search cross compiling paths
 		 NO_DEFAULT_PATH)
   else()
     find_program(PROG_OPENSSL openssl${CMAKE_EXECUTABLE_SUFFIX}
@@ -130,7 +131,7 @@ if(BUILD_TESTING)
 
   if(PROG_OPENSSL)
     if(prog_openssl_new)
-      message("-- Using ${PROG_OPENSSL} to create test certifications")
+      message("-- Using ${PROG_OPENSSL} to create ssl test certificates")
     endif()
     configure_file(mkcerts.pl.in mkcerts.pl @ONLY)
     set(SSL_TESTS ON)
