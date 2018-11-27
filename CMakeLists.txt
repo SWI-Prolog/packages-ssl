@@ -150,7 +150,7 @@ if(BUILD_TESTING)
 		              --source=${CMAKE_CURRENT_SOURCE_DIR}/tests
 		              --dest=tests
 	COMMAND touch tests/test_certs/generated
-	DEPENDS prolog_products)
+	DEPENDS prolog_products clib)
     add_custom_target(
 	test_certificates ALL
 	DEPENDS tests/test_certs/generated)
