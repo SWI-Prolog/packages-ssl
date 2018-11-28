@@ -73,7 +73,8 @@ main(Argv) :-
     ;   true
     ),
     option(source(SrcDir), Options),
-    make_ssl_test_data(SrcDir, test_certs).
+    make_ssl_test_data(SrcDir, test_certs),
+    clean_old(test_certs).
 
 make_ssl_test_data :-
     make_ssl_test_data('../../../packages/ssl/tests', test_certs).
@@ -412,6 +413,17 @@ cat_into(Out, Path) :-
         open(File, read, In, [type(binary)]),
         copy_stream_data(In, Out),
         close(In)).
+
+%!  clean_old(Dir) is det.
+%
+%   Remove *.old files from the certificates.
+
+clean_old(Dir) :-
+    forall(directory_member(Dir, OldFile,
+                            [ recursive(true),
+                              matches('*.old')
+                            ]),
+           delete_file(OldFile)).
 
 
 		 /*******************************
