@@ -158,6 +158,8 @@ if(BUILD_TESTING)
     test_libs(
 	ssl
 	PACKAGES clib sgml http
+	TEST_FILES_REGEX
+	"ssl/https.pl$|etc/server/.*$|etc/client/.*$|test_certs/.*"
     )
   endif()
 endif(BUILD_TESTING)

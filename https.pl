@@ -24,10 +24,14 @@
 % different locations of some of  the  files   in  the  source  tree and
 % examples tree.
 
-:- if(exists_source('../http/examples/demo_body')).
-:- use_module('../http/examples/demo_body').    % location in source tree
+:- prolog_load_context(directory, D),
+   asserta(user:file_search_path(library, D)),
+   atom_concat(D, '/..', DD),
+   asserta(user:file_search_path(library, DD)).
+:- if(exists_source(library(http/examples/demo_body))).
+:- use_module(library(http/examples/demo_body)).    % location in source tree
 :- else.
-:- use_module('../http/demo_body').             % location in demo tree
+:- use_module(library(http/demo_body)).             % location in demo tree
 :- endif.
 :- use_module(library(http/thread_httpd)).
 :- if(exists_source(library(http/http_ssl_plugin))).
