@@ -48,6 +48,10 @@
 :- asserta(user:file_search_path(foreign, '../http')).
 :- asserta(user:file_search_path(foreign, '../sgml')).
 
+:- prolog_load_context(directory, D),
+   asserta(user:file_search_path(library, D)),
+   atom_concat(D, '/..', DD),
+   asserta(user:file_search_path(library, DD)).
 :- use_module(library(plunit)).
 :- use_module(library(ssl)).
 :- use_module(library(crypto)).
@@ -55,7 +59,7 @@
 :- use_module(library(error)).
 :- use_module(library(readutil)).
 :- use_module(library(socket)).
-:- use_module(https).
+:- use_module(library(https)).
 
 %:- debug(connection).
 %:- debug(certificate).
