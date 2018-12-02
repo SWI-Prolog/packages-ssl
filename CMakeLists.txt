@@ -158,9 +158,16 @@ if(BUILD_TESTING)
     test_libs(
 	ssl
 	PACKAGES clib sgml http
-	TEST_FILES_REGEX
-	"ssl/https.pl$|etc/server/.*$|etc/client/.*$|test_certs/.*"
     )
+
+    if(INSTALL_TESTS)
+      install(FILES https.pl
+	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl)
+      install(DIRECTORY etc
+	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl)
+      install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/tests
+	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl)
+    endif()
   endif()
 endif(BUILD_TESTING)
 
