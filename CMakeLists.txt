@@ -94,6 +94,7 @@ check_struct_has_member(X509_VERIFY_PARAM id openssl/ssl.h
 
 if(NOT DEFINED SYSTEM_CACERT_FILENAME)
   set(CERT_CANDIDATES
+      /data/data/com.termux/files/usr/etc/tls/cert.pem
       /etc/ssl/certs/ca-certificates.crt
       /etc/pki/tls/certs/ca-bundle.crt
       /etc/ssl/ca-bundle.pem
@@ -106,8 +107,8 @@ if(NOT DEFINED SYSTEM_CACERT_FILENAME)
     endif()
   endforeach()
   set(SYSTEM_CACERT_FILENAME ${SYSTEM_CACERT_FILENAME}
-      CACHE INTERNAL
-      "Location of the system certificate file")
+      CACHE STRING
+      "Location of the system TLS root certificate file")
 endif()
 
 configure_file(config.h.cmake config.h)
