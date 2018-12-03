@@ -2871,6 +2871,14 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
     { case SSL_PL_OK:
         ssl_deb(1, "established ssl connection\n");
         *instancep = instance;
+#if defined(TLS1_3_VERSION) && defined(EPIPE)
+	if ( config->role == PL_SSL_SERVER &&
+	     strcmp(SSL_get_version(instance->ssl), "TLSv1.3") == 0 &&
+	     SSL_get_error(instance->ssl, 0) == SSL_ERROR_SYSCALL &&
+	     errno == EPIPE )
+	{ Sclearerr(swrite); PL_clear_exception();
+	}
+#endif
         return TRUE;
       case SSL_PL_RETRY:
         ssl_deb(1, "retry ssl connection\n");
