@@ -50,14 +50,11 @@
 #include <openssl/dh.h>
 #define NEED_BIO 1
 #define NEED_SSL_ERR 1
-#define NEED_SSL_SET_DEBUG 1
 #include "cryptolib.c"
 
 #ifdef LIBRESSL_VERSION_NUMBER
 #undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */
 #endif
-
-#include "../clib/nonblockio.h"
 
 #define SSL_CONFIG_MAGIC 0x539dbe3a
 #ifndef SYSTEM_CACERT_FILENAME
@@ -2770,14 +2767,6 @@ ssl_lib_init(void)
 #ifdef __SWI_PROLOG__
     FUNCTOR_error2     = PL_new_functor(PL_new_atom("error"),     2);
     FUNCTOR_ssl_error4 = PL_new_functor(PL_new_atom("ssl_error"), 4);
-
-    /*
-     * Initialize the nonblockio library
-     */
-    if ( !nbio_init("ssl4pl") )         /* DLL name */
-    { ssl_err("Could not initialise nbio module\n");
-      return -1;
-    }
 #endif
 
     return 0;
@@ -2789,10 +2778,6 @@ ssl_lib_exit(void)
  * One-time library exit calls
  */
 {
-#ifdef __SWI_PROLOG__
-    nbio_cleanup();
-#endif
-
     return 0;
 }
 
@@ -3410,13 +3395,13 @@ pl_ssl_control(void *handle, int action, void *data)
 #else
     case SIO_GETFILENO:
       { if (instance->sread != NULL)
-        {  SOCKET fd = Sfileno(instance->sread);
-           SOCKET *fdp = data;
+        {  int fd = Sfileno(instance->sread);
+           int *fdp = data;
            *fdp = fd;
            return 0;
         } else if (instance->swrite != NULL)
-        {  SOCKET fd = Sfileno(instance->swrite);
-           SOCKET *fdp = data;
+        {  int fd = Sfileno(instance->swrite);
+           int *fdp = data;
            *fdp = fd;
            return 0;
         }

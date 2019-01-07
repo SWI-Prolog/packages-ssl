@@ -1922,6 +1922,17 @@ crypto_lib_exit(void)
     return 0;
 }
 
+static foreign_t
+crypto_set_debug(term_t level)
+{ int l;
+
+  if ( !PL_get_integer_ex(level, &l) )
+    return FALSE;
+
+  ssl_set_debug(l);
+
+  return TRUE;
+}
 
 		 /*******************************
 		 *	     INSTALL		*
@@ -2008,6 +2019,8 @@ install_crypto4pl(void)
                       pl_crypto_curve_generator, 0);
   PL_register_foreign("_crypto_curve_scalar_mult", 6,
                       pl_crypto_curve_scalar_mult, 0);
+  PL_register_foreign("crypto_set_debug", 1,
+		      crypto_set_debug, 0);
 
   /*
    * Initialize crypto library

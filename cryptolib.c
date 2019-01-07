@@ -176,19 +176,22 @@ ssl_err(char *fmt, ...)
 }
 #endif
 
-#ifdef NEED_SSL_SET_DEBUG
+static int ssl_debug_level = 0;
+
 static int
 ssl_set_debug(int level)
-{ return nbio_debug(level);
+{ int old = ssl_debug_level;
+
+  ssl_debug_level = level;
+  return old;
 }
-#endif
 
 
 static void
 ssl_deb(int level, char *fmt, ...)
 {
 #if DEBUG
-    if ( nbio_debug(-1) >= level )
+    if ( ssl_debug_level >= level )
     { va_list argpoint;
 
       fprintf(stderr, "Debug: ");

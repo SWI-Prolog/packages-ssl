@@ -57,12 +57,6 @@
 #undef HAVE_SECURITY_SECURITY_H
 #endif
 #define perror(x) Sdprintf("%s: %s\n", x, strerror(errno));
-
-/*
- * Remap socket related calls to nonblockio library
- */
-#include "../clib/nonblockio.h"
-#define closesocket     nbio_closesocket
 #else   /* __SWI_PROLOG__ */
 #define Soutput         stdout
 #define Serror          stderr
