@@ -37,7 +37,8 @@
 
 #include "cryptolib.h"
 
-#if !defined(HAVE_OPENSSL_ZALLOC) && !defined(OPENSSL_zalloc)
+/* OPENSSL_zalloc is only used in the EVP_MD_CTX_new defined below */
+#if !defined(HAVE_OPENSSL_ZALLOC) && !defined(OPENSSL_zalloc) && !defined(HAVE_EVP_MD_CTX_FREE)
 static void *
 OPENSSL_zalloc(size_t num)
 { void *ret = OPENSSL_malloc(num);
