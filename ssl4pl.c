@@ -2212,48 +2212,53 @@ ssl_system_verify_locations(void)
 #elif defined(HAVE_SECURITY_SECURITY_H) /* __APPLE__ */
   SecKeychainRef keychain = NULL;
   OSStatus status;
-  status = SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &keychain);
-  if ( status == errSecSuccess )
-  { CFDictionaryRef query = NULL;
-    CFArrayRef certs = NULL;
-    CFArrayRef keychainSingleton = CFArrayCreate(NULL, (const void **)&keychain, 1, &kCFTypeArrayCallBacks);
-    const void *keys[] =   {kSecClass,            kSecMatchSearchList,  kSecMatchTrustedOnly, kSecReturnRef,  kSecMatchLimit,    kSecMatchValidOnDate};
-    const void *values[] = {kSecClassCertificate, keychainSingleton,    kCFBooleanTrue,       kCFBooleanTrue, kSecMatchLimitAll, kCFNull};
-    CFIndex i;
-    CFIndex count;
-    query = CFDictionaryCreate(NULL,
-                               keys,
-                               values,
-                               6,
-                               &kCFTypeDictionaryKeyCallBacks,
-                               &kCFTypeDictionaryValueCallBacks);
-    status = SecItemCopyMatching(query, (CFTypeRef *)&certs);
-    if (status == errSecSuccess)
-    { count = CFArrayGetCount(certs);
-      for (i = 0; i < count; i++)
-      { const void *cert = CFArrayGetValueAtIndex(certs, i);
-        CFDataRef cert_data = NULL;
-        const unsigned char *der;
-        unsigned long cert_data_length;
-        X509 *x509 = NULL;
-
-        cert_data = SecCertificateCopyData((SecCertificateRef)cert);
-        der = CFDataGetBytePtr(cert_data);
-        cert_data_length = CFDataGetLength(cert_data);
-        x509 = d2i_X509(NULL, &der, cert_data_length);
-        CFRelease(cert_data);
-        if ( x509 )
-        { if ( !sk_X509_push(system_certs, x509) )
-          { ok = FALSE;
-            break;
+  const char* keystoreLocations[] = {"/System/Library/Keychains/SystemRootCertificates.keychain",
+                                     "/Library/Keychains/System.keychain",
+                                     NULL};
+  for (const char** keystoreLocation = keystoreLocations; *keystoreLocation; keystoreLocation++)
+  { status = SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &keychain);
+    if ( status == errSecSuccess )
+    { CFDictionaryRef query = NULL;
+      CFArrayRef certs = NULL;
+      CFArrayRef keychainSingleton = CFArrayCreate(NULL, (const void **)&keychain, 1, &kCFTypeArrayCallBacks);
+      const void *keys[] =   {kSecClass,            kSecMatchSearchList,  kSecMatchTrustedOnly, kSecReturnRef,  kSecMatchLimit,    kSecMatchValidOnDate};
+      const void *values[] = {kSecClassCertificate, keychainSingleton,    kCFBooleanTrue,       kCFBooleanTrue, kSecMatchLimitAll, kCFNull};
+      CFIndex i;
+      CFIndex count;
+      query = CFDictionaryCreate(NULL,
+                                 keys,
+                                 values,
+                                 6,
+                                 &kCFTypeDictionaryKeyCallBacks,
+                                 &kCFTypeDictionaryValueCallBacks);
+      status = SecItemCopyMatching(query, (CFTypeRef *)&certs);
+      if (status == errSecSuccess)
+      { count = CFArrayGetCount(certs);
+        for (i = 0; i < count; i++)
+        { const void *cert = CFArrayGetValueAtIndex(certs, i);
+          CFDataRef cert_data = NULL;
+          const unsigned char *der;
+          unsigned long cert_data_length;
+          X509 *x509 = NULL;
+  
+          cert_data = SecCertificateCopyData((SecCertificateRef)cert);
+          der = CFDataGetBytePtr(cert_data);
+          cert_data_length = CFDataGetLength(cert_data);
+          x509 = d2i_X509(NULL, &der, cert_data_length);
+          CFRelease(cert_data);
+          if ( x509 )
+          { if ( !sk_X509_push(system_certs, x509) )
+            { ok = FALSE;
+              break;
+            }
           }
         }
+        CFRelease(certs);
       }
-      CFRelease(certs);
+      CFRelease(query);
+      CFRelease(keychainSingleton);
+      CFRelease(keychain);
     }
-    CFRelease(query);
-    CFRelease(keychainSingleton);
-    CFRelease(keychain);
   }
 #else
 { const char *cacert_filename;
