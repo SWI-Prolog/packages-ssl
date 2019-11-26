@@ -2216,7 +2216,7 @@ ssl_system_verify_locations(void)
                                      "/Library/Keychains/System.keychain",
                                      NULL};
   for (const char** keystoreLocation = keystoreLocations; *keystoreLocation; keystoreLocation++)
-  { status = SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &keychain);
+  { status = SecKeychainOpen(*keystoreLocation, &keychain);
     if ( status == errSecSuccess )
     { CFDictionaryRef query = NULL;
       CFArrayRef certs = NULL;
