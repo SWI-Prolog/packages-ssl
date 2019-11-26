@@ -95,6 +95,8 @@ static atom_t ATOM_root_certificates;
 static atom_t ATOM_sni_hook;
 static atom_t ATOM_alpn_protocols;
 static atom_t ATOM_alpn_protocol_hook;
+static atom_t ATOM_raw;
+static atom_t ATOM_prolog;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -1037,6 +1039,66 @@ unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
   return retval && PL_unify_nil(list);
 }
 
+static int
+release_cert(atom_t atom)
+{ X509 **cert = PL_blob_data(atom, NULL, NULL);
+  X509_free(*cert);
+  return TRUE;
+}
+
+static int
+write_cert(IOSTREAM *s, atom_t symbol, int flags)
+{ X509 **cert = PL_blob_data(symbol, NULL, NULL);
+  Sfprintf(s, "<certificate>(%p)", cert);
+  return TRUE;
+}
+
+static PL_blob_t certificate_type =
+{ PL_BLOB_MAGIC,
+  PL_BLOB_NOCOPY,
+  "certificate",
+  release_cert,
+  NULL,
+  write_cert,
+  NULL
+};
+
+static int
+put_certificate_blob(term_t Cert, X509* cert)
+{ term_t blob = PL_new_term_ref();
+  PL_put_blob(blob, cert, sizeof(void*), &certificate_type);
+  return PL_unify(Cert, blob);
+}
+
+static int
+get_certificate_blob(term_t Cert, X509** cert)
+{ PL_blob_t* type;
+  if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
+    return TRUE;
+  return PL_type_error("certificate", Cert);
+}
+
+static int
+get_certificate_blobs(term_t Certs, STACK_OF(X509) **certs)
+{ term_t tail = PL_copy_term_ref(Certs);
+  term_t head = PL_new_term_ref();
+  *certs = sk_X509_new_null();
+  int rc = 1;
+
+  while( rc && PL_get_list_ex(tail, head, tail) )
+  {
+    X509* cert;
+    rc &= get_certificate_blob(head, &cert);
+    rc &= sk_X509_push(*certs, cert);
+  }
+  rc &= PL_get_nil_ex(tail);
+  if (!rc)
+  { sk_X509_free(*certs);
+    *certs = NULL;
+  }
+  return rc;
+}
+
 
 static foreign_t
 pl_load_public_key(term_t source, term_t key_t)
@@ -1134,12 +1196,15 @@ pl_load_crl(term_t source, term_t list)
 }
 
 static foreign_t
-pl_load_certificate(term_t source, term_t cert)
+pl_load_certificate(term_t source, term_t cert, term_t Format)
 { X509* x509;
   BIO* bio;
   IOSTREAM* stream;
   int c = 0;
+  atom_t format;
 
+  if ( !PL_get_atom_ex(Format, &format) )
+    return FALSE;
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
   bio = BIO_new(bio_read_method());
@@ -1154,13 +1219,216 @@ pl_load_certificate(term_t source, term_t cert)
   PL_release_stream(stream);
   if (x509 == NULL)
     return raise_ssl_error(ERR_get_error());
-  if (unify_certificate(cert, x509))
-  { X509_free(x509);
-    PL_succeed;
-  } else
-  { X509_free(x509);
-    PL_fail;
+  if ( format == ATOM_raw )
+    return put_certificate_blob(cert, x509);
+  else if ( format == ATOM_prolog )
+  { int rc = unify_certificate(cert, x509);
+    X509_free(x509);
+    return rc;
   }
+  else
+    return PL_domain_error("certificate_format", Format);
+}
+
+static foreign_t
+pl_certificate_subject(term_t Certificate, term_t Subject)
+{ X509* cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  return unify_name(Subject, X509_get_subject_name(cert));
+}
+
+static foreign_t
+pl_certificate_issuer(term_t Certificate, term_t Issuer)
+{ X509* cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  return unify_name(Issuer, X509_get_issuer_name(cert));
+}
+
+static foreign_t
+pl_certificate_version(term_t Certificate, term_t Version)
+{ X509* cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  return PL_unify_integer(Version, X509_get_version(cert));
+}
+
+static foreign_t
+pl_certificate_serial(term_t Certificate, term_t Serial)
+{ X509* cert;
+  BIO * mem = NULL;
+  long n;
+  int rc = 0;
+  unsigned char *p;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+
+  if ((mem = BIO_new(BIO_s_mem())) != NULL)
+  { i2a_ASN1_INTEGER(mem, X509_get_serialNumber(cert));
+    if ((n = BIO_get_mem_data(mem, &p)) > 0)
+    { BIO_vfree(mem);
+      rc = PL_unify_atom_nchars(Serial, (size_t)n, (char*)p);
+    }
+    BIO_vfree(mem);
+    return FALSE;
+  }
+  return FALSE;
+}
+
+
+static foreign_t
+pl_certificate_not_before(term_t Certificate, term_t NotBefore)
+{ X509* cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  return unify_asn1_time(NotBefore, X509_get0_notBefore(cert));
+}
+
+static foreign_t
+pl_certificate_not_after(term_t Certificate, term_t NotAfter)
+{ X509* cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  return unify_asn1_time(NotAfter, X509_get0_notAfter(cert));
+}
+
+
+static foreign_t
+pl_certificate_public_key(term_t Certificate, term_t PublicKey)
+{ X509* cert;
+  EVP_PKEY *key;
+  int rc;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  key = X509_get_pubkey(cert);
+
+  rc = unify_public_key(key, PublicKey);
+  EVP_PKEY_free(key);
+  return rc;
+}
+
+static foreign_t
+pl_certificate_crls(term_t Certificate, term_t CRLs)
+{ X509* cert;
+  unsigned int crl_ext_id;
+  X509_EXTENSION * crl_ext = NULL;
+
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  
+  crl_ext_id = X509_get_ext_by_NID(cert, NID_crl_distribution_points, -1);
+  crl_ext = X509_get_ext(cert, crl_ext_id);
+  if (crl_ext != NULL)
+  { STACK_OF(DIST_POINT) * distpoints;
+    int i, j;
+    term_t crl;
+    term_t crl_list;
+    term_t crl_item;
+
+    distpoints = X509_get_ext_d2i(cert, NID_crl_distribution_points, NULL, NULL);
+    /* Loop through the CRL points, putting them into a list */
+    crl = PL_new_term_ref();
+    crl_list = PL_copy_term_ref(crl);
+    crl_item = PL_new_term_ref();
+
+    for (i = 0; i < sk_DIST_POINT_num(distpoints); i++)
+    { DIST_POINT *point;
+      GENERAL_NAME *name;
+      point = sk_DIST_POINT_value(distpoints, i);
+      if (point->distpoint != NULL)
+      { /* Each point may have several names? May as well put them all in */
+        for (j = 0; j < sk_GENERAL_NAME_num(point->distpoint->name.fullname); j++)
+        { name = sk_GENERAL_NAME_value(point->distpoint->name.fullname, j);
+          if (name != NULL && name->type == GEN_URI)
+          { if (!(PL_unify_list(crl_list, crl_item, crl_list) &&
+                  PL_unify_atom_chars(crl_item, (const char *)name->d.ia5->data)))
+            {
+              CRL_DIST_POINTS_free(distpoints);
+              return FALSE;
+            }
+          }
+        }
+      }
+    }
+    CRL_DIST_POINTS_free(distpoints);
+    return PL_unify_nil(crl_list) && PL_unify(CRLs, crl);
+  }
+  else
+  { /* No CRL */
+    return PL_unify_nil(CRLs);
+  }
+}
+
+static foreign_t
+pl_certificate_san(term_t Certificate, term_t SANs)
+{ X509* cert;
+  unsigned int san_ext_id;
+  X509_EXTENSION * san_ext = NULL;
+
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  san_ext_id = X509_get_ext_by_NID(cert, NID_subject_alt_name, -1);
+  san_ext = X509_get_ext(cert, san_ext_id);
+  if (san_ext != NULL)
+  { STACK_OF(GENERAL_NAME) *san_names = NULL;
+    GENERAL_NAME *name;
+    term_t san, san_list, san_item;
+    int i;
+
+    san_names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
+    /* Loop through the SANs, putting them into a list */
+    san = PL_new_term_ref();
+    san_list = PL_copy_term_ref(san);
+    san_item = PL_new_term_ref();
+    for (i = 0; i < sk_GENERAL_NAME_num(san_names); i++)
+    { name = sk_GENERAL_NAME_value(san_names, i);
+      if (name != NULL && name->type == GEN_DNS)
+      { if (!(PL_unify_list(san_list, san_item, san_list) &&
+	      PL_unify_atom_chars(san_item, (char*)ASN1_STRING_data(name->d.dNSName))))
+	{ sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
+	  return FALSE;
+	}
+      }
+    }
+    sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
+    return PL_unify_nil(san_list) && PL_unify(SANs, san);
+  }
+  else
+  { /* No SAN */
+    return PL_unify_nil(SANs);
+  }
+}
+
+static foreign_t
+pl_verify_certificate_issuer(term_t Certificate, term_t IssuerCertificate)
+{ X509* cert, *issuer_cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  if ( !get_certificate_blob(IssuerCertificate, &issuer_cert) )
+    return FALSE;
+  return X509_check_issued(issuer_cert, cert);
+}
+
+
+static foreign_t
+pl_write_certificate(term_t Sink, term_t Cert, term_t Options)
+{ X509* x509;
+  BIO* bio;
+  IOSTREAM* stream;
+  int rc;
+
+  if ( !get_certificate_blob(Cert, &x509) )
+    return FALSE;
+  if ( !PL_get_stream_handle(Sink, &stream) )
+    return FALSE;
+
+  bio = BIO_new(bio_write_method());
+  BIO_set_ex_data(bio, 0, stream);
+  rc = PEM_write_bio_X509(bio, x509);
+  BIO_free(bio);
+  PL_release_stream(stream);
+  return rc;
 }
 
 
@@ -3645,6 +3913,65 @@ pl_system_root_certificates(term_t list)
   return PL_unify_nil(tail);
 }
 
+
+static foreign_t
+pl_verify_certificate(term_t Cert, term_t Chain, term_t Roots)
+{ X509* cert = NULL;
+  X509_STORE_CTX* ctx = NULL;
+  X509_STORE* store = NULL;
+  STACK_OF(X509) *chain = NULL;
+  STACK_OF(X509) *roots = NULL;
+  int rc = 1;
+  int index = 0;
+
+  if ( !get_certificate_blob(Cert, &cert))
+    return FALSE;
+
+  if ( PL_is_functor(Roots, FUNCTOR_system1) )
+  { _PL_get_arg(1, Roots, Roots);
+    atom_t a;
+
+    if ( !PL_get_atom_ex(Roots, &a) )
+      return FALSE;
+    if ( a == ATOM_root_certificates )
+      roots = system_root_certificates();
+    else
+      return PL_domain_error("certificate_list", Roots);
+  } else if ( !get_certificate_blobs(Roots, &roots))
+    return FALSE;
+
+  if ( !get_certificate_blobs(Chain, &chain))
+    rc = FALSE;
+
+  rc &= ((ctx = X509_STORE_CTX_new()) != NULL);
+  rc &= ((store = X509_STORE_new()) != NULL);
+
+  /* Add roots to store */
+  if (rc)
+  { for ( index = 0; index < sk_X509_num(roots); index++ )
+      X509_STORE_add_cert(store, sk_X509_value(roots, index));
+    Sdprintf("Added %d certificates to the store\n", index);
+
+    rc &= X509_STORE_CTX_init(ctx, store, cert, chain);
+    rc &= X509_verify_cert(ctx);
+    if (rc <= 0)
+      { char msg[1024];
+	ERR_error_string(X509_STORE_CTX_get_error(ctx), &msg[0]);
+	Sdprintf("Failed to verify certificate: %s (%d)\n", msg, rc);
+      }
+  }
+  if (store != NULL)
+    X509_STORE_free(store);
+  if (ctx != NULL)
+    X509_STORE_CTX_free(ctx);
+  if (chain != NULL)
+    sk_X509_free(chain);
+
+  if (roots != NULL && roots != system_root_store)
+    sk_X509_free(roots);
+  return rc;
+}
+
 static int
 get_ssl_stream(term_t stream_t, IOSTREAM **locked, IOSTREAM **ssl)
 { IOSTREAM *stream, *ssl_stream;
@@ -3858,6 +4185,8 @@ install_ssl4pl(void)
   MKATOM(crl);
   MKATOM(alpn_protocols);
   MKATOM(alpn_protocol_hook);
+  MKATOM(raw);
+  MKATOM(prolog);
 
   ATOM_minus                = PL_new_atom("-");
 
@@ -3911,10 +4240,23 @@ install_ssl4pl(void)
   PL_register_foreign("ssl_peer_certificate_chain",
                                         2, pl_ssl_peer_certificate_chain, 0);
   PL_register_foreign("load_crl",       2, pl_load_crl,      0);
-  PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
+  PL_register_foreign("load_certificate",3,pl_load_certificate,      0);
+  PL_register_foreign("write_certificate",3,pl_write_certificate,      0);
+  PL_register_foreign("verify_certificate",3,pl_verify_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
+
+  PL_register_foreign("certificate_subject", 2, pl_certificate_subject, 0);
+  PL_register_foreign("certificate_issuer", 2, pl_certificate_issuer, 0);
+  PL_register_foreign("certificate_version", 2, pl_certificate_version, 0);
+  PL_register_foreign("certificate_serial", 2, pl_certificate_serial, 0);
+  PL_register_foreign("certificate_not_before", 2, pl_certificate_not_before, 0);
+  PL_register_foreign("certificate_not_after", 2, pl_certificate_not_after, 0);
+  PL_register_foreign("certificate_public_key", 2, pl_certificate_public_key, 0);
+  PL_register_foreign("certificate_crls", 2, pl_certificate_crls, 0);
+  PL_register_foreign("certificate_san", 2, pl_certificate_san, 0);
+  PL_register_foreign("verify_certificate_issuer", 2, pl_verify_certificate_issuer, 0);
 
 /* Note that libcrypto threading needs to be initialized exactly once.
    This is achieved by loading library(crypto) from library(ssl) and

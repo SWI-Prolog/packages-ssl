@@ -34,10 +34,21 @@
 */
 
 :- module(ssl,
-          [ load_certificate/2,           % +Stream, -Certificate
+	  [ certificate_crls/2,           % +RawCertificate, -CRLS
+	    certificate_issuer/2,         % +RawCertificate, -Issuer
+	    certificate_not_after/2,      % +RawCertificate, -NotAfter
+	    certificate_not_before/2,     % +RawCertificate, -NotBefore
+	    certificate_public_key/2,     % +RawCertificate, -PublicKey
+	    certificate_san/2,            % +RawCertificate, -SAN
+	    certificate_serial/2,         % +RawCertificate, -Serial
+	    certificate_subject/2,        % +RawCertificate, -Subject
+	    certificate_version/2,        % +RawCertificate, -Version
+	    load_certificate/2,           % +Stream, -Certificate
+	    load_certificate/3,           % +Stream, -Certificate, +Format
             load_private_key/3,           % +Stream, +Password, -Key
             load_public_key/2,            % +Stream, -Key
-            load_crl/2,                   % +Stream, -Crl
+	    load_crl/2,                   % +Stream, -Crl
+	    write_certificate/3,          % +Stream, -X509, +Options
             system_root_certificates/1,   % -List
             cert_accept_any/5,            % +SSL, +ProblemCertificate,
                                           % +AllCertificates, +FirstCertificate,
@@ -50,7 +61,9 @@
             ssl_peer_certificate/2,       % +Stream, -Certificate
             ssl_peer_certificate_chain/2, % +Stream, -Certificates
             ssl_session/2,                % +Stream, -Session
-            ssl_secure_ciphers/1          % -Ciphers
+	    ssl_secure_ciphers/1,         % -Ciphers,
+	    verify_certificate/3,         % +X509, +AuxiliaryCertificates, +TrustedCertificates
+	    verify_certificate_issuer/2   % +RawCertificate, +RawIssuerCertificate
           ]).
 :- use_module(library(option)).
 :- use_module(library(settings)).
@@ -204,7 +217,7 @@ easily be used.
 %     certifications from the `cacert_file` option, Error is unified
 %     with the atom `verified`. Otherwise it contains the error
 %     string passed from OpenSSL. Access will be granted iff the
-%     predicate succeeds. See load_certificate/2 for a description
+%     predicate succeeds. See load_certificate/3 for a description
 %     of the certificate terms. See cert_accept_any/5 for a dummy
 %     implementation that accepts any certificate.
 %     * cipher_list(+Atom)
@@ -412,12 +425,17 @@ ssl_set_options(SSL0, SSL, Options) :-
 %     The negotiated ALPN protocol, if supported. If no protocol was
 %     negotiated, this will be an empty string.
 
-%!  load_certificate(+Stream, -Certificate) is det.
+load_certificate(Stream, Certificate):-
+	load_certificate(Stream, Certificate, prolog).
+
+%!  load_certificate(+Stream, -Certificate, +Format) is det.
 %
 %   Loads a certificate from a PEM- or DER-encoded stream, returning
-%   a term which  will unify with the same  certificate if presented
-%   in  cert_verify_hook. A  certificate  is a  list containing  the
-%   following    terms:    issuer_name/1,    hash/1,    signature/1,
+%   a certificate in either a prolog-style representation or a
+%   native representation, depending on Format (which can be *raw*
+%   or *prolog*. If raw, predicates certificate_*/2 below can be used
+%   to extract the certificate fields. If prolog, then the term will
+%   contain the following terms: issuer_name/1, hash/1, signature/1,
 %   signature_algorithm/1,   version/1,   notbefore/1,   notafter/1,
 %   serial/1, subject/1 and key/1.   subject/1 and issuer_name/1 are
 %   both lists  of =/2  terms representing  the name.   With OpenSSL
@@ -439,6 +457,11 @@ ssl_set_options(SSL0, SSL, Options) :-
 %               at_end_of_stream(In), !
 %           ).
 %     ==
+
+%!  write_certificate(+Stream, +Certificate, +Options) is det.
+%
+%   Writes a (raw) certificate to the stream Stream. Options is
+%   reserved for future use.
 
 %!  load_crl(+Stream, -CRL) is det.
 %
@@ -508,6 +531,71 @@ ssl_set_options(SSL0, SSL, Options) :-
 %                 [ cert_verify_hook(cert_accept_any)
 %                 ])
 %     ==
+
+%!  verify_certificate_issuer(+Certificate,
+%!			      +Issuer).
+%
+%   True if Certificate is a (raw) certificate which was issued by the
+%   (raw) certificate Issuer.
+
+%!  verify_certificate(+Certificate,
+%!		       +AuxiliaryCertificates,
+%!		       +TrustedCertificates).
+%
+%   True if it is possible to build a chain of trust from Certificate to
+%   one of the certificates in TrustedCertificates, optionally using the
+%   (untrusted) certificates in AuxiliaryCertificates to complete the
+%   chain.
+%   To use the system built-in trust store, specify the special term
+%   system(root_certificates) for TrustedCertificates.
+%   Note that all the certificates supplied must be in *raw* format.
+
+%!  certificate_crls(+Certificate,
+%!		     -CRLs).
+%
+%   Retrieve the CRL fields (if any) from the (raw) certificate Certificate
+
+%!  certificate_issuer(+Certificate,
+%!		       -Issuer).
+%
+%   Retrieve the issuer name from the (raw) certificate Certificate
+
+%!  certificate_not_after(+Certificate,
+%!			  -NotAfter).
+%
+%   Retrieve the expiry date from the (raw) certificate Certificate
+
+%!  certificate_not_before(+Certificate,
+%!			  -NotBefore).
+%
+%   Retrieve the start date from the (raw) certificate Certificate
+
+%!  certificate_public_key(+Certificate,
+%!			   -PublicKey).
+%
+%   Retrieve the public key from the (raw) certificate Certificate
+
+%!  certificate_san(+Certificate,
+%!		    -SANList).
+%
+%   Retrieve the subject alt names (if any) from the (raw) certificate
+%   Certificate
+
+%!  certificate_serial(+Certificate,
+%!		       -Serial).
+%
+%   Retrieve the serial number from the (raw) certificate Certificate
+
+%!  certificate_subject(+Certificate,
+%!			-Subject).
+%
+%   Retrieve the subject from the (raw) certificate Certificate
+
+%!  certificate_version(+Certificate,
+%!			-Version).
+%
+%   Retrieve the version from the (raw) certificate Certificate
+
 
 cert_accept_any(_SSL,
                 _ProblemCertificate, _AllCertificates, _FirstCertificate,
