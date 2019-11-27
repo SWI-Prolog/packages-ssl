@@ -1230,93 +1230,75 @@ pl_load_certificate(term_t source, term_t cert, term_t Format)
     return PL_domain_error("certificate_format", Format);
 }
 
+
+typedef struct
+{
+   int index;
+   int deterministic;
+   X509* cert;
+   term_t current_field;
+} field_enum;
+
 static foreign_t
-pl_certificate_subject(term_t Certificate, term_t Subject)
-{ X509* cert;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
-  return unify_name(Subject, X509_get_subject_name(cert));
+fetch_subject(term_t Field, X509* cert)
+{ return unify_name(Field, X509_get_subject_name(cert));
 }
 
 static foreign_t
-pl_certificate_issuer(term_t Certificate, term_t Issuer)
-{ X509* cert;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
-  return unify_name(Issuer, X509_get_issuer_name(cert));
+fetch_issuer(term_t Field, X509* cert)
+{ return unify_name(Field, X509_get_issuer_name(cert));
+}
+
+
+static foreign_t
+fetch_version(term_t Field, X509* cert)
+{ return PL_unify_integer(Field, X509_get_version(cert));
 }
 
 static foreign_t
-pl_certificate_version(term_t Certificate, term_t Version)
-{ X509* cert;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
-  return PL_unify_integer(Version, X509_get_version(cert));
-}
-
-static foreign_t
-pl_certificate_serial(term_t Certificate, term_t Serial)
-{ X509* cert;
-  BIO * mem = NULL;
+fetch_serial(term_t Field, X509* cert)
+{ BIO * mem = NULL;
   long n;
   int rc = 0;
   unsigned char *p;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
 
   if ((mem = BIO_new(BIO_s_mem())) != NULL)
   { i2a_ASN1_INTEGER(mem, X509_get_serialNumber(cert));
     if ((n = BIO_get_mem_data(mem, &p)) > 0)
-    { BIO_vfree(mem);
-      rc = PL_unify_atom_nchars(Serial, (size_t)n, (char*)p);
-    }
+      rc = PL_unify_atom_nchars(Field, (size_t)n, (char*)p);
     BIO_vfree(mem);
-    return FALSE;
+    return rc;
   }
   return FALSE;
 }
 
 
 static foreign_t
-pl_certificate_not_before(term_t Certificate, term_t NotBefore)
-{ X509* cert;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
-  return unify_asn1_time(NotBefore, X509_get0_notBefore(cert));
+fetch_not_before(term_t Field, X509* cert)
+{ return unify_asn1_time(Field, X509_get0_notBefore(cert));
 }
 
 static foreign_t
-pl_certificate_not_after(term_t Certificate, term_t NotAfter)
-{ X509* cert;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
-  return unify_asn1_time(NotAfter, X509_get0_notAfter(cert));
+fetch_not_after(term_t Field, X509* cert)
+{ return unify_asn1_time(Field, X509_get0_notAfter(cert));
 }
 
 
 static foreign_t
-pl_certificate_public_key(term_t Certificate, term_t PublicKey)
-{ X509* cert;
-  EVP_PKEY *key;
+fetch_public_key(term_t Field, X509* cert)
+{ EVP_PKEY *key;
   int rc;
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
   key = X509_get_pubkey(cert);
-
-  rc = unify_public_key(key, PublicKey);
+  rc = unify_public_key(key, Field);
   EVP_PKEY_free(key);
   return rc;
 }
 
 static foreign_t
-pl_certificate_crls(term_t Certificate, term_t CRLs)
-{ X509* cert;
-  unsigned int crl_ext_id;
+fetch_crls(term_t Field, X509* cert)
+{ unsigned int crl_ext_id;
   X509_EXTENSION * crl_ext = NULL;
 
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
-  
   crl_ext_id = X509_get_ext_by_NID(cert, NID_crl_distribution_points, -1);
   crl_ext = X509_get_ext(cert, crl_ext_id);
   if (crl_ext != NULL)
@@ -1352,22 +1334,19 @@ pl_certificate_crls(term_t Certificate, term_t CRLs)
       }
     }
     CRL_DIST_POINTS_free(distpoints);
-    return PL_unify_nil(crl_list) && PL_unify(CRLs, crl);
+    return PL_unify_nil(crl_list) && PL_unify(Field, crl);
   }
   else
   { /* No CRL */
-    return PL_unify_nil(CRLs);
+    return PL_unify_nil(Field);
   }
 }
 
 static foreign_t
-pl_certificate_san(term_t Certificate, term_t SANs)
-{ X509* cert;
-  unsigned int san_ext_id;
+fetch_sans(term_t Field, X509* cert)
+{ unsigned int san_ext_id;
   X509_EXTENSION * san_ext = NULL;
 
-  if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
   san_ext_id = X509_get_ext_by_NID(cert, NID_subject_alt_name, -1);
   san_ext = X509_get_ext(cert, san_ext_id);
   if (san_ext != NULL)
@@ -1392,13 +1371,111 @@ pl_certificate_san(term_t Certificate, term_t SANs)
       }
     }
     sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-    return PL_unify_nil(san_list) && PL_unify(SANs, san);
+    return PL_unify_nil(san_list) && PL_unify(Field, san);
   }
   else
   { /* No SAN */
-    return PL_unify_nil(SANs);
+    return PL_unify_nil(Field);
   }
 }
+
+
+struct
+{
+  const char* name;
+  foreign_t (*fetch)(term_t, X509*);
+} certificate_fields[] = {{"subject", fetch_subject},
+			  {"issuer", fetch_issuer},
+			  {"not_before", fetch_not_before},
+			  {"not_after", fetch_not_after},
+			  {"version", fetch_version},
+			  {"serial", fetch_serial},
+			  {"public_key", fetch_public_key},
+			  {"crls", fetch_crls},
+			  {"sans", fetch_sans},
+			  {NULL, NULL}};
+
+
+static int fetch_field(field_enum *state)
+{ if (certificate_fields[state->index].name != 0)
+  { term_t arg = PL_new_term_ref();
+    int rc = certificate_fields[state->index].fetch(arg, state->cert);
+    state->current_field = PL_new_term_ref();
+    return rc && PL_unify_term(state->current_field,
+			       PL_FUNCTOR_CHARS, certificate_fields[state->index].name, 1,
+			       PL_TERM, arg);
+  }
+  return 0;
+}
+
+static
+foreign_t pl_certificate_field(term_t Certificate, term_t Field, control_t handle)
+{ field_enum *state;
+  switch(PL_foreign_control(handle))
+  { case PL_FIRST_CALL:
+    state = PL_malloc(sizeof(field_enum));
+    memset(state, 0, sizeof(field_enum));
+    if ( !get_certificate_blob(Certificate, &state->cert) )
+    { PL_free(state);
+      return FALSE;
+    }
+    if (!PL_is_variable(Field)) /* deterministic case */
+    { atom_t name;
+      size_t arity;
+      const char* namec;
+      if (!PL_get_name_arity(Field, &name, &arity) || arity != 1)
+      { PL_free(state);
+	return PL_type_error("field_name", Field);
+      }
+      namec = PL_atom_chars(name);
+      while (certificate_fields[state->index].name != NULL)
+      { if (strcmp(certificate_fields[state->index].name, namec) == 0)
+	{ state->deterministic = 1;
+	  break;
+	}
+	state->index++;
+      }
+      if (certificate_fields[state->index].name == 0)
+      { PL_free(state);
+	return PL_existence_error("field", Field);
+      }
+    }
+    if (!fetch_field(state))
+    { PL_free(state);
+      PL_fail;
+    }
+    break;
+  case PL_REDO:
+     state = PL_foreign_context_address(handle);
+     if (!fetch_field(state))
+     { PL_free(state);
+       PL_fail;
+     }
+     break;
+  case PL_CUTTED:
+    state = PL_foreign_context_address(handle);
+    PL_free(state);
+    PL_succeed;
+    break;
+  default:
+    return FALSE;
+  }
+  if (PL_unify(Field, state->current_field))
+  { if (state->deterministic)
+    { PL_free(state);
+      PL_succeed;
+    }
+    else
+    { state->index++;
+      PL_retry_address(state);
+    }
+  }
+  else
+  { PL_free(state);
+    PL_fail;
+  }
+}
+
 
 static foreign_t
 pl_verify_certificate_issuer(term_t Certificate, term_t IssuerCertificate)
@@ -4247,15 +4324,7 @@ install_ssl4pl(void)
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
 
-  PL_register_foreign("certificate_subject", 2, pl_certificate_subject, 0);
-  PL_register_foreign("certificate_issuer", 2, pl_certificate_issuer, 0);
-  PL_register_foreign("certificate_version", 2, pl_certificate_version, 0);
-  PL_register_foreign("certificate_serial", 2, pl_certificate_serial, 0);
-  PL_register_foreign("certificate_not_before", 2, pl_certificate_not_before, 0);
-  PL_register_foreign("certificate_not_after", 2, pl_certificate_not_after, 0);
-  PL_register_foreign("certificate_public_key", 2, pl_certificate_public_key, 0);
-  PL_register_foreign("certificate_crls", 2, pl_certificate_crls, 0);
-  PL_register_foreign("certificate_san", 2, pl_certificate_san, 0);
+  PL_register_foreign("certificate_field", 2, pl_certificate_field, PL_FA_NONDETERMINISTIC);
   PL_register_foreign("verify_certificate_issuer", 2, pl_verify_certificate_issuer, 0);
 
 /* Note that libcrypto threading needs to be initialized exactly once.

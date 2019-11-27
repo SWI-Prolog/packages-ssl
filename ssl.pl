@@ -34,15 +34,7 @@
 */
 
 :- module(ssl,
-	  [ certificate_crls/2,           % +RawCertificate, -CRLS
-	    certificate_issuer/2,         % +RawCertificate, -Issuer
-	    certificate_not_after/2,      % +RawCertificate, -NotAfter
-	    certificate_not_before/2,     % +RawCertificate, -NotBefore
-	    certificate_public_key/2,     % +RawCertificate, -PublicKey
-	    certificate_san/2,            % +RawCertificate, -SAN
-	    certificate_serial/2,         % +RawCertificate, -Serial
-	    certificate_subject/2,        % +RawCertificate, -Subject
-	    certificate_version/2,        % +RawCertificate, -Version
+	  [ certificate_field/2,          % +RawCertificate, ?Field
 	    load_certificate/2,           % +Stream, -Certificate
 	    load_certificate/3,           % +Stream, -Certificate, +Format
             load_private_key/3,           % +Stream, +Password, -Key
@@ -550,51 +542,21 @@ load_certificate(Stream, Certificate):-
 %   system(root_certificates) for TrustedCertificates.
 %   Note that all the certificates supplied must be in *raw* format.
 
-%!  certificate_crls(+Certificate,
-%!		     -CRLs).
+%!  certificate_field(+Certificate,
+%!		      ?Field) is nondet.
 %
-%   Retrieve the CRL fields (if any) from the (raw) certificate Certificate
+%   Retrieve the field matching Field from Certificate. Field may be
+%   one of the following:
+%     * subject/1 to retrieve the subject
+%     * issuer/1  to retrieve the issuer's subject
+%     * version/1  to retrieve the version
+%     * serial/1  to retrieve the serial number
+%     * not_before/1 to retrieve the start date
+%     * not_after/1  to retrieve the expiry date
+%     * public_key/1 to retrieve the public key
+%     * crls/1 to retrieve a list of the CRLs
+%     * sans/1 to retrieve a list of the Subject Alternative Names
 
-%!  certificate_issuer(+Certificate,
-%!		       -Issuer).
-%
-%   Retrieve the issuer name from the (raw) certificate Certificate
-
-%!  certificate_not_after(+Certificate,
-%!			  -NotAfter).
-%
-%   Retrieve the expiry date from the (raw) certificate Certificate
-
-%!  certificate_not_before(+Certificate,
-%!			  -NotBefore).
-%
-%   Retrieve the start date from the (raw) certificate Certificate
-
-%!  certificate_public_key(+Certificate,
-%!			   -PublicKey).
-%
-%   Retrieve the public key from the (raw) certificate Certificate
-
-%!  certificate_san(+Certificate,
-%!		    -SANList).
-%
-%   Retrieve the subject alt names (if any) from the (raw) certificate
-%   Certificate
-
-%!  certificate_serial(+Certificate,
-%!		       -Serial).
-%
-%   Retrieve the serial number from the (raw) certificate Certificate
-
-%!  certificate_subject(+Certificate,
-%!			-Subject).
-%
-%   Retrieve the subject from the (raw) certificate Certificate
-
-%!  certificate_version(+Certificate,
-%!			-Version).
-%
-%   Retrieve the version from the (raw) certificate Certificate
 
 
 cert_accept_any(_SSL,
