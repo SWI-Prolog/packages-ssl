@@ -1236,27 +1236,27 @@ typedef struct
    int index;
    int deterministic;
    X509* cert;
-   term_t current_field;
-} field_enum;
+   term_t current_property;
+} prop_enum;
 
 static foreign_t
-fetch_subject(term_t Field, X509* cert)
-{ return unify_name(Field, X509_get_subject_name(cert));
+fetch_subject(term_t Property, X509* cert)
+{ return unify_name(Property, X509_get_subject_name(cert));
 }
 
 static foreign_t
-fetch_issuer(term_t Field, X509* cert)
-{ return unify_name(Field, X509_get_issuer_name(cert));
+fetch_issuer(term_t Property, X509* cert)
+{ return unify_name(Property, X509_get_issuer_name(cert));
 }
 
 
 static foreign_t
-fetch_version(term_t Field, X509* cert)
-{ return PL_unify_integer(Field, X509_get_version(cert));
+fetch_version(term_t Property, X509* cert)
+{ return PL_unify_integer(Property, X509_get_version(cert));
 }
 
 static foreign_t
-fetch_serial(term_t Field, X509* cert)
+fetch_serial(term_t Property, X509* cert)
 { BIO * mem = NULL;
   long n;
   int rc = 0;
@@ -1265,7 +1265,7 @@ fetch_serial(term_t Field, X509* cert)
   if ((mem = BIO_new(BIO_s_mem())) != NULL)
   { i2a_ASN1_INTEGER(mem, X509_get_serialNumber(cert));
     if ((n = BIO_get_mem_data(mem, &p)) > 0)
-      rc = PL_unify_atom_nchars(Field, (size_t)n, (char*)p);
+      rc = PL_unify_atom_nchars(Property, (size_t)n, (char*)p);
     BIO_vfree(mem);
     return rc;
   }
@@ -1274,28 +1274,28 @@ fetch_serial(term_t Field, X509* cert)
 
 
 static foreign_t
-fetch_not_before(term_t Field, X509* cert)
-{ return unify_asn1_time(Field, X509_get0_notBefore(cert));
+fetch_not_before(term_t Property, X509* cert)
+{ return unify_asn1_time(Property, X509_get0_notBefore(cert));
 }
 
 static foreign_t
-fetch_not_after(term_t Field, X509* cert)
-{ return unify_asn1_time(Field, X509_get0_notAfter(cert));
+fetch_not_after(term_t Property, X509* cert)
+{ return unify_asn1_time(Property, X509_get0_notAfter(cert));
 }
 
 
 static foreign_t
-fetch_public_key(term_t Field, X509* cert)
+fetch_public_key(term_t Property, X509* cert)
 { EVP_PKEY *key;
   int rc;
   key = X509_get_pubkey(cert);
-  rc = unify_public_key(key, Field);
+  rc = unify_public_key(key, Property);
   EVP_PKEY_free(key);
   return rc;
 }
 
 static foreign_t
-fetch_crls(term_t Field, X509* cert)
+fetch_crls(term_t Property, X509* cert)
 { unsigned int crl_ext_id;
   X509_EXTENSION * crl_ext = NULL;
 
@@ -1334,16 +1334,16 @@ fetch_crls(term_t Field, X509* cert)
       }
     }
     CRL_DIST_POINTS_free(distpoints);
-    return PL_unify_nil(crl_list) && PL_unify(Field, crl);
+    return PL_unify_nil(crl_list) && PL_unify(Property, crl);
   }
   else
   { /* No CRL */
-    return PL_unify_nil(Field);
+    return PL_unify_nil(Property);
   }
 }
 
 static foreign_t
-fetch_sans(term_t Field, X509* cert)
+fetch_sans(term_t Property, X509* cert)
 { unsigned int san_ext_id;
   X509_EXTENSION * san_ext = NULL;
 
@@ -1371,11 +1371,11 @@ fetch_sans(term_t Field, X509* cert)
       }
     }
     sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-    return PL_unify_nil(san_list) && PL_unify(Field, san);
+    return PL_unify_nil(san_list) && PL_unify(Property, san);
   }
   else
   { /* No SAN */
-    return PL_unify_nil(Field);
+    return PL_unify_nil(Property);
   }
 }
 
@@ -1384,70 +1384,70 @@ struct
 {
   const char* name;
   foreign_t (*fetch)(term_t, X509*);
-} certificate_fields[] = {{"subject", fetch_subject},
-			  {"issuer", fetch_issuer},
-			  {"not_before", fetch_not_before},
-			  {"not_after", fetch_not_after},
-			  {"version", fetch_version},
-			  {"serial", fetch_serial},
-			  {"public_key", fetch_public_key},
-			  {"crls", fetch_crls},
-			  {"sans", fetch_sans},
-			  {NULL, NULL}};
+} certificate_properties[] = {{"subject", fetch_subject},
+			      {"issuer", fetch_issuer},
+			      {"not_before", fetch_not_before},
+			      {"not_after", fetch_not_after},
+			      {"version", fetch_version},
+			      {"serial", fetch_serial},
+			      {"public_key", fetch_public_key},
+			      {"crls", fetch_crls},
+			      {"sans", fetch_sans},
+			      {NULL, NULL}};
 
 
-static int fetch_field(field_enum *state)
-{ if (certificate_fields[state->index].name != 0)
+static int fetch_property(prop_enum *state)
+{ if (certificate_properties[state->index].name != 0)
   { term_t arg = PL_new_term_ref();
-    int rc = certificate_fields[state->index].fetch(arg, state->cert);
-    state->current_field = PL_new_term_ref();
-    return rc && PL_unify_term(state->current_field,
-			       PL_FUNCTOR_CHARS, certificate_fields[state->index].name, 1,
+    int rc = certificate_properties[state->index].fetch(arg, state->cert);
+    state->current_property = PL_new_term_ref();
+    return rc && PL_unify_term(state->current_property,
+			       PL_FUNCTOR_CHARS, certificate_properties[state->index].name, 1,
 			       PL_TERM, arg);
   }
   return 0;
 }
 
 static
-foreign_t pl_certificate_field(term_t Certificate, term_t Field, control_t handle)
-{ field_enum *state;
+foreign_t pl_certificate_property(term_t Certificate, term_t Property, control_t handle)
+{ prop_enum *state;
   switch(PL_foreign_control(handle))
   { case PL_FIRST_CALL:
-    state = PL_malloc(sizeof(field_enum));
-    memset(state, 0, sizeof(field_enum));
+    state = PL_malloc(sizeof(prop_enum));
+    memset(state, 0, sizeof(prop_enum));
     if ( !get_certificate_blob(Certificate, &state->cert) )
     { PL_free(state);
       return FALSE;
     }
-    if (!PL_is_variable(Field)) /* deterministic case */
+    if (!PL_is_variable(Property)) /* deterministic case */
     { atom_t name;
       size_t arity;
       const char* namec;
-      if (!PL_get_name_arity(Field, &name, &arity) || arity != 1)
+      if (!PL_get_name_arity(Property, &name, &arity) || arity != 1)
       { PL_free(state);
-	return PL_type_error("field_name", Field);
+	return PL_type_error("property", Property);
       }
       namec = PL_atom_chars(name);
-      while (certificate_fields[state->index].name != NULL)
-      { if (strcmp(certificate_fields[state->index].name, namec) == 0)
+      while (certificate_properties[state->index].name != NULL)
+      { if (strcmp(certificate_properties[state->index].name, namec) == 0)
 	{ state->deterministic = 1;
 	  break;
 	}
 	state->index++;
       }
-      if (certificate_fields[state->index].name == 0)
+      if (certificate_properties[state->index].name == 0)
       { PL_free(state);
-	return PL_existence_error("field", Field);
+	return PL_existence_error("property", Property);
       }
     }
-    if (!fetch_field(state))
+    if (!fetch_property(state))
     { PL_free(state);
       PL_fail;
     }
     break;
   case PL_REDO:
      state = PL_foreign_context_address(handle);
-     if (!fetch_field(state))
+     if (!fetch_property(state))
      { PL_free(state);
        PL_fail;
      }
@@ -1460,7 +1460,7 @@ foreign_t pl_certificate_field(term_t Certificate, term_t Field, control_t handl
   default:
     return FALSE;
   }
-  if (PL_unify(Field, state->current_field))
+  if (PL_unify(Property, state->current_property))
   { if (state->deterministic)
     { PL_free(state);
       PL_succeed;
@@ -2249,7 +2249,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
           case X509_V_ERR_CERT_HAS_EXPIRED:
             error = "expired";
             break;
-          case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
+	  case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
           case X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD:
           case X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD:
           case X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
@@ -4324,7 +4324,7 @@ install_ssl4pl(void)
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
 
-  PL_register_foreign("certificate_field", 2, pl_certificate_field, PL_FA_NONDETERMINISTIC);
+  PL_register_foreign("certificate_property", 2, pl_certificate_property, PL_FA_NONDETERMINISTIC);
   PL_register_foreign("verify_certificate_issuer", 2, pl_verify_certificate_issuer, 0);
 
 /* Note that libcrypto threading needs to be initialized exactly once.

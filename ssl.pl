@@ -34,7 +34,7 @@
 */
 
 :- module(ssl,
-	  [ certificate_field/2,          % +RawCertificate, ?Field
+	  [ certificate_property/2,       % +RawCertificate, ?Property
 	    load_certificate/2,           % +Stream, -Certificate
 	    load_certificate/3,           % +Stream, -Certificate, +Format
             load_private_key/3,           % +Stream, +Password, -Key
@@ -542,10 +542,10 @@ load_certificate(Stream, Certificate):-
 %   system(root_certificates) for TrustedCertificates.
 %   Note that all the certificates supplied must be in *raw* format.
 
-%!  certificate_field(+Certificate,
-%!		      ?Field) is nondet.
+%!  certificate_property(+Certificate,
+%!			 ?Property) is nondet.
 %
-%   Retrieve the field matching Field from Certificate. Field may be
+%   Retrieve the property matching Property from Certificate. May be
 %   one of the following:
 %     * subject/1 to retrieve the subject
 %     * issuer/1  to retrieve the issuer's subject
