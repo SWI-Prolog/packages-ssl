@@ -34,10 +34,9 @@
 */
 
 :- module(ssl,
-	  [ certificate_property/2,       % +RawCertificate, ?Property
+	  [ certificate_property/2,       % +Certificate, ?Property
 	    load_certificate/2,           % +Stream, -Certificate
-	    load_certificate/3,           % +Stream, -Certificate, +Format
-            load_private_key/3,           % +Stream, +Password, -Key
+	    load_private_key/3,           % +Stream, +Password, -Key
             load_public_key/2,            % +Stream, -Key
 	    load_crl/2,                   % +Stream, -Crl
 	    write_certificate/3,          % +Stream, -X509, +Options
@@ -55,7 +54,7 @@
             ssl_session/2,                % +Stream, -Session
 	    ssl_secure_ciphers/1,         % -Ciphers,
 	    verify_certificate/3,         % +X509, +AuxiliaryCertificates, +TrustedCertificates
-	    verify_certificate_issuer/2   % +RawCertificate, +RawIssuerCertificate
+	    verify_certificate_issuer/2   % +Certificate, +IssuerCertificate
           ]).
 :- use_module(library(option)).
 :- use_module(library(settings)).
@@ -417,23 +416,11 @@ ssl_set_options(SSL0, SSL, Options) :-
 %     The negotiated ALPN protocol, if supported. If no protocol was
 %     negotiated, this will be an empty string.
 
-load_certificate(Stream, Certificate):-
-	load_certificate(Stream, Certificate, prolog).
-
-%!  load_certificate(+Stream, -Certificate, +Format) is det.
+%!  load_certificate(+Stream, -Certificate) is det.
 %
 %   Loads a certificate from a PEM- or DER-encoded stream, returning
-%   a certificate in either a prolog-style representation or a
-%   native representation, depending on Format (which can be *raw*
-%   or *prolog*. If raw, predicates certificate_*/2 below can be used
-%   to extract the certificate fields. If prolog, then the term will
-%   contain the following terms: issuer_name/1, hash/1, signature/1,
-%   signature_algorithm/1,   version/1,   notbefore/1,   notafter/1,
-%   serial/1, subject/1 and key/1.   subject/1 and issuer_name/1 are
-%   both lists  of =/2  terms representing  the name.   With OpenSSL
-%   1.0.2 and  greater, to_be_signed/1  is also  available, yielding
-%   the hexadecimal representation of the TBS (to-be-signed) portion
-%   of the certificate.
+%   a certificate. The fields of the certificate can be inspected
+%   using certificate_property(+Certificate, ?Property).
 %
 %   Note that the OpenSSL `CA.pl`  utility creates certificates that
 %   have a human readable textual representation in front of the PEM
@@ -452,8 +439,8 @@ load_certificate(Stream, Certificate):-
 
 %!  write_certificate(+Stream, +Certificate, +Options) is det.
 %
-%   Writes a (raw) certificate to the stream Stream. Options is
-%   reserved for future use.
+%   Writes a certificate to the stream Stream. Options is reserved
+%   for future use.
 
 %!  load_crl(+Stream, -CRL) is det.
 %
@@ -527,8 +514,8 @@ load_certificate(Stream, Certificate):-
 %!  verify_certificate_issuer(+Certificate,
 %!			      +Issuer).
 %
-%   True if Certificate is a (raw) certificate which was issued by the
-%   (raw) certificate Issuer.
+%   True if Certificate is a certificate which was issued by the
+%   certificate Issuer.
 
 %!  verify_certificate(+Certificate,
 %!		       +AuxiliaryCertificates,
@@ -540,7 +527,6 @@ load_certificate(Stream, Certificate):-
 %   chain.
 %   To use the system built-in trust store, specify the special term
 %   system(root_certificates) for TrustedCertificates.
-%   Note that all the certificates supplied must be in *raw* format.
 
 %!  certificate_property(+Certificate,
 %!			 ?Property) is nondet.
@@ -556,6 +542,11 @@ load_certificate(Stream, Certificate):-
 %     * public_key/1 to retrieve the public key
 %     * crls/1 to retrieve a list of the CRLs
 %     * sans/1 to retrieve a list of the Subject Alternative Names
+%     * signature/1 to retrieve the certificate signature
+%     * signature_algorithm/1 to retrieve the signing algorithm
+%     * hash/1 to retrieve the certificate hash
+%     * to_be_signed/1 to retrieve the data on the certificate which
+%        must be signed
 
 
 

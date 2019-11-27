@@ -95,8 +95,6 @@ static atom_t ATOM_root_certificates;
 static atom_t ATOM_sni_hook;
 static atom_t ATOM_alpn_protocols;
 static atom_t ATOM_alpn_protocol_hook;
-static atom_t ATOM_raw;
-static atom_t ATOM_prolog;
 
 static atom_t ATOM_sslv2;
 static atom_t ATOM_sslv23;
@@ -812,232 +810,6 @@ unify_private_key(EVP_PKEY* key, term_t item)
 #define GET0SIG_CONST_T
 #endif
 
-static int
-unify_certificate(term_t cert, X509* data)
-{ term_t list = PL_copy_term_ref(cert);
-  term_t item = PL_new_term_ref();
-  BIO * mem = NULL;
-  long n;
-  EVP_PKEY *key;
-  term_t issuername;
-  term_t subject;
-  term_t hash;
-  term_t not_before;
-  term_t not_after;
-  term_t signature;
-  unsigned int crl_ext_id;
-  unsigned char *p;
-  X509_EXTENSION * crl_ext = NULL;
-  GET0SIG_CONST_T ASN1_BIT_STRING *psig;
-  GET0SIG_CONST_T X509_ALGOR *palg;
-  const char *salgorithm;
-  term_t talgorithm;
-#ifdef HAVE_I2D_RE_X509_TBS
-  term_t to_be_signed;
-  unsigned char *tbs = NULL;
-  int tbs_len = i2d_re_X509_tbs(data, &tbs);
-#endif
-
-  X509_get0_signature(&psig, &palg, data);
-
-  if (!(PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_version1,
-                      PL_LONG, X509_get_version(data))
-         ))
-     return FALSE;
-  if (!(PL_unify_list(list, item, list) &&
-        (not_before = PL_new_term_ref()) &&
-        unify_asn1_time(not_before, X509_get0_notBefore(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_notbefore1,
-                      PL_TERM, not_before)))
-     return FALSE;
-
-  if (!(PL_unify_list(list, item, list) &&
-        (not_after = PL_new_term_ref()) &&
-        unify_asn1_time(not_after, X509_get0_notAfter(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_notafter1,
-                      PL_TERM, not_after)))
-     return FALSE;
-
-
-  if ((mem = BIO_new(BIO_s_mem())) != NULL)
-  { i2a_ASN1_INTEGER(mem, X509_get_serialNumber(data));
-    if ((n = BIO_get_mem_data(mem, &p)) > 0)
-    {  if (!(PL_unify_list(list, item, list) &&
-             PL_unify_term(item,
-                           PL_FUNCTOR, FUNCTOR_serial1,
-                           PL_NCHARS, (size_t)n, p)
-              ))
-        { BIO_vfree(mem);
-          return FALSE;
-        }
-    } else
-      Sdprintf("Failed to print serial - continuing without serial\n");
-  } else
-    Sdprintf("Failed to allocate BIO for printing - continuing without serial\n");
-  BIO_vfree(mem);
-
-  if (!(PL_unify_list(list, item, list) &&
-        (subject = PL_new_term_ref()) &&
-        unify_name(subject, X509_get_subject_name(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_subject1,
-                      PL_TERM, subject))
-     )
-     return FALSE;
-  if (!((hash = PL_new_term_ref()) &&
-#ifdef HAVE_X509_DIGEST
-        unify_hash(hash, palg->algorithm, hash_X509_digest_wrapper, data) &&
-#else
-        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
-#endif
-        PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_hash1,
-                      PL_TERM, hash)))
-     return FALSE;
-  if (!((signature = PL_new_term_ref()) &&
-	unify_bytes_hex(signature, psig->length, psig->data) &&
-	PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_signature1,
-                      PL_TERM, signature)
-         ))
-     return FALSE;
-
-  if ( !((talgorithm = PL_new_term_ref()) &&
-         (salgorithm = OBJ_nid2sn(OBJ_obj2nid(palg->algorithm))) &&
-         PL_unify_chars(talgorithm, PL_ATOM|REP_UTF8, strlen(salgorithm), salgorithm) &&
-         PL_unify_list(list, item, list) &&
-         PL_unify_term(item,
-                       PL_FUNCTOR, FUNCTOR_signature_algorithm1,
-                       PL_TERM, talgorithm)) )
-    return FALSE;
-
-#ifdef HAVE_I2D_RE_X509_TBS
-  if (!((to_be_signed = PL_new_term_ref()) &&
-        (tbs_len >= 0) &&
-        unify_bytes_hex(to_be_signed, tbs_len, tbs) &&
-        PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_to_be_signed1,
-                      PL_TERM, to_be_signed)
-        ))
-    return FALSE;
-  OPENSSL_free(tbs);
-#endif
-
-  if (!(PL_unify_list(list, item, list) &&
-        (issuername = PL_new_term_ref()) &&
-        unify_name(issuername, X509_get_issuer_name(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_issuername1,
-                      PL_TERM, issuername))
-     )
-     return FALSE;
-
-  if (!PL_unify_list(list, item, list))
-    return FALSE;
-  /* X509_get_pubkey returns a copy of the existing key */
-  key = X509_get_pubkey(data);
-  if ( !PL_unify_functor(item, FUNCTOR_key1) ||
-       !PL_get_arg(1, item, item) ||
-       !unify_public_key(key, item) )
-    return FALSE;
-  EVP_PKEY_free(key);
-
-
-  /* If the cert has a CRL distribution point, return that. If it does not,
-     it is not an error
-  */
-  crl_ext_id = X509_get_ext_by_NID(data, NID_crl_distribution_points, -1);
-  crl_ext = X509_get_ext(data, crl_ext_id);
-  if (crl_ext != NULL)
-  { STACK_OF(DIST_POINT) * distpoints;
-    int i, j;
-    term_t crl;
-    term_t crl_list;
-    term_t crl_item;
-
-    if (!PL_unify_list(list, item, list))
-       return FALSE;
-
-    distpoints = X509_get_ext_d2i(data, NID_crl_distribution_points, NULL, NULL);
-    /* Loop through the CRL points, putting them into a list */
-    crl = PL_new_term_ref();
-    crl_list = PL_copy_term_ref(crl);
-    crl_item = PL_new_term_ref();
-
-    for (i = 0; i < sk_DIST_POINT_num(distpoints); i++)
-    { DIST_POINT *point;
-      GENERAL_NAME *name;
-      point = sk_DIST_POINT_value(distpoints, i);
-      if (point->distpoint != NULL)
-      { /* Each point may have several names? May as well put them all in */
-        for (j = 0; j < sk_GENERAL_NAME_num(point->distpoint->name.fullname); j++)
-        { name = sk_GENERAL_NAME_value(point->distpoint->name.fullname, j);
-          if (name != NULL && name->type == GEN_URI)
-          { if (!(PL_unify_list(crl_list, crl_item, crl_list) &&
-                  PL_unify_atom_chars(crl_item, (const char *)name->d.ia5->data)))
-            {
-              CRL_DIST_POINTS_free(distpoints);
-              return FALSE;
-            }
-          }
-        }
-      }
-    }
-    CRL_DIST_POINTS_free(distpoints);
-    if (!PL_unify_nil(crl_list))
-       return FALSE;
-    if (!PL_unify_term(item,
-                       PL_FUNCTOR, FUNCTOR_crl1,
-                       PL_TERM, crl))
-       return FALSE;
-  }
-  return PL_unify_nil(list);
-}
-
-static int
-unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
-{ term_t item = PL_new_term_ref();
-  term_t list = PL_copy_term_ref(certs);
-  STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
-  X509* cert = sk_X509_pop(copy);
-  int retval = 1;
-
-  while (cert != NULL && retval == 1)
-  { retval &= PL_unify_list(list, item, list);
-    retval &= unify_certificate(item, cert);
-    cert = sk_X509_pop(copy);
-    if (cert == NULL)
-    { sk_X509_free(copy);
-      return PL_unify(tail, item) && PL_unify_nil(list);
-    }
-  }
-  sk_X509_free(copy);
-  return retval && PL_unify_nil(list);
-}
-
-static int
-unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
-{ term_t item = PL_new_term_ref();
-  term_t list = PL_copy_term_ref(certs);
-  STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
-  X509* cert = sk_X509_shift(copy);
-  int retval = 1;
-
-  while (cert != NULL && retval == 1)
-  { retval &= PL_unify_list(list, item, list);
-    retval &= unify_certificate(item, cert);
-    cert = sk_X509_shift(copy);
-  }
-  sk_X509_free(copy);
-  return retval && PL_unify_nil(list);
-}
 
 static int
 release_cert(atom_t atom)
@@ -1076,6 +848,45 @@ get_certificate_blob(term_t Cert, X509** cert)
   if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
     return TRUE;
   return PL_type_error("certificate", Cert);
+}
+
+
+static int
+unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
+{ term_t item = PL_new_term_ref();
+  term_t list = PL_copy_term_ref(certs);
+  STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
+  X509* cert = sk_X509_pop(copy);
+  int retval = 1;
+
+  while (cert != NULL && retval == 1)
+  { retval &= PL_unify_list(list, item, list);
+    retval &= put_certificate_blob(item, cert);
+    cert = sk_X509_pop(copy);
+    if (cert == NULL)
+    { sk_X509_free(copy);
+      return PL_unify(tail, item) && PL_unify_nil(list);
+    }
+  }
+  sk_X509_free(copy);
+  return retval && PL_unify_nil(list);
+}
+
+static int
+unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
+{ term_t item = PL_new_term_ref();
+  term_t list = PL_copy_term_ref(certs);
+  STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
+  X509* cert = sk_X509_shift(copy);
+  int retval = 1;
+
+  while (cert != NULL && retval == 1)
+  { retval &= PL_unify_list(list, item, list);
+    retval &= put_certificate_blob(item, cert);
+    cert = sk_X509_shift(copy);
+  }
+  sk_X509_free(copy);
+  return retval && PL_unify_nil(list);
 }
 
 static int
@@ -1196,15 +1007,12 @@ pl_load_crl(term_t source, term_t list)
 }
 
 static foreign_t
-pl_load_certificate(term_t source, term_t cert, term_t Format)
+pl_load_certificate(term_t source, term_t cert)
 { X509* x509;
   BIO* bio;
   IOSTREAM* stream;
   int c = 0;
-  atom_t format;
 
-  if ( !PL_get_atom_ex(Format, &format) )
-    return FALSE;
   if ( !PL_get_stream_handle(source, &stream) )
     return FALSE;
   bio = BIO_new(bio_read_method());
@@ -1219,15 +1027,7 @@ pl_load_certificate(term_t source, term_t cert, term_t Format)
   PL_release_stream(stream);
   if (x509 == NULL)
     return raise_ssl_error(ERR_get_error());
-  if ( format == ATOM_raw )
-    return put_certificate_blob(cert, x509);
-  else if ( format == ATOM_prolog )
-  { int rc = unify_certificate(cert, x509);
-    X509_free(x509);
-    return rc;
-  }
-  else
-    return PL_domain_error("certificate_format", Format);
+  return put_certificate_blob(cert, x509);
 }
 
 
@@ -1379,6 +1179,56 @@ fetch_sans(term_t Property, X509* cert)
   }
 }
 
+static foreign_t
+fetch_signature(term_t Property, X509* cert)
+{ GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
+  X509_get0_signature(&psig, &palg, cert);
+  return unify_bytes_hex(Property, psig->length, psig->data);
+}
+
+
+static foreign_t
+fetch_signature_algorithm(term_t Property, X509* cert)
+{ GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
+  const char *salgorithm;
+  
+  X509_get0_signature(&psig, &palg, cert);
+  if ((salgorithm = OBJ_nid2sn(OBJ_obj2nid(palg->algorithm))) != NULL)
+  { return PL_unify_chars(Property, PL_ATOM|REP_UTF8, strlen(salgorithm), salgorithm);
+  }
+  return FALSE;
+}
+
+static foreign_t
+fetch_hash(term_t Property, X509* cert)
+{ GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
+  
+  X509_get0_signature(&psig, &palg, cert);
+#ifdef HAVE_X509_DIGEST
+  return unify_hash(Property, palg->algorithm, hash_X509_digest_wrapper, cert);
+#else
+  return unify_hash(Property, palg->algorithm, i2d_X509_CINF_wrapper, cert->cert_info);
+#endif
+}
+
+
+
+#ifdef HAVE_I2D_RE_X509_TBS
+static foreign_t
+fetch_to_be_signed(term_t Property, X509* cert)
+{ unsigned char *tbs = NULL;
+  int tbs_len = i2d_re_X509_tbs(cert, &tbs);
+  int rc = 0;
+  if (tbs_len >= 0)
+    rc = unify_bytes_hex(Property, tbs_len, tbs);
+  OPENSSL_free(tbs);
+  return rc;
+}
+#endif
+
 
 struct
 {
@@ -1393,6 +1243,12 @@ struct
 			      {"public_key", fetch_public_key},
 			      {"crls", fetch_crls},
 			      {"sans", fetch_sans},
+			      {"signature", fetch_signature},
+			      {"signature_algorithm", fetch_signature_algorithm},
+			      {"hash", fetch_hash},
+#ifdef HAVE_I2D_RE_X509_TBS			      
+			      {"to_be_signed", fetch_to_be_signed},
+#endif
 			      {NULL, NULL}};
 
 
@@ -1699,7 +1555,7 @@ pl_cert_verify_hook(PL_SSL *config,
   else
     val = PL_unify_atom_chars(error_term, error);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
-  val &= ( unify_certificate(av+2, cert) &&
+  val &= ( put_certificate_blob(av+2, cert) &&
            unify_certificates(av+3, av+4, stack) &&
            PL_unify(av+5, error_term) &&
            PL_call_predicate(config->cb_cert_verify.module,
@@ -3982,7 +3838,7 @@ pl_system_root_certificates(term_t list)
 
   while (index < sk_X509_num(certs))
   { if ( !(PL_unify_list(tail, head, tail) &&
-	   unify_certificate(head, sk_X509_value(certs, index++))) )
+	   put_certificate_blob(head, sk_X509_value(certs, index++))) )
     { return FALSE;
     }
   }
@@ -4087,7 +3943,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
   instance = ssl_stream->handle;
   if ( (cert = ssl_peer_certificate(instance)) )
-    rc = unify_certificate(Cert, cert);
+    rc = put_certificate_blob(Cert, cert);
   PL_release_stream(stream);
 
   return rc;
@@ -4262,8 +4118,6 @@ install_ssl4pl(void)
   MKATOM(crl);
   MKATOM(alpn_protocols);
   MKATOM(alpn_protocol_hook);
-  MKATOM(raw);
-  MKATOM(prolog);
 
   ATOM_minus                = PL_new_atom("-");
 
@@ -4317,7 +4171,7 @@ install_ssl4pl(void)
   PL_register_foreign("ssl_peer_certificate_chain",
                                         2, pl_ssl_peer_certificate_chain, 0);
   PL_register_foreign("load_crl",       2, pl_load_crl,      0);
-  PL_register_foreign("load_certificate",3,pl_load_certificate,      0);
+  PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
   PL_register_foreign("write_certificate",3,pl_write_certificate,      0);
   PL_register_foreign("verify_certificate",3,pl_verify_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);
