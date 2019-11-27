@@ -2249,7 +2249,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
           case X509_V_ERR_CERT_HAS_EXPIRED:
             error = "expired";
             break;
-	  case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
+          case X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD:
           case X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD:
           case X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD:
           case X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD:
