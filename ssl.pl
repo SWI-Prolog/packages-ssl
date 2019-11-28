@@ -34,7 +34,7 @@
 */
 
 :- module(ssl,
-	  [ certificate_property/2,       % +Certificate, ?Property
+	  [ certificate_field/2,          % +Certificate, ?Field
 	    load_certificate/2,           % +Stream, -Certificate
 	    load_private_key/3,           % +Stream, +Password, -Key
             load_public_key/2,            % +Stream, -Key
@@ -420,7 +420,7 @@ ssl_set_options(SSL0, SSL, Options) :-
 %
 %   Loads a certificate from a PEM- or DER-encoded stream, returning
 %   a certificate. The fields of the certificate can be inspected
-%   using certificate_property(+Certificate, ?Property).
+%   using certificate_field(+Certificate, ?Field).
 %
 %   Note that the OpenSSL `CA.pl`  utility creates certificates that
 %   have a human readable textual representation in front of the PEM
@@ -528,10 +528,10 @@ ssl_set_options(SSL0, SSL, Options) :-
 %   To use the system built-in trust store, specify the special term
 %   system(root_certificates) for TrustedCertificates.
 
-%!  certificate_property(+Certificate,
-%!			 ?Property) is nondet.
+%!  certificate_field(+Certificate,
+%!		      ?Field) is nondet.
 %
-%   Retrieve the property matching Property from Certificate. May be
+%   Retrieve the field matching Field from Certificate. May be
 %   one of the following:
 %     * subject/1 to retrieve the subject
 %     * issuer/1  to retrieve the issuer's subject
