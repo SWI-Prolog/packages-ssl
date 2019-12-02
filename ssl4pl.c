@@ -1142,6 +1142,12 @@ fetch_crls(term_t Field, X509* cert)
   }
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
+#define X509_STORE_CTX_get0_cert(C) ((C)->cert)
+#endif
+
+
 static foreign_t
 fetch_sans(term_t Field, X509* cert)
 { unsigned int san_ext_id;
@@ -1164,7 +1170,7 @@ fetch_sans(term_t Field, X509* cert)
     { name = sk_GENERAL_NAME_value(san_names, i);
       if (name != NULL && name->type == GEN_DNS)
       { if (!(PL_unify_list(san_list, san_item, san_list) &&
-	      PL_unify_atom_chars(san_item, (char*)ASN1_STRING_data(name->d.dNSName))))
+              PL_unify_atom_chars(san_item, (char*)ASN1_STRING_get0_data(name->d.dNSName))))
 	{ sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
 	  return FALSE;
 	}
@@ -1980,10 +1986,6 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
          4) Otherwise, FAIL.
       */
       int i;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-#define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
-#define X509_STORE_CTX_get0_cert(C) ((C)->cert)
-#endif
       X509 *cert = X509_STORE_CTX_get0_cert(ctx);
 
       STACK_OF(GENERAL_NAME) *alt_names = X509_get_ext_d2i((X509 *)cert, NID_subject_alt_name, NULL, NULL);
