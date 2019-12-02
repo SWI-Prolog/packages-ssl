@@ -827,7 +827,7 @@ write_cert(IOSTREAM *s, atom_t symbol, int flags)
 
 static PL_blob_t certificate_type =
 { PL_BLOB_MAGIC,
-  PL_BLOB_NOCOPY,
+  PL_BLOB_UNIQUE | PL_BLOB_NOCOPY,
   "ssl_certificate",
   release_cert,
   NULL,
