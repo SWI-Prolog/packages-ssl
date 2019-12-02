@@ -34,10 +34,12 @@
 */
 
 :- module(ssl,
-          [ load_certificate/2,           % +Stream, -Certificate
-            load_private_key/3,           % +Stream, +Password, -Key
+	  [ certificate_field/2,          % +Certificate, ?Field
+	    load_certificate/2,           % +Stream, -Certificate
+	    load_private_key/3,           % +Stream, +Password, -Key
             load_public_key/2,            % +Stream, -Key
-            load_crl/2,                   % +Stream, -Crl
+	    load_crl/2,                   % +Stream, -Crl
+	    write_certificate/3,          % +Stream, -X509, +Options
             system_root_certificates/1,   % -List
             cert_accept_any/5,            % +SSL, +ProblemCertificate,
                                           % +AllCertificates, +FirstCertificate,
@@ -50,7 +52,9 @@
             ssl_peer_certificate/2,       % +Stream, -Certificate
             ssl_peer_certificate_chain/2, % +Stream, -Certificates
             ssl_session/2,                % +Stream, -Session
-            ssl_secure_ciphers/1          % -Ciphers
+	    ssl_secure_ciphers/1,         % -Ciphers,
+	    verify_certificate/3,         % +X509, +AuxiliaryCertificates, +TrustedCertificates
+	    verify_certificate_issuer/2   % +Certificate, +IssuerCertificate
           ]).
 :- use_module(library(option)).
 :- use_module(library(settings)).
@@ -415,15 +419,8 @@ ssl_set_options(SSL0, SSL, Options) :-
 %!  load_certificate(+Stream, -Certificate) is det.
 %
 %   Loads a certificate from a PEM- or DER-encoded stream, returning
-%   a term which  will unify with the same  certificate if presented
-%   in  cert_verify_hook. A  certificate  is a  list containing  the
-%   following    terms:    issuer_name/1,    hash/1,    signature/1,
-%   signature_algorithm/1,   version/1,   notbefore/1,   notafter/1,
-%   serial/1, subject/1 and key/1.   subject/1 and issuer_name/1 are
-%   both lists  of =/2  terms representing  the name.   With OpenSSL
-%   1.0.2 and  greater, to_be_signed/1  is also  available, yielding
-%   the hexadecimal representation of the TBS (to-be-signed) portion
-%   of the certificate.
+%   a certificate. The fields of the certificate can be inspected
+%   using certificate_field(+Certificate, ?Field).
 %
 %   Note that the OpenSSL `CA.pl`  utility creates certificates that
 %   have a human readable textual representation in front of the PEM
@@ -439,6 +436,11 @@ ssl_set_options(SSL0, SSL, Options) :-
 %               at_end_of_stream(In), !
 %           ).
 %     ==
+
+%!  write_certificate(+Stream, +Certificate, +Options) is det.
+%
+%   Writes a certificate to the stream Stream. Options is reserved
+%   for future use.
 
 %!  load_crl(+Stream, -CRL) is det.
 %
@@ -508,6 +510,45 @@ ssl_set_options(SSL0, SSL, Options) :-
 %                 [ cert_verify_hook(cert_accept_any)
 %                 ])
 %     ==
+
+%!  verify_certificate_issuer(+Certificate,
+%!			      +Issuer).
+%
+%   True if Certificate is a certificate which was issued by the
+%   certificate Issuer.
+
+%!  verify_certificate(+Certificate,
+%!		       +AuxiliaryCertificates,
+%!		       +TrustedCertificates).
+%
+%   True if it is possible to build a chain of trust from Certificate to
+%   one of the certificates in TrustedCertificates, optionally using the
+%   (untrusted) certificates in AuxiliaryCertificates to complete the
+%   chain.
+%   To use the system built-in trust store, specify the special term
+%   system(root_certificates) for TrustedCertificates.
+
+%!  certificate_field(+Certificate,
+%!		      ?Field) is nondet.
+%
+%   Retrieve the field matching Field from Certificate. May be
+%   one of the following:
+%     * subject/1 to retrieve the subject
+%     * issuer/1  to retrieve the issuer's subject
+%     * version/1  to retrieve the version
+%     * serial/1  to retrieve the serial number
+%     * not_before/1 to retrieve the start date
+%     * not_after/1  to retrieve the expiry date
+%     * public_key/1 to retrieve the public key
+%     * crls/1 to retrieve a list of the CRLs
+%     * sans/1 to retrieve a list of the Subject Alternative Names
+%     * signature/1 to retrieve the certificate signature
+%     * signature_algorithm/1 to retrieve the signing algorithm
+%     * hash/1 to retrieve the certificate hash
+%     * to_be_signed/1 to retrieve the data on the certificate which
+%        must be signed
+
+
 
 cert_accept_any(_SSL,
                 _ProblemCertificate, _AllCertificates, _FirstCertificate,

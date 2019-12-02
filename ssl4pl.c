@@ -810,197 +810,57 @@ unify_private_key(EVP_PKEY* key, term_t item)
 #define GET0SIG_CONST_T
 #endif
 
+
 static int
-unify_certificate(term_t cert, X509* data)
-{ term_t list = PL_copy_term_ref(cert);
-  term_t item = PL_new_term_ref();
-  BIO * mem = NULL;
-  long n;
-  EVP_PKEY *key;
-  term_t issuername;
-  term_t subject;
-  term_t hash;
-  term_t not_before;
-  term_t not_after;
-  term_t signature;
-  unsigned int crl_ext_id;
-  unsigned char *p;
-  X509_EXTENSION * crl_ext = NULL;
-  GET0SIG_CONST_T ASN1_BIT_STRING *psig;
-  GET0SIG_CONST_T X509_ALGOR *palg;
-  const char *salgorithm;
-  term_t talgorithm;
-#ifdef HAVE_I2D_RE_X509_TBS
-  term_t to_be_signed;
-  unsigned char *tbs = NULL;
-  int tbs_len = i2d_re_X509_tbs(data, &tbs);
-#endif
-
-  X509_get0_signature(&psig, &palg, data);
-
-  if (!(PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_version1,
-                      PL_LONG, X509_get_version(data))
-         ))
-     return FALSE;
-  if (!(PL_unify_list(list, item, list) &&
-        (not_before = PL_new_term_ref()) &&
-        unify_asn1_time(not_before, X509_get0_notBefore(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_notbefore1,
-                      PL_TERM, not_before)))
-     return FALSE;
-
-  if (!(PL_unify_list(list, item, list) &&
-        (not_after = PL_new_term_ref()) &&
-        unify_asn1_time(not_after, X509_get0_notAfter(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_notafter1,
-                      PL_TERM, not_after)))
-     return FALSE;
-
-
-  if ((mem = BIO_new(BIO_s_mem())) != NULL)
-  { i2a_ASN1_INTEGER(mem, X509_get_serialNumber(data));
-    if ((n = BIO_get_mem_data(mem, &p)) > 0)
-    {  if (!(PL_unify_list(list, item, list) &&
-             PL_unify_term(item,
-                           PL_FUNCTOR, FUNCTOR_serial1,
-                           PL_NCHARS, (size_t)n, p)
-              ))
-        { BIO_vfree(mem);
-          return FALSE;
-        }
-    } else
-      Sdprintf("Failed to print serial - continuing without serial\n");
-  } else
-    Sdprintf("Failed to allocate BIO for printing - continuing without serial\n");
-  BIO_vfree(mem);
-
-  if (!(PL_unify_list(list, item, list) &&
-        (subject = PL_new_term_ref()) &&
-        unify_name(subject, X509_get_subject_name(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_subject1,
-                      PL_TERM, subject))
-     )
-     return FALSE;
-  if (!((hash = PL_new_term_ref()) &&
-#ifdef HAVE_X509_DIGEST
-        unify_hash(hash, palg->algorithm, hash_X509_digest_wrapper, data) &&
-#else
-        unify_hash(hash, palg->algorithm, i2d_X509_CINF_wrapper, data->cert_info) &&
-#endif
-        PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_hash1,
-                      PL_TERM, hash)))
-     return FALSE;
-  if (!((signature = PL_new_term_ref()) &&
-	unify_bytes_hex(signature, psig->length, psig->data) &&
-	PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_signature1,
-                      PL_TERM, signature)
-         ))
-     return FALSE;
-
-  if ( !((talgorithm = PL_new_term_ref()) &&
-         (salgorithm = OBJ_nid2sn(OBJ_obj2nid(palg->algorithm))) &&
-         PL_unify_chars(talgorithm, PL_ATOM|REP_UTF8, strlen(salgorithm), salgorithm) &&
-         PL_unify_list(list, item, list) &&
-         PL_unify_term(item,
-                       PL_FUNCTOR, FUNCTOR_signature_algorithm1,
-                       PL_TERM, talgorithm)) )
-    return FALSE;
-
-#ifdef HAVE_I2D_RE_X509_TBS
-  if (!((to_be_signed = PL_new_term_ref()) &&
-        (tbs_len >= 0) &&
-        unify_bytes_hex(to_be_signed, tbs_len, tbs) &&
-        PL_unify_list(list, item, list) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_to_be_signed1,
-                      PL_TERM, to_be_signed)
-        ))
-    return FALSE;
-  OPENSSL_free(tbs);
-#endif
-
-  if (!(PL_unify_list(list, item, list) &&
-        (issuername = PL_new_term_ref()) &&
-        unify_name(issuername, X509_get_issuer_name(data)) &&
-        PL_unify_term(item,
-                      PL_FUNCTOR, FUNCTOR_issuername1,
-                      PL_TERM, issuername))
-     )
-     return FALSE;
-
-  if (!PL_unify_list(list, item, list))
-    return FALSE;
-  /* X509_get_pubkey returns a copy of the existing key */
-  key = X509_get_pubkey(data);
-  if ( !PL_unify_functor(item, FUNCTOR_key1) ||
-       !PL_get_arg(1, item, item) ||
-       !unify_public_key(key, item) )
-    return FALSE;
-  EVP_PKEY_free(key);
-
-
-  /* If the cert has a CRL distribution point, return that. If it does not,
-     it is not an error
-  */
-  crl_ext_id = X509_get_ext_by_NID(data, NID_crl_distribution_points, -1);
-  crl_ext = X509_get_ext(data, crl_ext_id);
-  if (crl_ext != NULL)
-  { STACK_OF(DIST_POINT) * distpoints;
-    int i, j;
-    term_t crl;
-    term_t crl_list;
-    term_t crl_item;
-
-    if (!PL_unify_list(list, item, list))
-       return FALSE;
-
-    distpoints = X509_get_ext_d2i(data, NID_crl_distribution_points, NULL, NULL);
-    /* Loop through the CRL points, putting them into a list */
-    crl = PL_new_term_ref();
-    crl_list = PL_copy_term_ref(crl);
-    crl_item = PL_new_term_ref();
-
-    for (i = 0; i < sk_DIST_POINT_num(distpoints); i++)
-    { DIST_POINT *point;
-      GENERAL_NAME *name;
-      point = sk_DIST_POINT_value(distpoints, i);
-      if (point->distpoint != NULL)
-      { /* Each point may have several names? May as well put them all in */
-        for (j = 0; j < sk_GENERAL_NAME_num(point->distpoint->name.fullname); j++)
-        { name = sk_GENERAL_NAME_value(point->distpoint->name.fullname, j);
-          if (name != NULL && name->type == GEN_URI)
-          { if (!(PL_unify_list(crl_list, crl_item, crl_list) &&
-                  PL_unify_atom_chars(crl_item, (const char *)name->d.ia5->data)))
-            {
-              CRL_DIST_POINTS_free(distpoints);
-              return FALSE;
-            }
-          }
-        }
-      }
-    }
-    CRL_DIST_POINTS_free(distpoints);
-    if (!PL_unify_nil(crl_list))
-       return FALSE;
-    if (!PL_unify_term(item,
-                       PL_FUNCTOR, FUNCTOR_crl1,
-                       PL_TERM, crl))
-       return FALSE;
-  }
-  return PL_unify_nil(list);
+release_cert(atom_t atom)
+{ X509 *cert = PL_blob_data(atom, NULL, NULL);
+  X509_free(cert);
+  return TRUE;
 }
 
 static int
-unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
+write_cert(IOSTREAM *s, atom_t symbol, int flags)
+{ X509 *cert = PL_blob_data(symbol, NULL, NULL);
+  Sfprintf(s, "<ssl_certificate>(%p)", cert);
+  return TRUE;
+}
+
+static PL_blob_t certificate_type =
+{ PL_BLOB_MAGIC,
+  PL_BLOB_UNIQUE | PL_BLOB_NOCOPY,
+  "ssl_certificate",
+  release_cert,
+  NULL,
+  write_cert,
+  NULL
+};
+
+static int
+unify_certificate_blob(term_t Cert, X509* cert)
+{ term_t blob = PL_new_term_ref();
+  PL_put_blob(blob, cert, sizeof(void*), &certificate_type);
+  return PL_unify(Cert, blob);
+}
+
+static int
+unify_certificate_blob_copy(term_t Cert, X509* cert)
+{ term_t blob = PL_new_term_ref();
+  PL_put_blob(blob, X509_dup(cert), sizeof(void*), &certificate_type);
+  return PL_unify(Cert, blob);
+}
+
+
+static int
+get_certificate_blob(term_t Cert, X509** cert)
+{ PL_blob_t* type;
+  if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
+    return TRUE;
+  return PL_type_error("ssl_certificate", Cert);
+}
+
+
+static int
+unify_certificate_copies(term_t certs, term_t tail, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
   STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
@@ -1009,7 +869,7 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
-    retval &= unify_certificate(item, cert);
+    retval &= unify_certificate_blob_copy(item, cert);
     cert = sk_X509_pop(copy);
     if (cert == NULL)
     { sk_X509_free(copy);
@@ -1021,7 +881,7 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 }
 
 static int
-unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
+unify_certificate_copies_inorder(term_t certs, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
   STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
@@ -1030,11 +890,32 @@ unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
-    retval &= unify_certificate(item, cert);
+    retval &= unify_certificate_blob_copy(item, cert);
     cert = sk_X509_shift(copy);
   }
   sk_X509_free(copy);
   return retval && PL_unify_nil(list);
+}
+
+static int
+get_certificate_blobs(term_t Certs, STACK_OF(X509) **certs)
+{ term_t tail = PL_copy_term_ref(Certs);
+  term_t head = PL_new_term_ref();
+  *certs = sk_X509_new_null();
+  int rc = 1;
+
+  while( rc && PL_get_list_ex(tail, head, tail) )
+  {
+    X509* cert;
+    rc &= get_certificate_blob(head, &cert);
+    rc &= sk_X509_push(*certs, cert);
+  }
+  rc &= PL_get_nil_ex(tail);
+  if (!rc)
+  { sk_X509_free(*certs);
+    *certs = NULL;
+  }
+  return rc;
 }
 
 
@@ -1154,13 +1035,356 @@ pl_load_certificate(term_t source, term_t cert)
   PL_release_stream(stream);
   if (x509 == NULL)
     return raise_ssl_error(ERR_get_error());
-  if (unify_certificate(cert, x509))
-  { X509_free(x509);
+  return unify_certificate_blob(cert, x509);
+}
+
+
+typedef struct
+{
+   int index;
+   int deterministic;
+   X509* cert;
+   term_t current_field;
+} field_enum;
+
+static foreign_t
+fetch_subject(term_t Field, X509* cert)
+{ return unify_name(Field, X509_get_subject_name(cert));
+}
+
+static foreign_t
+fetch_issuer(term_t Field, X509* cert)
+{ return unify_name(Field, X509_get_issuer_name(cert));
+}
+
+
+static foreign_t
+fetch_version(term_t Field, X509* cert)
+{ return PL_unify_integer(Field, X509_get_version(cert));
+}
+
+static foreign_t
+fetch_serial(term_t Field, X509* cert)
+{ BIO * mem = NULL;
+  long n;
+  int rc = 0;
+  unsigned char *p;
+
+  if ((mem = BIO_new(BIO_s_mem())) != NULL)
+  { i2a_ASN1_INTEGER(mem, X509_get_serialNumber(cert));
+    if ((n = BIO_get_mem_data(mem, &p)) > 0)
+      rc = PL_unify_atom_nchars(Field, (size_t)n, (char*)p);
+    BIO_vfree(mem);
+    return rc;
+  }
+  return FALSE;
+}
+
+
+static foreign_t
+fetch_not_before(term_t Field, X509* cert)
+{ return unify_asn1_time(Field, X509_get0_notBefore(cert));
+}
+
+static foreign_t
+fetch_not_after(term_t Field, X509* cert)
+{ return unify_asn1_time(Field, X509_get0_notAfter(cert));
+}
+
+
+static foreign_t
+fetch_public_key(term_t Field, X509* cert)
+{ EVP_PKEY *key;
+  int rc;
+  term_t arg = PL_new_term_ref();
+  key = X509_get_pubkey(cert);
+  rc = unify_public_key(key, arg);
+  EVP_PKEY_free(key);
+  /* Most existing code expects to be able to call memberchk(key(Key), Cert)
+     and then pass Key to the rsa_* routines. This is a problem for this new
+     interface, since calling certificate_field(Cert, public_key(Key)) will
+     bind Key to an rsa/8. This means we have the slightly awkward result
+     that calling certificate_field(Cert, public_key(Key)) will exit with
+     binding certificate_field(Cert, public_key(public_key(rsa(....))))
+     ie with two public_key/1 functors
+  */
+  return rc && PL_unify_term(Field, PL_FUNCTOR, FUNCTOR_public_key1, PL_TERM, arg);
+}
+
+static foreign_t
+fetch_crls(term_t Field, X509* cert)
+{ unsigned int crl_ext_id;
+  X509_EXTENSION * crl_ext = NULL;
+
+  crl_ext_id = X509_get_ext_by_NID(cert, NID_crl_distribution_points, -1);
+  crl_ext = X509_get_ext(cert, crl_ext_id);
+  if (crl_ext != NULL)
+  { STACK_OF(DIST_POINT) * distpoints;
+    int i, j;
+    term_t crl;
+    term_t crl_list;
+    term_t crl_item;
+
+    distpoints = X509_get_ext_d2i(cert, NID_crl_distribution_points, NULL, NULL);
+    /* Loop through the CRL points, putting them into a list */
+    crl = PL_new_term_ref();
+    crl_list = PL_copy_term_ref(crl);
+    crl_item = PL_new_term_ref();
+
+    for (i = 0; i < sk_DIST_POINT_num(distpoints); i++)
+    { DIST_POINT *point;
+      GENERAL_NAME *name;
+      point = sk_DIST_POINT_value(distpoints, i);
+      if (point->distpoint != NULL)
+      { /* Each point may have several names? May as well put them all in */
+        for (j = 0; j < sk_GENERAL_NAME_num(point->distpoint->name.fullname); j++)
+        { name = sk_GENERAL_NAME_value(point->distpoint->name.fullname, j);
+          if (name != NULL && name->type == GEN_URI)
+          { if (!(PL_unify_list(crl_list, crl_item, crl_list) &&
+                  PL_unify_atom_chars(crl_item, (const char *)name->d.ia5->data)))
+            {
+              CRL_DIST_POINTS_free(distpoints);
+              return FALSE;
+            }
+          }
+        }
+      }
+    }
+    CRL_DIST_POINTS_free(distpoints);
+    return PL_unify_nil(crl_list) && PL_unify(Field, crl);
+  }
+  else
+  { /* No CRL */
+    return PL_unify_nil(Field);
+  }
+}
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
+#define X509_STORE_CTX_get0_cert(C) ((C)->cert)
+#endif
+
+
+static foreign_t
+fetch_sans(term_t Field, X509* cert)
+{ unsigned int san_ext_id;
+  X509_EXTENSION * san_ext = NULL;
+
+  san_ext_id = X509_get_ext_by_NID(cert, NID_subject_alt_name, -1);
+  san_ext = X509_get_ext(cert, san_ext_id);
+  if (san_ext != NULL)
+  { STACK_OF(GENERAL_NAME) *san_names = NULL;
+    GENERAL_NAME *name;
+    term_t san, san_list, san_item;
+    int i;
+
+    san_names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
+    /* Loop through the SANs, putting them into a list */
+    san = PL_new_term_ref();
+    san_list = PL_copy_term_ref(san);
+    san_item = PL_new_term_ref();
+    for (i = 0; i < sk_GENERAL_NAME_num(san_names); i++)
+    { name = sk_GENERAL_NAME_value(san_names, i);
+      if (name != NULL && name->type == GEN_DNS)
+      { if (!(PL_unify_list(san_list, san_item, san_list) &&
+              PL_unify_atom_chars(san_item, (char*)ASN1_STRING_get0_data(name->d.dNSName))))
+	{ sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
+	  return FALSE;
+	}
+      }
+    }
+    sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
+    return PL_unify_nil(san_list) && PL_unify(Field, san);
+  }
+  else
+  { /* No SAN */
+    return PL_unify_nil(Field);
+  }
+}
+
+static foreign_t
+fetch_signature(term_t Field, X509* cert)
+{ GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
+  X509_get0_signature(&psig, &palg, cert);
+  return unify_bytes_hex(Field, psig->length, psig->data);
+}
+
+
+static foreign_t
+fetch_signature_algorithm(term_t Field, X509* cert)
+{ GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
+  const char *salgorithm;
+  
+  X509_get0_signature(&psig, &palg, cert);
+  if ((salgorithm = OBJ_nid2sn(OBJ_obj2nid(palg->algorithm))) != NULL)
+  { return PL_unify_chars(Field, PL_ATOM|REP_UTF8, strlen(salgorithm), salgorithm);
+  }
+  return FALSE;
+}
+
+static foreign_t
+fetch_hash(term_t Field, X509* cert)
+{ GET0SIG_CONST_T ASN1_BIT_STRING *psig;
+  GET0SIG_CONST_T X509_ALGOR *palg;
+  
+  X509_get0_signature(&psig, &palg, cert);
+#ifdef HAVE_X509_DIGEST
+  return unify_hash(Field, palg->algorithm, hash_X509_digest_wrapper, cert);
+#else
+  return unify_hash(Field, palg->algorithm, i2d_X509_CINF_wrapper, cert->cert_info);
+#endif
+}
+
+
+
+#ifdef HAVE_I2D_RE_X509_TBS
+static foreign_t
+fetch_to_be_signed(term_t Field, X509* cert)
+{ unsigned char *tbs = NULL;
+  int tbs_len = i2d_re_X509_tbs(cert, &tbs);
+  int rc = 0;
+  if (tbs_len >= 0)
+    rc = unify_bytes_hex(Field, tbs_len, tbs);
+  OPENSSL_free(tbs);
+  return rc;
+}
+#endif
+
+
+struct
+{
+  const char* name;
+  foreign_t (*fetch)(term_t, X509*);
+} certificate_fields[] = {{"subject", fetch_subject},
+			      {"issuer", fetch_issuer},
+			      {"not_before", fetch_not_before},
+			      {"not_after", fetch_not_after},
+			      {"version", fetch_version},
+			      {"serial", fetch_serial},
+			      {"public_key", fetch_public_key},
+			      {"crls", fetch_crls},
+			      {"sans", fetch_sans},
+			      {"signature", fetch_signature},
+			      {"signature_algorithm", fetch_signature_algorithm},
+			      {"hash", fetch_hash},
+#ifdef HAVE_I2D_RE_X509_TBS			      
+			      {"to_be_signed", fetch_to_be_signed},
+#endif
+			      {NULL, NULL}};
+
+
+static int fetch_field(field_enum *state)
+{ if (certificate_fields[state->index].name != 0)
+  { term_t arg = PL_new_term_ref();
+    int rc = certificate_fields[state->index].fetch(arg, state->cert);
+    state->current_field = PL_new_term_ref();
+    return rc && PL_unify_term(state->current_field,
+			       PL_FUNCTOR_CHARS, certificate_fields[state->index].name, 1,
+			       PL_TERM, arg);
+  }
+  return 0;
+}
+
+static
+foreign_t pl_certificate_field(term_t Certificate, term_t Field, control_t handle)
+{ field_enum *state;
+  switch(PL_foreign_control(handle))
+  { case PL_FIRST_CALL:
+    state = PL_malloc(sizeof(field_enum));
+    memset(state, 0, sizeof(field_enum));
+    if ( !get_certificate_blob(Certificate, &state->cert) )
+    { PL_free(state);
+      return FALSE;
+    }
+    if (!PL_is_variable(Field)) /* deterministic case */
+    { atom_t name;
+      size_t arity;
+      const char* namec;
+      if (!PL_get_name_arity(Field, &name, &arity) || arity != 1)
+      { PL_free(state);
+	return PL_type_error("field", Field);
+      }
+      namec = PL_atom_chars(name);
+      while (certificate_fields[state->index].name != NULL)
+      { if (strcmp(certificate_fields[state->index].name, namec) == 0)
+	{ state->deterministic = 1;
+	  break;
+	}
+	state->index++;
+      }
+      if (certificate_fields[state->index].name == 0)
+      { PL_free(state);
+	return PL_existence_error("field", Field);
+      }
+    }
+    if (!fetch_field(state))
+    { PL_free(state);
+      PL_fail;
+    }
+    break;
+  case PL_REDO:
+     state = PL_foreign_context_address(handle);
+     if (!fetch_field(state))
+     { PL_free(state);
+       PL_fail;
+     }
+     break;
+  case PL_CUTTED:
+    state = PL_foreign_context_address(handle);
+    PL_free(state);
     PL_succeed;
-  } else
-  { X509_free(x509);
+    break;
+  default:
+    return FALSE;
+  }
+  if (PL_unify(Field, state->current_field))
+  { if (state->deterministic)
+    { PL_free(state);
+      PL_succeed;
+    }
+    else
+    { state->index++;
+      PL_retry_address(state);
+    }
+  }
+  else
+  { PL_free(state);
     PL_fail;
   }
+}
+
+
+static foreign_t
+pl_verify_certificate_issuer(term_t Certificate, term_t IssuerCertificate)
+{ X509* cert, *issuer_cert;
+  if ( !get_certificate_blob(Certificate, &cert) )
+    return FALSE;
+  if ( !get_certificate_blob(IssuerCertificate, &issuer_cert) )
+    return FALSE;
+  return X509_check_issued(issuer_cert, cert);
+}
+
+
+static foreign_t
+pl_write_certificate(term_t Sink, term_t Cert, term_t Options)
+{ X509* x509;
+  BIO* bio;
+  IOSTREAM* stream;
+  int rc;
+
+  if ( !get_certificate_blob(Cert, &x509) )
+    return FALSE;
+  if ( !PL_get_stream_handle(Sink, &stream) )
+    return FALSE;
+
+  bio = BIO_new(bio_write_method());
+  BIO_set_ex_data(bio, 0, stream);
+  rc = PEM_write_bio_X509(bio, x509);
+  BIO_free(bio);
+  PL_release_stream(stream);
+  return rc;
 }
 
 
@@ -1354,8 +1578,8 @@ pl_cert_verify_hook(PL_SSL *config,
   else
     val = PL_unify_atom_chars(error_term, error);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
-  val &= ( unify_certificate(av+2, cert) &&
-           unify_certificates(av+3, av+4, stack) &&
+  val &= ( unify_certificate_blob_copy(av+2, cert) &&
+           unify_certificate_copies(av+3, av+4, stack) &&
            PL_unify(av+5, error_term) &&
            PL_call_predicate(config->cb_cert_verify.module,
                              PL_Q_PASS_EXCEPTION, call6, av) );
@@ -1779,10 +2003,6 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
          4) Otherwise, FAIL.
       */
       int i;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-#define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
-#define X509_STORE_CTX_get0_cert(C) ((C)->cert)
-#endif
       X509 *cert = X509_STORE_CTX_get0_cert(ctx);
 
       STACK_OF(GENERAL_NAME) *alt_names = X509_get_ext_d2i((X509 *)cert, NID_subject_alt_name, NULL, NULL);
@@ -2039,8 +2259,8 @@ ssl_close(PL_SSL_INSTANCE *instance)
       }
     }
 
-    if ( instance->ssl )
-      SSL_free(instance->ssl);
+      if ( instance->ssl )
+        SSL_free(instance->ssl);
 
     if ( instance->swrite )
       Sset_filter(instance->swrite, NULL);
@@ -3637,12 +3857,71 @@ pl_system_root_certificates(term_t list)
 
   while (index < sk_X509_num(certs))
   { if ( !(PL_unify_list(tail, head, tail) &&
-	   unify_certificate(head, sk_X509_value(certs, index++))) )
+           unify_certificate_blob_copy(head, sk_X509_value(certs, index++))) )
     { return FALSE;
     }
   }
 
   return PL_unify_nil(tail);
+}
+
+
+static foreign_t
+pl_verify_certificate(term_t Cert, term_t Chain, term_t Roots)
+{ X509* cert = NULL;
+  X509_STORE_CTX* ctx = NULL;
+  X509_STORE* store = NULL;
+  STACK_OF(X509) *chain = NULL;
+  STACK_OF(X509) *roots = NULL;
+  int rc = 1;
+  int index = 0;
+
+  if ( !get_certificate_blob(Cert, &cert))
+    return FALSE;
+
+  if ( PL_is_functor(Roots, FUNCTOR_system1) )
+  { _PL_get_arg(1, Roots, Roots);
+    atom_t a;
+
+    if ( !PL_get_atom_ex(Roots, &a) )
+      return FALSE;
+    if ( a == ATOM_root_certificates )
+      roots = system_root_certificates();
+    else
+      return PL_domain_error("certificate_list", Roots);
+  } else if ( !get_certificate_blobs(Roots, &roots))
+    return FALSE;
+
+  if ( !get_certificate_blobs(Chain, &chain))
+    rc = FALSE;
+
+  rc &= ((ctx = X509_STORE_CTX_new()) != NULL);
+  rc &= ((store = X509_STORE_new()) != NULL);
+
+  /* Add roots to store */
+  if (rc)
+  { for ( index = 0; index < sk_X509_num(roots); index++ )
+      X509_STORE_add_cert(store, sk_X509_value(roots, index));
+    Sdprintf("Added %d certificates to the store\n", index);
+
+    rc &= X509_STORE_CTX_init(ctx, store, cert, chain);
+    rc &= X509_verify_cert(ctx);
+    if (rc <= 0)
+      { char msg[1024];
+	ERR_error_string(X509_STORE_CTX_get_error(ctx), &msg[0]);
+	Sdprintf("Failed to verify certificate: %s (%d)\n", msg, rc);
+      }
+  }
+  if (store != NULL)
+    X509_STORE_free(store);
+  if (ctx != NULL)
+    X509_STORE_CTX_free(ctx);
+  if (chain != NULL)
+    sk_X509_free(chain);
+
+  if (roots != NULL && roots != system_root_store)
+    sk_X509_free(roots);
+  return rc;
 }
 
 static int
@@ -3683,7 +3962,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
   instance = ssl_stream->handle;
   if ( (cert = ssl_peer_certificate(instance)) )
-    rc = unify_certificate(Cert, cert);
+    rc = unify_certificate_blob_copy(Cert, cert);
   PL_release_stream(stream);
 
   return rc;
@@ -3699,8 +3978,8 @@ pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
     return FALSE;
 
   instance = ssl_stream->handle;
-  rc = unify_certificates_inorder(chain,
-				  SSL_get_peer_cert_chain(instance->ssl));
+  rc = unify_certificate_copies_inorder(chain,
+                                        SSL_get_peer_cert_chain(instance->ssl));
   PL_release_stream(stream);
 
   return rc;
@@ -3912,9 +4191,14 @@ install_ssl4pl(void)
                                         2, pl_ssl_peer_certificate_chain, 0);
   PL_register_foreign("load_crl",       2, pl_load_crl,      0);
   PL_register_foreign("load_certificate",2,pl_load_certificate,      0);
+  PL_register_foreign("write_certificate",3,pl_write_certificate,      0);
+  PL_register_foreign("verify_certificate",3,pl_verify_certificate,      0);
   PL_register_foreign("load_private_key",3,pl_load_private_key,      0);
   PL_register_foreign("load_public_key", 2,pl_load_public_key,      0);
   PL_register_foreign("system_root_certificates", 1, pl_system_root_certificates, 0);
+
+  PL_register_foreign("certificate_field", 2, pl_certificate_field, PL_FA_NONDETERMINISTIC);
+  PL_register_foreign("verify_certificate_issuer", 2, pl_verify_certificate_issuer, 0);
 
 /* Note that libcrypto threading needs to be initialized exactly once.
    This is achieved by loading library(crypto) from library(ssl) and
