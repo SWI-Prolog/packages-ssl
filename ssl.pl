@@ -208,7 +208,7 @@ easily be used.
 %     certifications from the `cacert_file` option, Error is unified
 %     with the atom `verified`. Otherwise it contains the error
 %     string passed from OpenSSL. Access will be granted iff the
-%     predicate succeeds. See load_certificate/3 for a description
+%     predicate succeeds. See load_certificate/2 for a description
 %     of the certificate terms. See cert_accept_any/5 for a dummy
 %     implementation that accepts any certificate.
 %     * cipher_list(+Atom)
