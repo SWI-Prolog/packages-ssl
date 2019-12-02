@@ -813,14 +813,14 @@ unify_private_key(EVP_PKEY* key, term_t item)
 
 static int
 release_cert(atom_t atom)
-{ X509 **cert = PL_blob_data(atom, NULL, NULL);
-  X509_free(*cert);
+{ X509 *cert = PL_blob_data(atom, NULL, NULL);
+  X509_free(cert);
   return TRUE;
 }
 
 static int
 write_cert(IOSTREAM *s, atom_t symbol, int flags)
-{ X509 **cert = PL_blob_data(symbol, NULL, NULL);
+{ X509 *cert = PL_blob_data(symbol, NULL, NULL);
   Sfprintf(s, "<ssl_certificate>(%p)", cert);
   return TRUE;
 }
