@@ -843,6 +843,14 @@ unify_certificate_blob(term_t Cert, X509* cert)
 }
 
 static int
+unify_certificate_blob_copy(term_t Cert, X509* cert)
+{ term_t blob = PL_new_term_ref();
+  PL_put_blob(blob, X509_dup(cert), sizeof(void*), &certificate_type);
+  return PL_unify(Cert, blob);
+}
+
+
+static int
 get_certificate_blob(term_t Cert, X509** cert)
 { PL_blob_t* type;
   if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
@@ -852,7 +860,7 @@ get_certificate_blob(term_t Cert, X509** cert)
 
 
 static int
-unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
+unify_certificate_copies(term_t certs, term_t tail, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
   STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
@@ -861,7 +869,7 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
-    retval &= unify_certificate_blob(item, cert);
+    retval &= unify_certificate_blob_copy(item, cert);
     cert = sk_X509_pop(copy);
     if (cert == NULL)
     { sk_X509_free(copy);
@@ -873,7 +881,7 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 }
 
 static int
-unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
+unify_certificate_copies_inorder(term_t certs, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
   STACK_OF(X509) *copy = stack ? sk_X509_dup(stack) : NULL;
@@ -882,7 +890,7 @@ unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
-    retval &= unify_certificate_blob(item, cert);
+    retval &= unify_certificate_blob_copy(item, cert);
     cert = sk_X509_shift(copy);
   }
   sk_X509_free(copy);
@@ -1570,8 +1578,8 @@ pl_cert_verify_hook(PL_SSL *config,
   else
     val = PL_unify_atom_chars(error_term, error);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
-  val &= ( unify_certificate_blob(av+2, cert) &&
-           unify_certificates(av+3, av+4, stack) &&
+  val &= ( unify_certificate_blob_copy(av+2, cert) &&
+           unify_certificate_copies(av+3, av+4, stack) &&
            PL_unify(av+5, error_term) &&
            PL_call_predicate(config->cb_cert_verify.module,
                              PL_Q_PASS_EXCEPTION, call6, av) );
@@ -2251,8 +2259,8 @@ ssl_close(PL_SSL_INSTANCE *instance)
       }
     }
 
-    if ( instance->ssl )
-      SSL_free(instance->ssl);
+      if ( instance->ssl )
+        SSL_free(instance->ssl);
 
     if ( instance->swrite )
       Sset_filter(instance->swrite, NULL);
@@ -3849,7 +3857,7 @@ pl_system_root_certificates(term_t list)
 
   while (index < sk_X509_num(certs))
   { if ( !(PL_unify_list(tail, head, tail) &&
-	   unify_certificate_blob(head, sk_X509_value(certs, index++))) )
+           unify_certificate_blob_copy(head, sk_X509_value(certs, index++))) )
     { return FALSE;
     }
   }
@@ -3954,7 +3962,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
   instance = ssl_stream->handle;
   if ( (cert = ssl_peer_certificate(instance)) )
-    rc = unify_certificate_blob(Cert, cert);
+    rc = unify_certificate_blob_copy(Cert, cert);
   PL_release_stream(stream);
 
   return rc;
@@ -3970,8 +3978,8 @@ pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
     return FALSE;
 
   instance = ssl_stream->handle;
-  rc = unify_certificates_inorder(chain,
-				  SSL_get_peer_cert_chain(instance->ssl));
+  rc = unify_certificate_copies_inorder(chain,
+                                        SSL_get_peer_cert_chain(instance->ssl));
   PL_release_stream(stream);
 
   return rc;
