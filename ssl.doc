@@ -427,6 +427,25 @@ Virtual hosts for HTTPS are available via \jargon{Server Name
 host different domains from the same IP address. See the sni_hook/1
 option of ssl_context/3 for more information.
 
+\section{Compatibility of the API}
+\label{sec:compatibility}
+Previous versions of the library used plain Prolog terms to represent
+the certificate objects as lists of fields. Newer versions of the
+library preserve the raw underlying structures as opaque handles to
+allow for more complicated operations to be performed on them. Any old
+code which obtains fields from the certificate using memberchk/2
+should be modified to use certificate_field/2 instead. For example,
+\begin{code}
+  memberchk(subject(Subject), Certificate)
+\end{code}
+will instead need to be
+\begin{code}
+  cerficate_field(Certificate, subject(Subject))
+\end{code}
+
+Note that some of the fields do not match up exactly with their
+previous counterparts (key is now public_key, for example).
+
 \section{Acknowledgments}
 \label{sec:ssl-acknowledgments}
 
