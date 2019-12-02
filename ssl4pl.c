@@ -1088,10 +1088,19 @@ static foreign_t
 fetch_public_key(term_t Field, X509* cert)
 { EVP_PKEY *key;
   int rc;
+  term_t arg = PL_new_term_ref();
   key = X509_get_pubkey(cert);
-  rc = unify_public_key(key, Field);
+  rc = unify_public_key(key, arg);
   EVP_PKEY_free(key);
-  return rc;
+  /* Most existing code expects to be able to call memberchk(key(Key), Cert)
+     and then pass Key to the rsa_* routines. This is a problem for this new
+     interface, since calling certificate_field(Cert, public_key(Key)) will
+     bind Key to an rsa/8. This means we have the slightly awkward result
+     that calling certificate_field(Cert, public_key(Key)) will exit with
+     binding certificate_field(Cert, public_key(public_key(rsa(....))))
+     ie with two public_key/1 functors
+  */
+  return rc && PL_unify_term(Field, PL_FUNCTOR, FUNCTOR_public_key1, PL_TERM, arg);
 }
 
 static foreign_t
