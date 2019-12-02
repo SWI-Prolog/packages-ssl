@@ -147,7 +147,7 @@ test(trip_private_public, In == Out) :-
               ( skip_to_pem_cert(S2),
                 load_certificate(S2, Cert)
               )),
-    memberchk(key(PublicKey), Cert),
+    certificate_field(Cert, public_key(PublicKey)),
     rsa_private_encrypt(PrivateKey, In, Encrypted, []),
     rsa_public_decrypt(PublicKey, Encrypted, Out, []).
 test(trip_private_public, In == Out) :-
@@ -159,7 +159,7 @@ test(trip_private_public, In == Out) :-
               ( skip_to_pem_cert(S2),
                 load_certificate(S2, Cert)
               )),
-    memberchk(key(PublicKey), Cert),
+    certificate_field(Cert, public_key(PublicKey)),
     rsa_private_encrypt(PrivateKey, In, Encrypted, []),
     rsa_public_decrypt(PublicKey, Encrypted, Out, []).
 test(trip_public_private, In == Out) :-
@@ -170,7 +170,7 @@ test(trip_public_private, In == Out) :-
               ( skip_to_pem_cert(S2),
                 load_certificate(S2, Cert)
               )),
-    memberchk(key(PublicKey), Cert),
+    certificate_field(Cert, public_key(PublicKey)),
     rsa_public_encrypt(PublicKey, In, Encrypted, []),
     rsa_private_decrypt(PrivateKey, Encrypted, Out, []).
 
@@ -572,7 +572,7 @@ test_crl_hook(_SSL, Cert, _Chain, _Tail, revoked):-
     setup_call_cleanup(open('tests/test_certs/rootCA-crl.pem', read, Stream),
                        load_crl(Stream, CRL),
                        close(Stream)),
-    memberchk(serial(Serial), Cert),
+    certificate_field(Cert, serial(Serial)),
     memberchk(revocations(Revocations), CRL),
     \+memberchk(revoked(Serial, _RevocationTime), Revocations).
 
@@ -714,15 +714,15 @@ test(roundtrip, RecoveredText == Text) :-
                  *******************************/
 
 is_certificate(Cert) :-
-    is_list(Cert),
-    memberchk(version(V), Cert), integer(V),
-    memberchk(notbefore(NB), Cert), integer(NB),
-    memberchk(notafter(NA), Cert), integer(NA),
-    memberchk(subject(Subj), Cert), is_subject(Subj),
-    memberchk(hash(H), Cert), is_hex_string(H),
-    memberchk(signature(S), Cert), is_hex_string(S),
-    memberchk(issuer_name(Issuer), Cert), is_issuer(Issuer),
-    memberchk(key(K), Cert), is_public_key(K).
+    blob(Cert, ssl_certificate),
+    certificate_field(Cert, version(V)), integer(V),
+    certificate_field(Cert, not_before(NB)), integer(NB),
+    certificate_field(Cert, not_after(NA)), integer(NA),
+    certificate_field(Cert, subject(Subj)), is_subject(Subj),
+    certificate_field(Cert, hash(H)), is_hex_string(H),
+    certificate_field(Cert, signature(S)), is_hex_string(S),
+    certificate_field(Cert, issuer(Issuer)), is_issuer(Issuer),
+    certificate_field(Cert, public_key(K)), is_public_key(K).
 
 is_subject(Subj) :-
     is_list(Subj),
