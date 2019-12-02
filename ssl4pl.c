@@ -821,14 +821,14 @@ release_cert(atom_t atom)
 static int
 write_cert(IOSTREAM *s, atom_t symbol, int flags)
 { X509 **cert = PL_blob_data(symbol, NULL, NULL);
-  Sfprintf(s, "<certificate>(%p)", cert);
+  Sfprintf(s, "<ssl_certificate>(%p)", cert);
   return TRUE;
 }
 
 static PL_blob_t certificate_type =
 { PL_BLOB_MAGIC,
   PL_BLOB_NOCOPY,
-  "certificate",
+  "ssl_certificate",
   release_cert,
   NULL,
   write_cert,
@@ -836,7 +836,7 @@ static PL_blob_t certificate_type =
 };
 
 static int
-put_certificate_blob(term_t Cert, X509* cert)
+unify_certificate_blob(term_t Cert, X509* cert)
 { term_t blob = PL_new_term_ref();
   PL_put_blob(blob, cert, sizeof(void*), &certificate_type);
   return PL_unify(Cert, blob);
@@ -847,7 +847,7 @@ get_certificate_blob(term_t Cert, X509** cert)
 { PL_blob_t* type;
   if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
     return TRUE;
-  return PL_type_error("certificate", Cert);
+  return PL_type_error("ssl_certificate", Cert);
 }
 
 
@@ -861,7 +861,7 @@ unify_certificates(term_t certs, term_t tail, STACK_OF(X509)* stack)
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
-    retval &= put_certificate_blob(item, cert);
+    retval &= unify_certificate_blob(item, cert);
     cert = sk_X509_pop(copy);
     if (cert == NULL)
     { sk_X509_free(copy);
@@ -882,7 +882,7 @@ unify_certificates_inorder(term_t certs, STACK_OF(X509)* stack)
 
   while (cert != NULL && retval == 1)
   { retval &= PL_unify_list(list, item, list);
-    retval &= put_certificate_blob(item, cert);
+    retval &= unify_certificate_blob(item, cert);
     cert = sk_X509_shift(copy);
   }
   sk_X509_free(copy);
@@ -1027,7 +1027,7 @@ pl_load_certificate(term_t source, term_t cert)
   PL_release_stream(stream);
   if (x509 == NULL)
     return raise_ssl_error(ERR_get_error());
-  return put_certificate_blob(cert, x509);
+  return unify_certificate_blob(cert, x509);
 }
 
 
@@ -1555,7 +1555,7 @@ pl_cert_verify_hook(PL_SSL *config,
   else
     val = PL_unify_atom_chars(error_term, error);
   /*Sdprintf("\n---Certificate:'%s'---\n", certificate);*/
-  val &= ( put_certificate_blob(av+2, cert) &&
+  val &= ( unify_certificate_blob(av+2, cert) &&
            unify_certificates(av+3, av+4, stack) &&
            PL_unify(av+5, error_term) &&
            PL_call_predicate(config->cb_cert_verify.module,
@@ -3838,7 +3838,7 @@ pl_system_root_certificates(term_t list)
 
   while (index < sk_X509_num(certs))
   { if ( !(PL_unify_list(tail, head, tail) &&
-	   put_certificate_blob(head, sk_X509_value(certs, index++))) )
+	   unify_certificate_blob(head, sk_X509_value(certs, index++))) )
     { return FALSE;
     }
   }
@@ -3943,7 +3943,7 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
   instance = ssl_stream->handle;
   if ( (cert = ssl_peer_certificate(instance)) )
-    rc = put_certificate_blob(Cert, cert);
+    rc = unify_certificate_blob(Cert, cert);
   PL_release_stream(stream);
 
   return rc;
