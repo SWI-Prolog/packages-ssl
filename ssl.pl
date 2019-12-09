@@ -190,6 +190,10 @@ easily be used.
 %     the FileName `system(root_certificates)` uses a list of
 %     trusted root certificates as provided by the OS. See
 %     system_root_certificates/1 for details.
+%     * cacerts(+ListOfCertificates)
+%     Specify a list of certificates of _trusted_ certificates.
+%     This is equivalent to cacert_file/1 but allows the use of
+%     certificates loaded from places other than a single file.
 %
 %     Additional verification of the peer certificate as well as
 %     accepting certificates that are not trusted by the given set

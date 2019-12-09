@@ -77,6 +77,7 @@ static atom_t ATOM_password;
 static atom_t ATOM_host;
 static atom_t ATOM_peer_cert;
 static atom_t ATOM_cacert_file;
+static atom_t ATOM_cacerts;
 static atom_t ATOM_require_crl;
 static atom_t ATOM_crl;
 static atom_t ATOM_certificate_file;
@@ -209,6 +210,7 @@ typedef struct pl_ssl {
      * Various parameters affecting the SSL layer
      */
     int                  use_system_cacert;
+    STACK_OF(X509)      *cacerts;
     char                *cacert;
 
     char                *certificate_file;
@@ -1821,7 +1823,8 @@ ssl_new(void)
         new->use_system_cacert   = FALSE;
         new->host                = NULL;
 
-        new->cacert              = NULL;
+	new->cacert              = NULL;
+	new->cacerts             = NULL;
         new->certificate_file    = NULL;
         new->num_cert_key_pairs  = 0;
         for (i = 0; i < SSL_MAX_CERT_KEY_PAIRS; i++)
@@ -1863,6 +1866,7 @@ ssl_free(PL_SSL *config)
     config->magic = 0;
     free(config->host);
     free(config->cacert);
+    sk_X509_free(config->cacerts);
     free(config->certificate_file);
     free(config->key_file);
     free(config->cipher_list);
@@ -2541,11 +2545,21 @@ ssl_init_verify_locations(PL_SSL *config)
       }
     }
     ssl_deb(1, "System certificate authority(s) installed\n");
+  } else if ( config->cacerts )
+  { X509_STORE *store = X509_STORE_new();
+    if ( store )
+    { int index = 0;
+      while (index < sk_X509_num(config->cacerts))
+      { X509_STORE_add_cert(store, sk_X509_value(config->cacerts, index++));
+      }
+      SSL_CTX_set_cert_store(config->ctx, store);
+    }
+    ssl_deb(1, "certificate authority(s) installed from individual certificates\n");
   } else if ( config->cacert )
   { SSL_CTX_load_verify_locations(config->ctx,
                                   config->cacert,
                                   NULL);
-    ssl_deb(1, "certificate authority(s) installed\n");
+    ssl_deb(1, "certificate authority(s) installed from single file\n");
   }
   if ( config->crl_list )
   { X509_STORE *store = SSL_CTX_get_cert_store(config->ctx);
@@ -3527,6 +3541,37 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       if (conf->certificate_file) free(conf->certificate_file);
       conf->certificate_file = ssl_strdup(file);
+    } else if ( name == ATOM_cacerts && arity == 1 )
+    { term_t CertTail = PL_new_term_ref();
+      term_t CertHead = PL_new_term_ref();
+      _PL_get_arg(1, head, CertTail);
+      if (conf->cacerts)
+	sk_X509_free(conf->cacerts);
+      conf->cacerts = sk_X509_new_null();
+      while (PL_get_list_ex(CertTail, CertHead, CertTail))
+      { X509* cert;
+	if (!get_certificate_blob(CertHead, &cert))
+	{ sk_X509_free(conf->cacerts);
+	  Sdprintf("failed here\n");
+	  conf->cacerts = NULL;
+	  return FALSE;
+	}
+	sk_X509_push(conf->cacerts, cert);
+      }
+      if (!PL_get_nil_ex(CertTail))
+      { sk_X509_free(conf->cacerts);
+	Sdprintf("not a list\n");
+	conf->cacerts = NULL;
+	return FALSE;
+      }
+    } else if ( name == ATOM_certificate_file && arity == 1 )
+    { char *file;
+
+      if ( !get_file_arg(1, head, &file) )
+	return FALSE;
+
+      if (conf->certificate_file) free(conf->certificate_file);
+      conf->certificate_file = ssl_strdup(file);
     } else if ( name == ATOM_certificate_key_pairs && arity == 1 )
     { term_t cert_head = PL_new_term_ref();
       term_t cert_tail = PL_new_term_ref();
@@ -3749,6 +3794,7 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->host                = ssl_strdup(old->host);
   new->use_system_cacert   = old->use_system_cacert;
   new->cacert              = ssl_strdup(old->cacert);
+  new->cacerts             = sk_X509_dup(old->cacerts);
   new->certificate_file    = ssl_strdup(old->certificate_file);
   new->key_file            = ssl_strdup(old->key_file);
   new->min_protocol        = old->min_protocol;
@@ -4112,6 +4158,7 @@ install_ssl4pl(void)
   MKATOM(host);
   MKATOM(peer_cert);
   MKATOM(cacert_file);
+  MKATOM(cacerts);
   MKATOM(certificate_file);
   MKATOM(certificate_key_pairs);
   MKATOM(key_file);
