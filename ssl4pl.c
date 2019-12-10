@@ -3551,8 +3551,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       while (PL_get_list_ex(CertTail, CertHead, CertTail))
       { X509* cert;
 	if (!get_certificate_blob(CertHead, &cert))
-	{ sk_X509_free(conf->cacerts);
-	  Sdprintf("failed here\n");
+        { sk_X509_free(conf->cacerts);
 	  conf->cacerts = NULL;
 	  return FALSE;
 	}
@@ -3560,7 +3559,6 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       }
       if (!PL_get_nil_ex(CertTail))
       { sk_X509_free(conf->cacerts);
-	Sdprintf("not a list\n");
 	conf->cacerts = NULL;
 	return FALSE;
       }
