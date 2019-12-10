@@ -1368,6 +1368,15 @@ pl_verify_certificate_issuer(term_t Certificate, term_t IssuerCertificate)
   return X509_check_issued(issuer_cert, cert) == X509_V_OK;
 }
 
+static foreign_t
+pl_same_certificate(term_t A, term_t B)
+{ X509* a, *b;
+  if ( !get_certificate_blob(A, &a) )
+    return FALSE;
+  if ( !get_certificate_blob(B, &b) )
+    return FALSE;
+  return X509_cmp(a, b) == 0;
+}
 
 static foreign_t
 pl_write_certificate(term_t Sink, term_t Cert, term_t Options)
@@ -4244,6 +4253,7 @@ install_ssl4pl(void)
 
   PL_register_foreign("certificate_field", 2, pl_certificate_field, PL_FA_NONDETERMINISTIC);
   PL_register_foreign("verify_certificate_issuer", 2, pl_verify_certificate_issuer, 0);
+  PL_register_foreign("same_certificate", 2, pl_same_certificate, 0);
 
 /* Note that libcrypto threading needs to be initialized exactly once.
    This is achieved by loading library(crypto) from library(ssl) and
