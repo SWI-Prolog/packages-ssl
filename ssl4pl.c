@@ -1381,7 +1381,7 @@ pl_write_certificate(term_t Sink, term_t Cert, term_t Options)
   if ( !PL_get_stream_handle(Sink, &stream) )
     return FALSE;
 
-  bio = BIO_new(bio_write_method());
+  bio = BIO_new(bio_write_text_method());
   BIO_set_ex_data(bio, 0, stream);
   rc = PEM_write_bio_X509(bio, x509);
   BIO_free(bio);
