@@ -1365,7 +1365,7 @@ pl_verify_certificate_issuer(term_t Certificate, term_t IssuerCertificate)
     return FALSE;
   if ( !get_certificate_blob(IssuerCertificate, &issuer_cert) )
     return FALSE;
-  return X509_check_issued(issuer_cert, cert);
+  return X509_check_issued(issuer_cert, cert) == X509_V_OK;
 }
 
 
