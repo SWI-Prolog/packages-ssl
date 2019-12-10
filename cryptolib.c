@@ -268,6 +268,22 @@ bio_write(BIO* bio, const char* buf, int len)
   return r;
 }
 
+static int
+bio_write_text(BIO* bio, const char* buf, int len)
+{ IOSTREAM* stream = BIO_get_ex_data(bio, 0);
+  int r = 0, i;
+
+  for (i = 0; i < len; i++)
+  { if (Sputcode(buf[i], stream))
+      r++;
+    else
+      break;
+  }
+  Sflush(stream);
+
+  return r;
+}
+
 /*
  * Control function. Currently only supports flushing and detecting EOF.
  * There are several more mandatory, but as-yet unsupported functions...
@@ -352,6 +368,18 @@ static BIO_METHOD bio_write_functions = { BIO_TYPE_MEM,
 					  &bio_destroy
 					};
 
+static BIO_METHOD bio_write_text_functions = { BIO_TYPE_MEM,
+                                               "write",
+                                               &bio_write_text,
+                                               NULL,
+                                               NULL,
+                                               NULL,
+                                               &bio_control,
+                                               &bio_create,
+                                               &bio_destroy
+                                             };
+
+
 static BIO_METHOD *
 bio_read_method(void)
 {
@@ -363,6 +391,13 @@ bio_write_method(void)
 {
   return &bio_write_functions;
 }
+
+static BIO_METHOD *
+bio_write_text_method(void)
+{
+  return &bio_write_text_functions;
+}
+
 #else
 /*
  * In OpenSSL >= 1.1.0, the BIO methods are constructed
@@ -374,6 +409,7 @@ static CRYPTO_ONCE once_write = CRYPTO_ONCE_STATIC_INIT;
 
 static BIO_METHOD *read_method = NULL;
 static BIO_METHOD *write_method = NULL;
+static BIO_METHOD *write_text_method = NULL;
 
 static void
 read_method_init(void)
@@ -417,6 +453,22 @@ write_method_init(void)
   write_method = wm;
 }
 
+static void
+write_text_method_init(void)
+{
+  BIO_METHOD *wm = BIO_meth_new(BIO_TYPE_MEM, "write");
+
+  if ( wm == NULL ||
+       (BIO_meth_set_write(wm, &bio_write_text) <= 0) ||
+       (BIO_meth_set_ctrl(wm, &bio_control) <= 0) ||
+       (BIO_meth_set_create(wm, &bio_create) <= 0) ||
+       (BIO_meth_set_destroy(wm, &bio_destroy) <= 0) )
+    return;
+
+  write_text_method = wm;
+}
+
+
 static BIO_METHOD *
 bio_write_method(void)
 {
@@ -427,6 +479,18 @@ bio_write_method(void)
 
   return write_method;
 }
+
+static BIO_METHOD *
+bio_write_text_method(void)
+{
+  if (write_text_method != NULL) return write_text_method;
+
+  if ( !CRYPTO_THREAD_run_once(&once_write, write_text_method_init) )
+    return NULL;
+
+  return write_text_method;
+}
+
 #endif
 
 #endif /*NEED_BIO*/
