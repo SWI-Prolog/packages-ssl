@@ -44,6 +44,7 @@
             cert_accept_any/5,            % +SSL, +ProblemCertificate,
                                           % +AllCertificates, +FirstCertificate,
                                           % +Error
+            same_certificate/2,           % +CertificateA, +CertificateB
             ssl_context/3,                % +Role, -Config, :Options
             ssl_add_certificate_key/4,    % +Config, +Cert, +Key, -Config
             ssl_set_options/3,            % +Config0, -Config, +Options
@@ -510,6 +511,12 @@ ssl_set_options(SSL0, SSL, Options) :-
 %                 [ cert_verify_hook(cert_accept_any)
 %                 ])
 %     ==
+
+%!  same_certificate(+CertificateA,
+%!                   +CertificateB).
+%
+%   True if CertificateA is logically the same as CertificateB, even if
+%   they are stored in different blobs
 
 %!  verify_certificate_issuer(+Certificate,
 %!			      +Issuer).
