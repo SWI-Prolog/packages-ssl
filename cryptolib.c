@@ -406,6 +406,7 @@ bio_write_text_method(void)
 
 static CRYPTO_ONCE once_read  = CRYPTO_ONCE_STATIC_INIT;
 static CRYPTO_ONCE once_write = CRYPTO_ONCE_STATIC_INIT;
+static CRYPTO_ONCE once_write_text = CRYPTO_ONCE_STATIC_INIT;
 
 static BIO_METHOD *read_method = NULL;
 static BIO_METHOD *write_method = NULL;
@@ -485,7 +486,7 @@ bio_write_text_method(void)
 {
   if (write_text_method != NULL) return write_text_method;
 
-  if ( !CRYPTO_THREAD_run_once(&once_write, write_text_method_init) )
+  if ( !CRYPTO_THREAD_run_once(&once_write_text, write_text_method_init) )
     return NULL;
 
   return write_text_method;
