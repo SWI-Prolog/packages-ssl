@@ -3801,7 +3801,7 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->host                = ssl_strdup(old->host);
   new->use_system_cacert   = old->use_system_cacert;
   new->cacert              = ssl_strdup(old->cacert);
-  new->cacerts             = sk_X509_dup(old->cacerts);
+  new->cacerts             = old->cacerts?sk_X509_dup(old->cacerts):NULL;
   new->certificate_file    = ssl_strdup(old->certificate_file);
   new->key_file            = ssl_strdup(old->key_file);
   new->min_protocol        = old->min_protocol;
