@@ -142,6 +142,8 @@ static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_unknown1;
 static functor_t FUNCTOR_alpn_protocol1;
+static functor_t FUNCTOR_file1;
+static functor_t FUNCTOR_certificate1;
 
 typedef enum
 { PL_SSL_NONE
@@ -209,7 +211,6 @@ typedef struct pl_ssl {
     /*
      * Various parameters affecting the SSL layer
      */
-    int                  use_system_cacert;
     STACK_OF(X509)      *cacerts;
     char                *cacert;
 
@@ -1017,9 +1018,8 @@ pl_load_crl(term_t source, term_t list)
 }
 
 static foreign_t
-pl_load_certificate(term_t source, term_t cert)
-{ X509* x509;
-  BIO* bio;
+load_certificate(term_t source, X509** x509)
+{ BIO* bio;
   IOSTREAM* stream;
   int c = 0;
 
@@ -1030,14 +1030,20 @@ pl_load_certificate(term_t source, term_t cert)
   /* Determine format */
   c = Speekcode(stream);
   if (c == 0x30)  /* ASN.1 sequence, so assume DER */
-     x509 = d2i_X509_bio(bio, NULL);
+     *x509 = d2i_X509_bio(bio, NULL);
   else
-     x509 = PEM_read_bio_X509(bio, NULL, 0, NULL);
+     *x509 = PEM_read_bio_X509(bio, NULL, 0, NULL);
   BIO_free(bio);
   PL_release_stream(stream);
   if (x509 == NULL)
     return raise_ssl_error(ERR_get_error());
-  return unify_certificate_blob(cert, x509);
+  PL_succeed;
+}
+
+static foreign_t
+pl_load_certificate(term_t source, term_t cert)
+{ X509* x509;
+  return load_certificate(source, &x509) && unify_certificate_blob(cert, x509);
 }
 
 
@@ -1829,7 +1835,6 @@ ssl_new(void)
         new->min_protocol.is_set = FALSE;
         new->max_protocol.is_set = FALSE;
 
-        new->use_system_cacert   = FALSE;
         new->host                = NULL;
 
 	new->cacert              = NULL;
@@ -2538,23 +2543,7 @@ system_root_certificates(void)
 
 static void
 ssl_init_verify_locations(PL_SSL *config)
-{ if ( config->use_system_cacert )
-  { STACK_OF(X509) *certs = system_root_certificates();
-
-    if ( certs )
-    { X509_STORE *store = X509_STORE_new();
-
-      if ( store )
-      { int index = 0;
-
-        while (index < sk_X509_num(certs))
-        { X509_STORE_add_cert(store, sk_X509_value(certs, index++));
-        }
-        SSL_CTX_set_cert_store(config->ctx, store);
-      }
-    }
-    ssl_deb(1, "System certificate authority(s) installed\n");
-  } else if ( config->cacerts )
+{ if ( config->cacerts )
   { X509_STORE *store = X509_STORE_new();
     if ( store )
     { int index = 0;
@@ -3534,7 +3523,17 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	if ( !PL_get_atom_ex(val, &a) )
 	  return FALSE;
 	if ( a == ATOM_root_certificates )
-	  conf->use_system_cacert = TRUE;
+	{ STACK_OF(X509) *system_certs = system_root_certificates();
+	  if ( system_certs )
+	  { int index = 0;
+	    if (conf->cacerts == NULL)
+	    { conf->cacerts = sk_X509_new_null();
+	    }
+	    while (index < sk_X509_num(system_certs))
+	    { sk_X509_push(conf->cacerts, sk_X509_value(system_certs, index++));
+	    }
+	  }
+	}
 	else
 	  return PL_domain_error("system_cacert", val);
       } else if ( PL_get_file_name(val, &file, PL_FILE_EXIST) )
@@ -3551,22 +3550,51 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if (conf->certificate_file) free(conf->certificate_file);
       conf->certificate_file = ssl_strdup(file);
     } else if ( name == ATOM_cacerts && arity == 1 )
-    { term_t CertTail = PL_new_term_ref();
-      term_t CertHead = PL_new_term_ref();
-      _PL_get_arg(1, head, CertTail);
+    { term_t CATail = PL_new_term_ref();
+      term_t CAHead = PL_new_term_ref();
+      _PL_get_arg(1, head, CATail);
       if (conf->cacerts)
 	sk_X509_free(conf->cacerts);
       conf->cacerts = sk_X509_new_null();
-      while (PL_get_list_ex(CertTail, CertHead, CertTail))
-      { X509* cert;
-	if (!get_certificate_blob(CertHead, &cert))
-        { sk_X509_free(conf->cacerts);
+      while (PL_get_list_ex(CATail, CAHead, CATail))
+      { X509* cert = NULL;
+	if (PL_is_functor(CAHead, FUNCTOR_certificate1))
+	{ if (!get_certificate_blob(CAHead, &cert))
+	    cert = NULL;
+	}
+	else if (PL_is_functor(CAHead, FUNCTOR_file1))
+	{ if (!load_certificate(CAHead, &cert))
+	    cert = NULL;
+	}
+	else if (PL_is_functor(CAHead, FUNCTOR_system1))
+	{ _PL_get_arg(1, CAHead, CAHead);
+	  atom_t a;
+	  if ( !PL_get_atom_ex(CAHead, &a) )
+	    return FALSE;
+	  if ( a == ATOM_root_certificates )
+	  { /* This case is a bit different because we need to load in multiple certificates */
+	    STACK_OF(X509) *system_certs = system_root_certificates();
+	    if ( system_certs )
+	    { int index = 0;
+	      while (index < sk_X509_num(system_certs))
+	      { sk_X509_push(conf->cacerts, sk_X509_value(system_certs, index++));
+	      }
+	      /* We have already pushed the certs into the stack. Move on to the next element in the list */
+	      continue;
+	    }
+	    else
+	    { cert = NULL;
+	    }
+	  }
+	}
+	if (cert == NULL)
+	{ sk_X509_free(conf->cacerts);
 	  conf->cacerts = NULL;
 	  return FALSE;
 	}
 	sk_X509_push(conf->cacerts, cert);
       }
-      if (!PL_get_nil_ex(CertTail))
+      if (!PL_get_nil_ex(CATail))
       { sk_X509_free(conf->cacerts);
 	conf->cacerts = NULL;
 	return FALSE;
@@ -3799,7 +3827,6 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->close_parent        = old->close_parent;
   new->close_notify        = old->close_notify;
   new->host                = ssl_strdup(old->host);
-  new->use_system_cacert   = old->use_system_cacert;
   new->cacert              = ssl_strdup(old->cacert);
   new->cacerts             = old->cacerts?sk_X509_dup(old->cacerts):NULL;
   new->certificate_file    = ssl_strdup(old->certificate_file);
@@ -4227,9 +4254,10 @@ install_ssl4pl(void)
   FUNCTOR_server_random1    = PL_new_functor(PL_new_atom("server_random"), 1);
   FUNCTOR_alpn_protocol1    = PL_new_functor(PL_new_atom("alpn_protocol"), 1);
   FUNCTOR_system1           = PL_new_functor(PL_new_atom("system"), 1);
-  FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);
+  FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);  
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
-
+  FUNCTOR_certificate1      = PL_new_functor(PL_new_atom("certificate"), 1);
+  FUNCTOR_file1             = PL_new_functor(PL_new_atom("file"), 1);  
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
   PL_register_foreign("_ssl_init_from_context",
 					2, pl_ssl_init_from_context, 0);
