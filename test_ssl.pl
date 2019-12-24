@@ -282,7 +282,7 @@ ssl_server :-
 make_server(SSL, Socket) :-
     ssl_context(server, SSL,
                 [ peer_cert(true),
-                  cacert_file('tests/test_certs/rootCA/cacert.pem'),
+                  cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
                   certificate_file('tests/test_certs/server-cert.pem'),
                   key_file('tests/test_certs/server-key.pem'),
                   cert_verify_hook(get_cert_verify),
@@ -357,7 +357,7 @@ get_cert_verify(SSL,
 client :-
     ssl_context(client, SSL,
              [ host('localhost'),
-               cacert_file('tests/test_certs/rootCA/cacert.pem'),
+               cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
                certificate_file('tests/test_certs/client-cert.pem'),
                key_file('tests/test_certs/client-key.pem'),
                close_parent(true),
@@ -517,7 +517,7 @@ try_ssl_client(Hostname, Hook, Options):-
                 [ host(Hostname),
                   port(Port),
                   cert_verify_hook(Hook),
-                  cacert_file('tests/test_certs/rootCA/cacert.pem')
+                  cacerts([file('tests/test_certs/rootCA/cacert.pem')])
                 | Options
                 ]),
     % Always connect to localhost

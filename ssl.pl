@@ -185,16 +185,21 @@ easily be used.
 %     certificates is not revoked. You must also set require_crl(true)
 %     if you want CRLs to actually be checked by OpenSSL.
 %     * cacert_file(+FileName)
+%     Deprecated. Use cacerts/1 instead.
 %     Specify a file containing certificate keys of _trusted_
 %     certificates. The peer is trusted if its certificate is
 %     signed (ultimately) by one of the provided certificates. Using
 %     the FileName `system(root_certificates)` uses a list of
 %     trusted root certificates as provided by the OS. See
 %     system_root_certificates/1 for details.
-%     * cacerts(+ListOfCertificates)
-%     Specify a list of certificates of _trusted_ certificates.
-%     This is equivalent to cacert_file/1 but allows the use of
-%     certificates loaded from places other than a single file.
+%     * cacerts(+ListOfCATerms)
+%     Specify a list of sources of _trusted_ certificates.
+%     Each element in the list should be one of the following:
+%        * file(Filename): A file containing one or more PEM-encoded
+%          certificates
+%        * certificate(Blob): A certificate blob
+%        * system(root_certificates): A special term which refers to
+%          the certificates trusted by the host OS.
 %
 %     Additional verification of the peer certificate as well as
 %     accepting certificates that are not trusted by the given set
