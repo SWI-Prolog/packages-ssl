@@ -315,7 +315,7 @@ ssl_context(Role, SSL, Module:Options) :-
     upgrade_legacy_options(O1, O2),
     % If the options list does not contain a cacerts/1 term (including cacerts([]))
     % then assume that the system root certificates should be used
-    (  memberchk(cacerts(_), O2)
+    (  select_option(cacerts(_), O2, _)
     -> O3 = O2
     ;  O3 = [cacerts([system(root_certificates)])|O2]
     ),
@@ -323,8 +323,10 @@ ssl_context(Role, SSL, Module:Options) :-
 
 upgrade_legacy_options(O1, O4):-
     % If the options list contains cacert_file/1 then update the cacerts list
-    select(cacert_file(CACertFile), O1, O2),
+    select_option(cacert_file(CACertFile), O1, O2),
     !,
+    % FIXME: Add a warning here
+
     % If CACertFile is an atom, then it represents a filename.
     % Otherwise, a special term.
     (  atom(CACertFile)
