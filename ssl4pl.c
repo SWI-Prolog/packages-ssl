@@ -76,7 +76,6 @@ static atom_t ATOM_client;
 static atom_t ATOM_password;
 static atom_t ATOM_host;
 static atom_t ATOM_peer_cert;
-static atom_t ATOM_cacert_file;
 static atom_t ATOM_cacerts;
 static atom_t ATOM_require_crl;
 static atom_t ATOM_crl;
@@ -3513,44 +3512,6 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if (conf->crl_list)
         sk_X509_CRL_pop_free(conf->crl_list, X509_CRL_free);
       conf->crl_list = crls;
-    } else if ( name == ATOM_cacert_file && arity == 1 )
-    { term_t val = PL_new_term_ref();
-      char *file;
-
-      _PL_get_arg(1, head, val);
-      if ( PL_is_functor(val, FUNCTOR_system1) )
-      { _PL_get_arg(1, val, val);
-	atom_t a;
-
-	if ( !PL_get_atom_ex(val, &a) )
-	  return FALSE;
-	if ( a == ATOM_root_certificates )
-	{ STACK_OF(X509) *system_certs = system_root_certificates();
-	  if ( system_certs )
-	  { int index = 0;
-	    if (conf->cacerts == NULL)
-	    { conf->cacerts = sk_X509_new_null();
-	    }
-	    /* We make a copy of all the system certs here since we later free all the
-	       certificates and do not want to free the ones in the system_root_certificates
-	       stack
-	    */
-	    while (index < sk_X509_num(system_certs))
-	    { sk_X509_push(conf->cacerts, X509_dup(sk_X509_value(system_certs, index++)));
-	    }
-	  }
-	}
-	else
-	  return PL_domain_error("system_cacert", val);
-      } else if ( PL_get_file_name(val, &file, PL_FILE_EXIST) )
-      { if (conf->cacerts == NULL)
-        { conf->cacerts = sk_X509_new_null();
-	}
-        if (!load_certificates_from_file(file, conf->cacerts))
-	{ return FALSE;
-	}
-      } else
-	return FALSE;
     } else if ( name == ATOM_certificate_file && arity == 1 )
     { char *file;
 
@@ -4206,7 +4167,6 @@ install_ssl4pl(void)
   MKATOM(password);
   MKATOM(host);
   MKATOM(peer_cert);
-  MKATOM(cacert_file);
   MKATOM(cacerts);
   MKATOM(certificate_file);
   MKATOM(certificate_key_pairs);

@@ -312,7 +312,30 @@ easily be used.
 
 ssl_context(Role, SSL, Module:Options) :-
     select_option(ssl_method(Method), Options, O1, sslv23),
-    '_ssl_context'(Role, SSL, Module:O1, Method).
+    upgrade_legacy_options(O1, O2),
+    % If the options list does not contain a cacerts/1 term (including cacerts([]))
+    % then assume that the system root certificates should be used
+    (  memberchk(cacerts(_), O2)
+    -> O3 = O2
+    ;  O3 = [cacerts([system(root_certificates)])|O2]
+    ),
+    '_ssl_context'(Role, SSL, Module:O3, Method).
+
+upgrade_legacy_options(O1, O4):-
+    % If the options list contains cacert_file/1 then update the cacerts list
+    select(cacert_file(CACertFile), O1, O2),
+    !,
+    % If CACertFile is an atom, then it represents a filename.
+    % Otherwise, a special term.
+    (  atom(CACertFile)
+    -> Term = file(CACertFile)
+    ;  Term = CACertFile
+    ),
+    % Augment the cacerts term to include the cacert_file value
+    select_option(cacerts(CACerts), O2, O3, []),
+    upgrade_legacy_options([cacerts([Term|CACerts])|O3], O4).
+
+upgrade_legacy_options(Options, Options).
 
 %!  ssl_add_certificate_key(+SSL0, +Certificate, +Key, -SSL)
 %
