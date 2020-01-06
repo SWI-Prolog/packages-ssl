@@ -325,8 +325,7 @@ upgrade_legacy_options(O1, O4):-
     % If the options list contains cacert_file/1 then update the cacerts list
     select_option(cacert_file(CACertFile), O1, O2),
     !,
-    % FIXME: Add a warning here
-
+    print_message(warning, deprecated(ssl_option(cacert_file(CACertFile)))),
     % If CACertFile is an atom, then it represents a filename.
     % Otherwise, a special term.
     (  atom(CACertFile)
