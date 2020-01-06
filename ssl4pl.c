@@ -1886,7 +1886,8 @@ ssl_free(PL_SSL *config)
     assert(config->magic == SSL_CONFIG_MAGIC);
     config->magic = 0;
     free(config->host);
-    sk_X509_pop_free(config->cacerts, X509_free);
+    if (config->cacerts)
+      sk_X509_pop_free(config->cacerts, X509_free);
     free(config->certificate_file);
     free(config->key_file);
     free(config->cipher_list);
@@ -2553,13 +2554,17 @@ ssl_init_verify_locations(PL_SSL *config)
   { X509_STORE *store = X509_STORE_new();
     if ( store )
     { int index = 0;
+      /* We make a duplicate of the certificate here since config->cacerts will be cleaned
+         up when the context is freed, but the store will also free all the certificates it
+         contains when the SSL object underlying the context is freed
+      */
       while (index < sk_X509_num(config->cacerts))
-      { X509_STORE_add_cert(store, sk_X509_value(config->cacerts, index++));
+      { X509_STORE_add_cert(store, X509_dup(sk_X509_value(config->cacerts, index++)));
       }
       SSL_CTX_set_cert_store(config->ctx, store);
     }
     ssl_deb(1, "certificate authority(s) installed from individual certificates\n");
-  } 
+  }
   if ( config->crl_list )
   { X509_STORE *store = SSL_CTX_get_cert_store(config->ctx);
     int i = 0;
@@ -3529,8 +3534,9 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       conf->cacerts = sk_X509_new_null();
       while (PL_get_list_ex(CATail, CAHead, CATail))
       { X509* cert = NULL;
-	if (PL_is_functor(CAHead, FUNCTOR_certificate1))
-	{ if (!get_certificate_blob(CAHead, &cert))
+        if (PL_is_functor(CAHead, FUNCTOR_certificate1))
+        { _PL_get_arg(1, CAHead, CAHead);
+          if (!get_certificate_blob(CAHead, &cert))
 	  { sk_X509_pop_free(conf->cacerts, X509_free);
 	    conf->cacerts = NULL;
 	    return FALSE;
@@ -3787,6 +3793,14 @@ ssl_copy_callback(const PL_SSL_CALLBACK old, PL_SSL_CALLBACK *new)
   }
 }
 
+/* This is used to avoid casting a function pointer. The second argument of sk_X509_deep_copy
+   expects a function with a const argument
+*/
+static X509 *x509dup(const X509 *cx)
+{ X509 *x = (X509 *)cx;
+  return X509_dup(x);
+}
+
 static foreign_t
 pl_ssl_init_from_context(term_t term_old, term_t term_new)
 {
@@ -3804,7 +3818,7 @@ pl_ssl_init_from_context(term_t term_old, term_t term_new)
   new->close_parent        = old->close_parent;
   new->close_notify        = old->close_notify;
   new->host                = ssl_strdup(old->host);
-  new->cacerts             = old->cacerts?sk_X509_dup(old->cacerts):NULL;
+  new->cacerts             = old->cacerts?sk_X509_deep_copy(old->cacerts, x509dup, X509_free):NULL;
   new->certificate_file    = ssl_strdup(old->certificate_file);
   new->key_file            = ssl_strdup(old->key_file);
   new->min_protocol        = old->min_protocol;
@@ -4229,10 +4243,10 @@ install_ssl4pl(void)
   FUNCTOR_server_random1    = PL_new_functor(PL_new_atom("server_random"), 1);
   FUNCTOR_alpn_protocol1    = PL_new_functor(PL_new_atom("alpn_protocol"), 1);
   FUNCTOR_system1           = PL_new_functor(PL_new_atom("system"), 1);
-  FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);  
+  FUNCTOR_unknown1          = PL_new_functor(PL_new_atom("unknown"), 1);
   FUNCTOR_unsupported_hash_algorithm1 = PL_new_functor(PL_new_atom("unsupported_hash_algorithm"), 1);
   FUNCTOR_certificate1      = PL_new_functor(PL_new_atom("certificate"), 1);
-  FUNCTOR_file1             = PL_new_functor(PL_new_atom("file"), 1);  
+  FUNCTOR_file1             = PL_new_functor(PL_new_atom("file"), 1);
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
   PL_register_foreign("_ssl_init_from_context",
 					2, pl_ssl_init_from_context, 0);
