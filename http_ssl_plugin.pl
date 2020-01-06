@@ -199,8 +199,7 @@ ssl_failed(Read, Write, E) :-
 %!                          -StreamPair, +Options) is semidet.
 %
 %   Hook for http_open/3 to connect  to   an  HTTPS (SSL-based HTTP)
-%   server.   This   plugin   also   passes   the   default   option
-%   `cacert_file(system(root_certificates))` to ssl_context/3.
+%   server.
 
 http:http_protocol_hook(https, Parts, PlainStreamPair, StreamPair, Options) :-
     ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options).
@@ -218,16 +217,6 @@ ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
     ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
     stream_pair(StreamPair, In, Out).
 
-%!  http:open_options(Parts, Options) is nondet.
-%
-%   Implementation of the multifile hook http:open_options/2 used by
-%   library(http/http_open). By default, we use   the system trusted
-%   root certificate database for validating an SSL certificate.
-
-http:open_options(Parts, Options) :-
-    memberchk(scheme(S), Parts),
-    ssl_scheme(S),
-    Options = [cacert_file(system(root_certificates))].
 
 ssl_scheme(https).
 ssl_scheme(wss).

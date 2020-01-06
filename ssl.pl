@@ -3,7 +3,7 @@
     Author:        Jan van der Steen, Matt Lilley and Jan Wielemaker,
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2017, SWI-Prolog Foundation
+    Copyright (c)  2004-2020, SWI-Prolog Foundation
                               VU University Amsterdam
     All rights reserved.
 
@@ -185,16 +185,21 @@ easily be used.
 %     certificates is not revoked. You must also set require_crl(true)
 %     if you want CRLs to actually be checked by OpenSSL.
 %     * cacert_file(+FileName)
+%     Deprecated. Use cacerts/1 instead.
 %     Specify a file containing certificate keys of _trusted_
 %     certificates. The peer is trusted if its certificate is
 %     signed (ultimately) by one of the provided certificates. Using
 %     the FileName `system(root_certificates)` uses a list of
 %     trusted root certificates as provided by the OS. See
 %     system_root_certificates/1 for details.
-%     * cacerts(+ListOfCertificates)
-%     Specify a list of certificates of _trusted_ certificates.
-%     This is equivalent to cacert_file/1 but allows the use of
-%     certificates loaded from places other than a single file.
+%     * cacerts(+ListOfCATerms)
+%     Specify a list of sources of _trusted_ certificates.
+%     Each element in the list should be one of the following:
+%        * file(Filename): A file containing one or more PEM-encoded
+%          certificates
+%        * certificate(Blob): A certificate blob
+%        * system(root_certificates): A special term which refers to
+%          the certificates trusted by the host OS.
 %
 %     Additional verification of the peer certificate as well as
 %     accepting certificates that are not trusted by the given set
@@ -307,7 +312,32 @@ easily be used.
 
 ssl_context(Role, SSL, Module:Options) :-
     select_option(ssl_method(Method), Options, O1, sslv23),
-    '_ssl_context'(Role, SSL, Module:O1, Method).
+    upgrade_legacy_options(O1, O2),
+    (   select_option(cacerts(_), O2, _)
+    ->  O3 = O2
+    ;   O3 = [cacerts([system(root_certificates)])|O2]
+    ),
+    '_ssl_context'(Role, SSL, Module:O3, Method).
+
+%!  upgrade_legacy_options(+OptionsIn, -Options) is det.
+%
+%   Handle deprecated cacert_file(Spec) option and  map   it  to the new
+%   cacerts(+List) option.
+
+:- public upgrade_legacy_options/2.             % used by http_open/3.
+
+upgrade_legacy_options(O1, O4) :-
+    select_option(cacert_file(CACertFile), O1, O2),
+    !,
+    print_message(warning, deprecated(ssl_option(cacert_file(CACertFile)))),
+    (   atom(CACertFile)
+    ->  Term = file(CACertFile)
+    ;   Term = CACertFile                % e.g., system(root_certificates)
+    ),
+    select_option(cacerts(CACerts), O2, O3, []),
+    upgrade_legacy_options([cacerts([Term|CACerts])|O3], O4).
+upgrade_legacy_options(Options, Options).
+
 
 %!  ssl_add_certificate_key(+SSL0, +Certificate, +Key, -SSL)
 %
@@ -596,7 +626,12 @@ ssl_secure_ciphers(Cs) :-
                  *******************************/
 
 :- multifile
-    prolog:error_message//1.
+    prolog:error_message//1,
+    prolog:deprecated//1.
 
 prolog:error_message(ssl_error(ID, _Library, Function, Reason)) -->
     [ 'SSL(~w) ~w: ~w'-[ID, Function, Reason] ].
+prolog:deprecated(ssl_option(cacert_file(CACertFile))) -->
+    [ 'SSL: cacert_file(~q) has need deprecated.'-[CACertFile],
+      'Please use the option cacerts(List) instead'
+    ].
