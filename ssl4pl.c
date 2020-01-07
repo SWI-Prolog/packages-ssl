@@ -2554,12 +2554,8 @@ ssl_init_verify_locations(PL_SSL *config)
   { X509_STORE *store = X509_STORE_new();
     if ( store )
     { int index = 0;
-      /* We make a duplicate of the certificate here since config->cacerts will be cleaned
-         up when the context is freed, but the store will also free all the certificates it
-         contains when the SSL object underlying the context is freed
-      */
       while (index < sk_X509_num(config->cacerts))
-      { X509_STORE_add_cert(store, X509_dup(sk_X509_value(config->cacerts, index++)));
+      { X509_STORE_add_cert(store, sk_X509_value(config->cacerts, index++));
       }
       SSL_CTX_set_cert_store(config->ctx, store);
     }
