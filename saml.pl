@@ -37,10 +37,12 @@
          [saml_authenticate/4]).
 
 :- use_module(library(sgml)).
+:- use_module(library(ssl)).
 :- use_module(library(base64)).
 :- use_module(library(zlib)).
 :- use_module(library(xmldsig)).
 :- use_module(library(xmlenc)).
+:- use_module(library(crypto)).
 :- use_module(library(http/http_path)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_client)).
@@ -280,18 +282,20 @@ saml_simple_sign(PrivateKey, XMLString, _SAMLRequest, RelayState, ['SigAlg'=SigA
     base64(RawSignature, Signature),
     debug(saml, 'Signature:~n~w~n', [Signature]).
 
-saml_sign(PrivateKey, _XMLString, SAMLRequest, RelayState, ['SigAlg'=SigAlg,'Signature'=Signature]):-
+saml_sign(PrivateKey, _XMLString, SAMLRequest, RelayState, ['SigAlg'=SigAlg,'Signature'=Base64Signature]):-
     SigAlg = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
     parse_url_search(CodesToSign, ['SAMLRequest'=SAMLRequest, 'RelayState'=RelayState, 'SigAlg'=SigAlg]),
     string_codes(DataToSign, CodesToSign),
     debug(saml, 'Data to sign with HTTP-Redirect binding:~n~s~n', [DataToSign]),
     sha_hash(DataToSign, Digest, [algorithm(sha1)]),
-    rsa_sign(PrivateKey, Digest, RawSignature,
+    rsa_sign(PrivateKey, Digest, HexSignature,
              [ type(sha1),
                encoding(octet)
              ]),
-    base64(RawSignature, Signature),
-    debug(saml, '~nSignature:~n~w~n', [Signature]).
+    hex_bytes(HexSignature, SignatureBytes),
+    atom_codes(SignatureAtom, SignatureBytes),
+    base64(SignatureAtom, Base64Signature),
+    debug(saml, '~nSignature:~n~w~n', [Base64Signature]).
 
 saml_acs_handler(ServiceProvider, Options, Request):-
     debug(saml, 'Got a message back from IdP!~n', []),
