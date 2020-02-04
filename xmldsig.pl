@@ -307,9 +307,7 @@ signature_info(DOM, Signature, SignedData, Algorithm, SignatureValue,
     memberchk(element(ns(_, NSRef):'CanonicalizationMethod', CanonicalizationMethodAttributes, _), SignedInfo),
     memberchk('Algorithm'=CanonicalizationMethod, CanonicalizationMethodAttributes),
     forall(memberchk(element(ns(_, NSRef):'Reference', ReferenceAttributes, Reference), SignedInfo),
-           verify_digest(ReferenceAttributes, Reference, DOM)),
-
-    memberchk(element(ns(_, NSRef):'CanonicalizationMethod', _CanonicalizationMethodAttributes, []), SignedInfo),
+           verify_digest(ReferenceAttributes, CanonicalizationMethod, Reference, DOM)),
     memberchk(element(ns(_, NSRef):'SignatureMethod', SignatureMethodAttributes, []), SignedInfo),
     memberchk('Algorithm'=XMLAlgorithm, SignatureMethodAttributes),
     ssl_algorithm(XMLAlgorithm, Algorithm),
@@ -317,7 +315,7 @@ signature_info(DOM, Signature, SignedData, Algorithm, SignatureValue,
     ( memberchk(element(ns(_, NSRef):'X509Data', _, X509Data), KeyInfo),
       memberchk(element(ns(_, NSRef):'X509Certificate', _, [X509Certificate]), X509Data)->
         load_certificate_from_base64_string(X509Certificate, Certificate),
-        memberchk(key(PublicKey), Certificate)
+        certificate_field(Certificate, public_key(PublicKey))
     ; throw(not_implemented)
     ).
 
@@ -328,7 +326,7 @@ delete_newlines([10|As], B):- !, delete_newlines(As, B).
 delete_newlines([A|As], [A|B]):- !, delete_newlines(As, B).
 
 
-verify_digest(ReferenceAttributes, Reference, DOM):-
+verify_digest(ReferenceAttributes, CanonicalizationMethod, Reference, DOM):-
     xmldsig_ns(NSRef),
     memberchk('URI'=URI, ReferenceAttributes),
     atom_concat('#', Id, URI),
@@ -348,7 +346,7 @@ verify_digest(ReferenceAttributes, Reference, DOM):-
     -> true
     ;  domain_error(supported_digest_method, DigestMethod)
     ),
-    with_output_to(string(XMLString), xml_write_canonical(current_output, TransformedDigestible, [])),
+    with_output_to(string(XMLString), xml_write_canonical(current_output, TransformedDigestible, [method(CanonicalizationMethod)])),
     sha_hash(XMLString, DigestBytes, [algorithm(DigestMethod)]),
     base64(ExpectedDigest, DigestBase64),
     atom_codes(ExpectedDigest, ExpectedDigestBytes),
