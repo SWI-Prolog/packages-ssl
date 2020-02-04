@@ -373,7 +373,8 @@ process_saml_response(XML0, ServiceProvider, Callback, RequestURL, Options):-
     ( member(element(ns(_, DS):'Signature', _, Signature), Response)->
         xmld_verify_signature(XML, Signature, Certificate, []),
         % Check that the certificate used to sign was one in the metadata
-        (  saml_idp_certificate(ServiceProvider, IssuerName, signing, Certificate)
+        (  saml_idp_certificate(ServiceProvider, IssuerName, signing, IDPCertificate),
+           same_certificate(Certificate, IDPCertificate)
         -> true
         ;  domain_error(trusted_certificate, Certificate)
         )
@@ -427,7 +428,8 @@ process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, A
     ( member(element(DS:'Signature', _, Signature), Assertion)->
         xmld_verify_signature(Document, Signature, Certificate, []),
         % Check that the certificate used to sign was one in the metadata
-        (  saml_idp_certificate(ServiceProvider, IssuerName, signing, Certificate)
+        (  saml_idp_certificate(ServiceProvider, IssuerName, signing, IDPCertificate),
+           same_certificate(Certificate, IDPCertificate)
         -> true
         ;  domain_error(trusted_certificate, Certificate)
         )
