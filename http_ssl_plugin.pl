@@ -34,6 +34,14 @@
 */
 
 :- module(http_ssl_plugin, []).
+% Requires ssl:upgrade_legacy_options/2 hook
+:- use_module(library(ssl),
+              [ ssl_context/3,
+                ssl_secure_ciphers/1,
+                ssl_set_options/3,
+                ssl_negotiate/5
+              ]).
+
 :- autoload(library(debug),[debug/3]).
 :- autoload(library(lists),[select/3]).
 :- autoload(library(option),[option/2,option/3]).
@@ -45,12 +53,6 @@
 	      tcp_accept/3,
 	      tcp_open_socket/3,
 	      tcp_connect/3
-	    ]).
-:- autoload(library(ssl),
-	    [ ssl_context/3,
-	      ssl_secure_ciphers/1,
-	      ssl_set_options/3,
-	      ssl_negotiate/5
 	    ]).
 :- autoload(library(http/http_header),[http_read_reply_header/2]).
 :- autoload(library(http/thread_httpd),[http_enough_workers/3]).
