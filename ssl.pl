@@ -57,8 +57,9 @@
 	    verify_certificate/3,         % +X509, +AuxiliaryCertificates, +TrustedCertificates
 	    verify_certificate_issuer/2   % +Certificate, +IssuerCertificate
           ]).
-:- use_module(library(option)).
-:- use_module(library(settings)).
+:- autoload(library(option),[select_option/4,select_option/3]).
+:- use_module(library(settings),[setting/4,setting/2]).
+
 :- use_module(library(crypto), []).     % force initialization of libcrypto
 
 :- use_foreign_library(foreign(ssl4pl)).

@@ -35,9 +35,9 @@
 :- module(client,
           [ client/0
           ]).
-
-:- use_module(library(ssl)).
-:- use_module(library(socket)).
+:- autoload(library(readutil),[read_line_to_codes/2]).
+:- autoload(library(socket),[tcp_connect/3]).
+:- autoload(library(ssl),[ssl_context/3,ssl_negotiate/5]).
 
 client :-
     ssl_context(client, SSL,

@@ -36,14 +36,18 @@
           [ xmld_signed_DOM/3,                  % +DOM, -SignedDOM, +Options
             xmld_verify_signature/4             % +DOM, +Signature, -Certificate, +Options
           ]).
-:- use_module(library(option)).
-:- use_module(library(sha)).
-:- use_module(library(ssl)).
-:- use_module(library(crypto)).
-:- use_module(library(base64)).
-:- use_module(library(debug)).
-:- use_module(library(dcg/basics)).
-:- use_module(library(c14n2)).
+:- autoload(library(base64),[base64/3,base64/2]).
+:- autoload(library(c14n2),[xml_write_canonical/3]).
+:- autoload(library(crypto),
+	    [crypto_data_hash/3,rsa_sign/4,hex_bytes/2,rsa_verify/4]).
+:- autoload(library(debug),[debug/3]).
+:- autoload(library(error),
+	    [type_error/2,domain_error/2,existence_error/2]).
+:- autoload(library(lists),[member/2]).
+:- autoload(library(option),[option/3,option/2]).
+:- autoload(library(sha),[sha_hash/3]).
+:- autoload(library(ssl),[load_private_key/3,certificate_field/2]).
+:- autoload(library(xmlenc),[load_certificate_from_base64_string/2]).
 
 /** <module> XML Digital signature
 

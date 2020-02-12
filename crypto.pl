@@ -63,7 +63,11 @@
             crypto_curve_generator/2,   % +Curve, -Generator
             crypto_curve_scalar_mult/4  % +Curve, +Scalar, +Point, -Result
           ]).
-:- use_module(library(option)).
+:- autoload(library(apply),[foldl/4,maplist/3]).
+:- autoload(library(base64),[base64_encoded/3]).
+:- autoload(library(error),[must_be/2,domain_error/2]).
+:- autoload(library(lists),[select/3,reverse/2]).
+:- autoload(library(option),[option/3,option/2]).
 
 :- use_foreign_library(foreign(crypto4pl)).
 

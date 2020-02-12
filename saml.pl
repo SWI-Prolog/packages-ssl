@@ -36,16 +36,34 @@
 :-module(saml,
          [saml_authenticate/4]).
 
-:- use_module(library(sgml)).
-:- use_module(library(ssl)).
-:- use_module(library(base64)).
-:- use_module(library(zlib)).
-:- use_module(library(xmldsig)).
-:- use_module(library(xmlenc)).
-:- use_module(library(crypto)).
-:- use_module(library(http/http_path)).
-:- use_module(library(http/http_dispatch)).
-:- use_module(library(http/http_client)).
+:- autoload(library(base64),[base64/2]).
+:- autoload(library(crypto),[rsa_sign/4,hex_bytes/2]).
+:- autoload(library(debug),[debug/3,debugging/1]).
+:- autoload(library(error),
+	    [domain_error/2,existence_error/2,permission_error/3]).
+:- autoload(library(lists),[member/2,subtract/3,select/3]).
+:- autoload(library(memfile),
+	    [ new_memory_file/1,
+	      open_memory_file/4,
+	      memory_file_to_atom/2,
+	      free_memory_file/1
+	    ]).
+:- autoload(library(quintus),[otherwise/0]).
+:- autoload(library(sgml),[load_structure/3]).
+:- autoload(library(sgml_write),[xml_write/3]).
+:- autoload(library(sha),[sha_hash/3]).
+:- autoload(library(ssl),
+	    [load_private_key/3,load_certificate/2,same_certificate/2]).
+:- autoload(library(url),[parse_url/2,parse_url_search/2]).
+:- autoload(library(uuid),[uuid/1]).
+:- autoload(library(xmldsig),[xmld_verify_signature/4]).
+:- autoload(library(xmlenc),
+	    [load_certificate_from_base64_string/2,decrypt_xml/4]).
+:- autoload(library(zlib),[zopen/3]).
+:- autoload(library(http/http_client),[http_read_data/3]).
+:- autoload(library(http/http_dispatch),[http_redirect/3]).
+:- autoload(library(http/http_path),[http_absolute_location/3]).
+:- autoload(library(http/http_open),[http_open/3]).
 
 /** <module> SAML Authentication
 

@@ -35,9 +35,18 @@
 :- module(server,
           [ server/0
           ]).
-
-:- use_module(library(ssl)).
-:- use_module(library(socket)).
+:- autoload(library(debug),[debug/1,debug/3]).
+:- autoload(library(readutil),[read_line_to_codes/2]).
+:- autoload(library(socket),
+	    [ tcp_socket/1,
+	      tcp_setopt/2,
+	      tcp_bind/2,
+	      tcp_listen/2,
+	      tcp_accept/3,
+	      tcp_open_socket/3,
+	      tcp_close_socket/1
+	    ]).
+:- autoload(library(ssl),[ssl_context/3,ssl_negotiate/5]).
 
 :- debug(connection).
 

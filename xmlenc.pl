@@ -38,11 +38,15 @@
          [ decrypt_xml/4,   % +EncryptedXML, -DecryptedXML, :KeyCallback, +Options
            load_certificate_from_base64_string/2 % +Base64String, -Certificate
          ]).
-:- use_module(library(ssl)).
-:- use_module(library(crypto)).
-:- use_module(library(sgml)).
-:- use_module(library(base64)).
-:- use_module(library(error)).
+:- autoload(library(base64),[base64/2]).
+:- autoload(library(crypto),
+	    [crypto_data_decrypt/6,rsa_private_decrypt/4,hex_bytes/2]).
+:- autoload(library(error),[existence_error/2,domain_error/2]).
+:- autoload(library(lists),[append/3]).
+:- autoload(library(sgml),[load_structure/3]).
+:- autoload(library(ssl),[load_certificate/2]).
+:- autoload(library(uri),[uri_components/2]).
+:- autoload(library(http/http_open),[http_open/3]).
 
 :- meta_predicate
     decrypt_xml(+, -, 3, +).

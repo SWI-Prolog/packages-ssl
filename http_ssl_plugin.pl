@@ -34,12 +34,26 @@
 */
 
 :- module(http_ssl_plugin, []).
-:- use_module(library(ssl)).
-:- use_module(library(socket)).
-:- use_module(library(debug)).
-:- use_module(library(option)).
-:- use_module(library(http/thread_httpd)).
-:- use_module(library(http/http_header)).
+:- autoload(library(debug),[debug/3]).
+:- autoload(library(lists),[select/3]).
+:- autoload(library(option),[option/2,option/3]).
+:- autoload(library(socket),
+	    [ tcp_socket/1,
+	      tcp_setopt/2,
+	      tcp_bind/2,
+	      tcp_listen/2,
+	      tcp_accept/3,
+	      tcp_open_socket/3,
+	      tcp_connect/3
+	    ]).
+:- autoload(library(ssl),
+	    [ ssl_context/3,
+	      ssl_secure_ciphers/1,
+	      ssl_set_options/3,
+	      ssl_negotiate/5
+	    ]).
+:- autoload(library(http/http_header),[http_read_reply_header/2]).
+:- autoload(library(http/thread_httpd),[http_enough_workers/3]).
 
 /** <module> SSL plugin for HTTP libraries
 
@@ -217,9 +231,6 @@ ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
     ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
     stream_pair(StreamPair, In, Out).
 
-
-ssl_scheme(https).
-ssl_scheme(wss).
 
 %!  http:http_connection_over_proxy(+Proxy, +Parts, +HostPort, -StreamPair,
 %!                                  +OptionsIn, -OptionsOut)
