@@ -41,19 +41,19 @@
                 ssl_set_options/3,
                 ssl_negotiate/5
               ]).
+:- use_module(library(debug),[debug/3]).
+:- use_module(library(socket),
+              [ tcp_socket/1,
+                tcp_setopt/2,
+                tcp_bind/2,
+                tcp_listen/2,
+                tcp_accept/3,
+                tcp_open_socket/3,
+                tcp_connect/3
+              ]).
 
-:- autoload(library(debug),[debug/3]).
 :- autoload(library(lists),[select/3]).
 :- autoload(library(option),[option/2,option/3]).
-:- autoload(library(socket),
-	    [ tcp_socket/1,
-	      tcp_setopt/2,
-	      tcp_bind/2,
-	      tcp_listen/2,
-	      tcp_accept/3,
-	      tcp_open_socket/3,
-	      tcp_connect/3
-	    ]).
 :- autoload(library(http/http_header),[http_read_reply_header/2]).
 :- autoload(library(http/thread_httpd),[http_enough_workers/3]).
 
