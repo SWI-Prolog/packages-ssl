@@ -55,7 +55,9 @@
             ssl_session/2,                % +Stream, -Session
 	    ssl_secure_ciphers/1,         % -Ciphers,
 	    verify_certificate/3,         % +X509, +AuxiliaryCertificates, +TrustedCertificates
-	    verify_certificate_issuer/2   % +Certificate, +IssuerCertificate
+	    verify_certificate_issuer/2,  % +Certificate, +IssuerCertificate
+
+            ssl_upgrade_legacy_options/2  % +OptionsIn, -OptionsOut
           ]).
 :- autoload(library(option),[select_option/4,select_option/3]).
 :- use_module(library(settings),[setting/4,setting/2]).
@@ -313,21 +315,19 @@ easily be used.
 
 ssl_context(Role, SSL, Module:Options) :-
     select_option(ssl_method(Method), Options, O1, sslv23),
-    upgrade_legacy_options(O1, O2),
+    ssl_upgrade_legacy_options(O1, O2),
     (   select_option(cacerts(_), O2, _)
     ->  O3 = O2
     ;   O3 = [cacerts([system(root_certificates)])|O2]
     ),
     '_ssl_context'(Role, SSL, Module:O3, Method).
 
-%!  upgrade_legacy_options(+OptionsIn, -Options) is det.
+%!  ssl_upgrade_legacy_options(+OptionsIn, -Options) is det.
 %
 %   Handle deprecated cacert_file(Spec) option and  map   it  to the new
 %   cacerts(+List) option.
 
-:- public upgrade_legacy_options/2.             % used by http_open/3.
-
-upgrade_legacy_options(O1, O4) :-
+ssl_upgrade_legacy_options(O1, O4) :-
     select_option(cacert_file(CACertFile), O1, O2),
     !,
     print_message(warning, deprecated(ssl_option(cacert_file(CACertFile)))),
@@ -336,8 +336,8 @@ upgrade_legacy_options(O1, O4) :-
     ;   Term = CACertFile                % e.g., system(root_certificates)
     ),
     select_option(cacerts(CACerts), O2, O3, []),
-    upgrade_legacy_options([cacerts([Term|CACerts])|O3], O4).
-upgrade_legacy_options(Options, Options).
+    ssl_upgrade_legacy_options([cacerts([Term|CACerts])|O3], O4).
+ssl_upgrade_legacy_options(Options, Options).
 
 
 %!  ssl_add_certificate_key(+SSL0, +Certificate, +Key, -SSL)
