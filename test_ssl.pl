@@ -235,6 +235,7 @@ test(server) :-
             report_join_status(Status)
         ;   format(user_error, 'Client error:~n', []),
             print_message(error, E),
+            thread_signal(Id, abort),
             thread_join(Id, Status),
             report_join_status(Status),
             fail
@@ -242,6 +243,7 @@ test(server) :-
     ).
 
 report_join_status(true).
+report_join_status('$aborted').                 % we killed the server.
 report_join_status(false) :-
     print_message(error, goal_failed(server_loop(_))).
 report_join_status(exception(Term)) :-
