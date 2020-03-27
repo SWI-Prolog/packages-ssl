@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2013-2018, University of Amsterdam
+    Copyright (c)  2013-2020, University of Amsterdam
                               VU University Amsterdam
                               CWI, Amsterdam
     All rights reserved.
@@ -278,7 +278,6 @@ make_server(SSL, Socket) :-
                   cert_verify_hook(get_cert_verify),
                   pem_password_hook(get_server_pwd)
                 ]),
-%   Port = 1111,
     tcp_socket(Socket),
     tcp_setopt(Socket, reuseaddr),
     tcp_bind(Socket, localhost:Port),
