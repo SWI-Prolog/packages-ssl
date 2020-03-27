@@ -38,18 +38,6 @@
           [ test_ssl/0
           ]).
 
-:- asserta(user:file_search_path(library, '.')).
-:- asserta(user:file_search_path(library, '../clib')).
-:- asserta(user:file_search_path(library, '..')).
-:- asserta(user:file_search_path(library, '../plunit')).
-:- asserta(user:file_search_path(library, '../sgml')).
-:- asserta(user:file_search_path(foreign, '../clib')).
-:- asserta(user:file_search_path(foreign, '.')).
-:- asserta(user:file_search_path(foreign, '../http')).
-:- asserta(user:file_search_path(foreign, '../sgml')).
-:- prolog_load_context(directory, D),
-   asserta(user:file_search_path(library, D)).
-
 :- use_module(library(plunit)).
 :- use_module(library(ssl)).
 :- use_module(library(crypto)).
@@ -57,7 +45,7 @@
 :- use_module(library(error)).
 :- use_module(library(readutil)).
 :- use_module(library(socket)).
-:- use_module(library(https)).
+:- use_module(https).
 
 %:- debug(connection).
 %:- debug(certificate).
@@ -318,9 +306,9 @@ copy_client(In, Out) :-
     read_line_to_codes(In, Line),
     (   Line == end_of_file
     ->  true
-    ;   debug(data, 'SERVER: Got ~s~n', [Line]),
+    ;   debug(data, 'SERVER: Got ~s', [Line]),
         sleep(1.5),
-        debug(data, 'SERVER: writing ~s~n', [Line]),
+        debug(data, 'SERVER: writing ~s', [Line]),
         format(Out, '~s~n', [Line]),
         flush_output(Out),
         (   atom_codes(bye, Line)
@@ -383,25 +371,25 @@ client_loop(SSL) :-
     call_cleanup(close(In), close(Out)).
 
 write_server(Message, In, Out) :-
-    debug(data, 'CLIENT: writing: ~q~n', [Message]),
+    debug(data, 'CLIENT: writing: ~q', [Message]),
     write(Out, Message), nl(Out),
     flush_output(Out),
     sleep(0.1),
     catch(read_from_server(In, Message),
           E,
-          debug(data, 'CLIENT: exception: ~q~n', [E])),
+          debug(data, 'CLIENT: exception: ~q', [E])),
     (   var(E)
     ->  true
     ;   read_from_server(In, Message)
     ).
 
 read_from_server(In, Message) :-
-    debug(data, 'CLIENT: attempting to read reply from stream~n', []),
+    debug(data, 'CLIENT: attempting to read reply from stream', []),
     read_line_to_codes(In, Line),
     (   Line == end_of_file
     ->  true
     ;   atom_codes(Reply, Line),
-        debug(data, 'CLIENT: Got ~q~n', [Reply]),
+        debug(data, 'CLIENT: Got ~q', [Reply]),
         (   Reply == Message
         ->  true
         ;   format(user_error, 'CLIENT: ERROR: Sent ~q, Got ~q~n',
