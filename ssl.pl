@@ -73,6 +73,7 @@
 :- predicate_options(ssl_context/3, 3,
                      [ host(atom),
                        port(integer),
+                       cacerts(list),
                        certificate_file(atom),
                        key_file(atom),
                        certificate_key_pairs(any),

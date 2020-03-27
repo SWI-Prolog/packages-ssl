@@ -276,7 +276,6 @@ make_server(SSL, Socket) :-
                   certificate_file('tests/test_certs/server-cert.pem'),
                   key_file('tests/test_certs/server-key.pem'),
                   cert_verify_hook(get_cert_verify),
-%                     password('apenoot1'),
                   pem_password_hook(get_server_pwd)
                 ]),
 %   Port = 1111,
@@ -351,7 +350,6 @@ client :-
                certificate_file('tests/test_certs/client-cert.pem'),
                key_file('tests/test_certs/client-key.pem'),
                close_parent(true),
-%                  password('apenoot2'),
                pem_password_hook(get_client_pwd)
              ]),
     client_loop(SSL).
