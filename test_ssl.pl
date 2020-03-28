@@ -226,6 +226,19 @@ test(missing_key, Msg == 'no private key assigned') :-
 
 :- begin_tests(ssl_server).
 
+% This test creates a server and client and tests the following
+% sequence:
+%
+%   - Client sends "Hello world" and reads the reply with a 1 sec
+%     timeout.
+%   - Server reads "Hello world", _waits_ 1.5 sec before echoing it.
+%   - Client gets a timeout and retries the read.  Second try should
+%     read "Hello world"
+%   - Client sends "bye", going through the same cycle as above.
+%     (JW: Why a second time?)
+%   - Client closes connection.
+%   - Server reads 'end_of_file' and closes the connection.
+
 test(server) :-
     make_server(SSL, Socket),
     thread_create(server_loop(SSL, Socket), Id, []),
@@ -306,7 +319,7 @@ copy_client(In, Out) :-
     read_line_to_codes(In, Line),
     (   Line == end_of_file
     ->  true
-    ;   debug(data, 'SERVER: Got ~s', [Line]),
+    ;   debug(data, 'SERVER: Got ~s (sleeping 1.5 sec)', [Line]),
         sleep(1.5),
         debug(data, 'SERVER: writing ~s', [Line]),
         format(Out, '~s~n', [Line]),
@@ -374,16 +387,17 @@ write_server(Message, In, Out) :-
     write(Out, Message), nl(Out),
     flush_output(Out),
     sleep(0.1),
+    debug(data, 'CLIENT: attempting to read reply (timeout 1 sec)', []),
     catch(read_from_server(In, Message),
           E,
           debug(data, 'CLIENT: exception: ~q', [E])),
     (   var(E)
     ->  true
-    ;   read_from_server(In, Message)
+    ;   debug(data, 'CLIENT: retrying read reply (timeout 1 sec)', []),
+        read_from_server(In, Message)
     ).
 
 read_from_server(In, Message) :-
-    debug(data, 'CLIENT: attempting to read reply from stream', []),
     read_line_to_codes(In, Line),
     (   Line == end_of_file
     ->  true
