@@ -1232,7 +1232,7 @@ fetch_signature_algorithm(term_t Field, X509* cert)
 { GET0SIG_CONST_T ASN1_BIT_STRING *psig;
   GET0SIG_CONST_T X509_ALGOR *palg;
   const char *salgorithm;
-  
+
   X509_get0_signature(&psig, &palg, cert);
   if ((salgorithm = OBJ_nid2sn(OBJ_obj2nid(palg->algorithm))) != NULL)
   { return PL_unify_chars(Field, PL_ATOM|REP_UTF8, strlen(salgorithm), salgorithm);
@@ -1244,7 +1244,7 @@ static foreign_t
 fetch_hash(term_t Field, X509* cert)
 { GET0SIG_CONST_T ASN1_BIT_STRING *psig;
   GET0SIG_CONST_T X509_ALGOR *palg;
-  
+
   X509_get0_signature(&psig, &palg, cert);
 #ifdef HAVE_X509_DIGEST
   return unify_hash(Field, palg->algorithm, hash_X509_digest_wrapper, cert);
@@ -1285,7 +1285,7 @@ struct
 			      {"signature", fetch_signature},
 			      {"signature_algorithm", fetch_signature_algorithm},
 			      {"hash", fetch_hash},
-#ifdef HAVE_I2D_RE_X509_TBS			      
+#ifdef HAVE_I2D_RE_X509_TBS
 			      {"to_be_signed", fetch_to_be_signed},
 #endif
 			      {NULL, NULL}};
@@ -2485,7 +2485,7 @@ ssl_system_verify_locations(void)
           const unsigned char *der;
           unsigned long cert_data_length;
           X509 *x509 = NULL;
-  
+
           cert_data = SecCertificateCopyData((SecCertificateRef)cert);
           der = CFDataGetBytePtr(cert_data);
           cert_data_length = CFDataGetLength(cert_data);
