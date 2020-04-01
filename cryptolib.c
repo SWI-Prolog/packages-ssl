@@ -287,6 +287,13 @@ bio_write_text(BIO* bio, const char* buf, int len)
 /*
  * Control function. Currently only supports flushing and detecting EOF.
  * There are several more mandatory, but as-yet unsupported functions...
+ *
+ * We should not consider a timeout  to   be  end-of-file.  If we do so,
+ * OpenSSL as of 1.1.1e will propagate this   as an SSL_ERROR_SSL and we
+ * cannot resume the connection. Note that   the TIMEOUT flag is cleared
+ * by the next read operation. Also, if this  flag is set, the last read
+ * operation did call Sfillbuf(), and we  thus   do  know  the buffer is
+ * empty.  Diagnosed by Matt Lilley.
  */
 
 static long
@@ -299,7 +306,7 @@ bio_control(BIO* bio, int cmd, long num, void* ptr)
       Sflush(stream);
       return 1;
     case BIO_CTRL_EOF:
-      return Sfeof(stream);
+      return !(stream->flags&SIO_TIMEOUT) && Sfeof(stream);
   }
 
   return 0;
