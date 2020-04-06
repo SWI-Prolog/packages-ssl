@@ -164,11 +164,14 @@ if(BUILD_TESTING)
 
     if(INSTALL_TESTS)
       install(FILES https.pl
-	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl)
+	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl
+	      COMPONENT Tests)
       install(DIRECTORY etc
-	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl)
+	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl
+	      COMPONENT Tests)
       install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/tests
-	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl)
+	      DESTINATION ${INSTALL_TESTS_DIR}/packages/ssl
+	      COMPONENT Tests)
     endif()
   endif()
 endif(BUILD_TESTING)
@@ -224,7 +227,8 @@ swipl_examples(client.pl server.pl https.pl)
 install_src(pkg_ssl_etc
 	    DIRECTORY etc
 	    DESTINATION
-	    ${SWIPL_INSTALL_PREFIX}/doc/packages/examples/${SWIPL_PKG})
+	    ${SWIPL_INSTALL_SHARE_PREFIX}/doc/packages/examples/${SWIPL_PKG}
+	    COMPONENT Examples)
 
 pkg_doc(ssl
 	SOURCES
