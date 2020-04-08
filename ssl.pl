@@ -360,10 +360,6 @@ ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
     ssl_copy_context(SSL0, SSL),
     '_ssl_add_certificate_key'(SSL, Cert, Key).
 
-ssl_copy_context(SSL0, SSL) :-
-    ssl_context(server, SSL, []),
-    '_ssl_init_from_context'(SSL0, SSL).
-
 %!  ssl_set_options(+SSL0, -SSL, +Options)
 %
 %   SSL is the same as SSL0, except for the options specified in

@@ -4,8 +4,9 @@
 		   Markus Triska and James Cash
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2018, SWI-Prolog Foundation
+    Copyright (c)  2004-2020, SWI-Prolog Foundation
                               VU University Amsterdam
+			      CWI, Amsterdam
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -3422,8 +3423,11 @@ get_ssl_method(term_t method)
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
-  if ( !PL_get_atom(method, &method_name) )
+  if ( !method )
+    method_name = ATOM_sslv23;
+  else if ( !PL_get_atom(method, &method_name) )
     return PL_domain_error("ssl_method", method);
+
   if ( method_name == ATOM_sslv23 )
     ssl_method = SSLv23_method();
 #ifndef OPENSSL_NO_SSL2
@@ -3818,17 +3822,25 @@ static X509 *x509dup(const X509 *cx)
 }
 
 static foreign_t
-pl_ssl_init_from_context(term_t term_old, term_t term_new)
-{
-  PL_SSL *old, *new;
+pl_ssl_copy_context(term_t term_old, term_t term_new)
+{ PL_SSL *old, *new;
   int idx;
+  const SSL_METHOD *ssl_method;
 
-  if ( !get_conf(term_old, &old) ||
-       !get_conf(term_new, &new) )
+  if ( !PL_is_variable(term_new) )
+    return PL_uninstantiation_error(term_new);
+
+  if ( !get_conf(term_old, &old) )
     return FALSE;
 
-  new->role                = old->role;
+  if ( !(ssl_method = get_ssl_method(0)) )
+    return FALSE;
+  if ( !(new = ssl_init(old->role, ssl_method)) )
+    return PL_resource_error("memory");
+  if ( !unify_conf(term_new, new) )
+    return FALSE;				/* TBD: cleanup */
 
+  new->role                = old->role;
   new->password            = ssl_strdup(old->password);
 
   new->close_parent        = old->close_parent;
@@ -4264,8 +4276,7 @@ install_ssl4pl(void)
   FUNCTOR_certificate1      = PL_new_functor(PL_new_atom("certificate"), 1);
   FUNCTOR_file1             = PL_new_functor(PL_new_atom("file"), 1);
   PL_register_foreign("_ssl_context",	4, pl_ssl_context,    0);
-  PL_register_foreign("_ssl_init_from_context",
-					2, pl_ssl_init_from_context, 0);
+  PL_register_foreign("ssl_copy_context", 2, pl_ssl_copy_context, 0);
   PL_register_foreign("ssl_negotiate",	5, pl_ssl_negotiate,  0);
   PL_register_foreign("_ssl_add_certificate_key",
 					3, pl_ssl_add_certificate_key, 0);
