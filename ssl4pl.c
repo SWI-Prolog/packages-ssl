@@ -3496,10 +3496,10 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   { atom_t name;
     size_t arity;
 
-    if ( !PL_get_name_arity(head, &name, &arity) )
+    if ( !(PL_get_name_arity(head, &name, &arity) && arity == 1) )
       return PL_type_error("ssl_option", head);
 
-    if ( name == ATOM_password && arity == 1 )
+    if ( name == ATOM_password )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
@@ -3507,14 +3507,14 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       if (conf->password) free(conf->password);
       conf->password = ssl_strdup(s);
-    } else if ( name == ATOM_require_crl && arity == 1 )
+    } else if ( name == ATOM_require_crl )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
       conf->crl_required = val;
-    } else if ( name == ATOM_crl && arity == 1 )
+    } else if ( name == ATOM_crl )
     { STACK_OF(X509_CRL) *crls = sk_X509_CRL_new_null();
       term_t list_head = PL_new_term_ref();
       term_t list_tail = PL_new_term_ref();
@@ -3535,7 +3535,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if (conf->crl_list)
         sk_X509_CRL_pop_free(conf->crl_list, X509_CRL_free);
       conf->crl_list = crls;
-    } else if ( name == ATOM_certificate_file && arity == 1 )
+    } else if ( name == ATOM_certificate_file )
     { char *file;
 
       if ( !get_file_arg(1, head, &file) )
@@ -3544,7 +3544,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if (conf->certificate_file)
 	free(conf->certificate_file);
       conf->certificate_file = ssl_strdup(file);
-    } else if ( name == ATOM_cacerts && arity == 1 )
+    } else if ( name == ATOM_cacerts )
     { term_t CATail = PL_new_term_ref();
       term_t CAHead = PL_new_term_ref();
 
@@ -3604,7 +3604,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	conf->cacerts = NULL;
 	return FALSE;
       }
-    } else if ( name == ATOM_certificate_file && arity == 1 )
+    } else if ( name == ATOM_certificate_file )
     { char *file;
 
       if ( !get_file_arg(1, head, &file) )
@@ -3612,7 +3612,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       if (conf->certificate_file) free(conf->certificate_file);
       conf->certificate_file = ssl_strdup(file);
-    } else if ( name == ATOM_certificate_key_pairs && arity == 1 )
+    } else if ( name == ATOM_certificate_key_pairs )
     { term_t cert_head = PL_new_term_ref();
       term_t cert_tail = PL_new_term_ref();
       _PL_get_arg(1, head, cert_tail);
@@ -3642,7 +3642,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       }
       if ( !PL_get_nil_ex(cert_tail) )
         return FALSE;
-    } else if ( name == ATOM_key_file && arity == 1 )
+    } else if ( name == ATOM_key_file )
     { char *file;
 
       if ( !get_file_arg(1, head, &file) )
@@ -3650,7 +3650,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       if (conf->key_file) free(conf->key_file);
       conf->key_file = ssl_strdup(file);
-    } else if ( name == ATOM_pem_password_hook && arity == 1 )
+    } else if ( name == ATOM_pem_password_hook )
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
       conf->cb_pem_passwd.goal   = PL_record(cb);
