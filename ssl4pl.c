@@ -3241,24 +3241,21 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      if (conf->cipher_list) free(conf->cipher_list);
-      conf->cipher_list = ssl_strdup(s);
+      set_string(conf, cipher_list, s);
     } else if ( name == ATOM_ecdh_curve )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      if (conf->ecdh_curve) free(conf->ecdh_curve);
-      conf->ecdh_curve = ssl_strdup(s);
+      set_string(conf, ecdh_curve, s);
     } else if ( name == ATOM_host )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      if (conf->host) free(conf->host);
-      conf->host = ssl_strdup(s);
+      set_string(conf, host, s);
     } else if ( name == ATOM_peer_cert )
     { int val;
 
@@ -3505,8 +3502,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_char_arg(1, head, &s) )
 	return FALSE;
 
-      if (conf->password) free(conf->password);
-      conf->password = ssl_strdup(s);
+      set_string(conf, password, s);
     } else if ( name == ATOM_require_crl )
     { int val;
 
@@ -3541,9 +3537,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      if (conf->certificate_file)
-	free(conf->certificate_file);
-      conf->certificate_file = ssl_strdup(file);
+      set_string(conf, certificate_file, file);
     } else if ( name == ATOM_cacerts )
     { term_t CATail = PL_new_term_ref();
       term_t CAHead = PL_new_term_ref();
@@ -3610,8 +3604,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      if (conf->certificate_file) free(conf->certificate_file);
-      conf->certificate_file = ssl_strdup(file);
+      set_string(conf, certificate_file, file);
     } else if ( name == ATOM_certificate_key_pairs )
     { term_t cert_head = PL_new_term_ref();
       term_t cert_tail = PL_new_term_ref();
@@ -3648,8 +3641,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      if (conf->key_file) free(conf->key_file);
-      conf->key_file = ssl_strdup(file);
+      set_string(conf, key_file, file);
     } else if ( name == ATOM_pem_password_hook )
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
