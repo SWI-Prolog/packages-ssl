@@ -2339,8 +2339,6 @@ ERR_print_errors_pl()
 }
 
 
-static PL_SSL *
-ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 /*
  * Allocate the holder for our parameters which will specify the
  * configuration parameters and any other statefull parameter.
@@ -2348,38 +2346,41 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
  * Define method for SSL layer depending on whether we're server or client.
  * Create SSL context.
  */
-{
-    PL_SSL           * config    = NULL;
-    SSL_CTX          *ssl_ctx    = NULL;
 
-    ssl_ctx = SSL_CTX_new(ssl_method);
-    if (!ssl_ctx) {
-        ERR_print_errors_pl();
-    } else {
-        long ctx_mode = 0L;
+static PL_SSL *
+ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
+{ PL_SSL *config = NULL;
+  SSL_CTX *ssl_ctx = NULL;
 
-        if ((config = SSL_CTX_get_ex_data(ssl_ctx, ctx_idx)) == NULL) {
-            ssl_err("Cannot read back application data\n");
-            SSL_CTX_free(ssl_ctx);
-            return NULL;
-        }
-        assert(config->magic == SSL_CONFIG_MAGIC);
-        config->ctx  = ssl_ctx;
-        config->role = role;
-        config->peer_cert_required = (role != PL_SSL_SERVER);
+  ssl_ctx = SSL_CTX_new(ssl_method);
+  if ( !ssl_ctx )
+  { ERR_print_errors_pl();
+  } else
+  { long ctx_mode = 0L;
 
-        /*
-         * Set SSL_{read,write} behaviour when a renegotiation takes place
-         * in a blocking transport layer.
-         */
-        ctx_mode  = SSL_CTX_get_mode(ssl_ctx);
-        ctx_mode |= SSL_MODE_AUTO_RETRY;
-        ctx_mode  = SSL_CTX_set_mode(ssl_ctx, ctx_mode);
+    if ( !(config=SSL_CTX_get_ex_data(ssl_ctx, ctx_idx)) )
+    { ssl_err("Cannot read back application data\n");
+      SSL_CTX_free(ssl_ctx);
+      return NULL;
     }
 
-    ssl_deb(1, "Initialized\n");
+    assert(config->magic == SSL_CONFIG_MAGIC);
+    config->ctx  = ssl_ctx;
+    config->role = role;
+    config->peer_cert_required = (role != PL_SSL_SERVER);
 
-    return config;
+    /*
+     * Set SSL_{read,write} behaviour when a renegotiation takes place
+     * in a blocking transport layer.
+     */
+    ctx_mode  = SSL_CTX_get_mode(ssl_ctx);
+    ctx_mode |= SSL_MODE_AUTO_RETRY;
+    ctx_mode  = SSL_CTX_set_mode(ssl_ctx, ctx_mode);
+  }
+
+  ssl_deb(1, "Initialized\n");
+
+  return config;
 }
 
 
@@ -3412,6 +3413,50 @@ pl_ssl_set_options(term_t config, term_t options)
     set_malleable_options(conf);
 }
 
+
+static const SSL_METHOD *
+get_ssl_method(term_t method)
+{ const SSL_METHOD *ssl_method = NULL;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  atom_t method_name;
+#endif
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+  if ( !PL_get_atom(method, &method_name) )
+    return PL_domain_error("ssl_method", method);
+  if ( method_name == ATOM_sslv23 )
+    ssl_method = SSLv23_method();
+#ifndef OPENSSL_NO_SSL2
+  else if ( method_name == ATOM_sslv2 )
+    ssl_method = SSLv2_method();
+#endif
+#ifndef OPENSSL_NO_SSL3_METHOD
+  else if ( method_name == ATOM_sslv3 )
+    ssl_method = SSLv3_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1
+  else if ( method_name == ATOM_tlsv1 )
+    ssl_method = TLSv1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_1
+  else if ( method_name == ATOM_tlsv1_1 )
+    ssl_method = TLSv1_1_method();
+#endif
+#ifdef SSL_OP_NO_TLSv1_2
+  else if ( method_name == ATOM_tlsv1_2 )
+    ssl_method = TLSv1_2_method();
+#endif
+  else
+    return PL_domain_error("ssl_method", method);
+#else
+  ssl_method = TLS_method();  /* In OpenSSL >= 1.1.0, always use TLS_method() */
+#endif
+
+  return ssl_method;
+}
+
+
+
 static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 { atom_t a;
@@ -3420,10 +3465,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   term_t tail;
   term_t head = PL_new_term_ref();
   module_t module = NULL;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  atom_t method_name;
-#endif
-  const SSL_METHOD *ssl_method = NULL;
+  const SSL_METHOD *ssl_method;
 
   if ( !PL_strip_module(options, &module, options) )
     return FALSE;
@@ -3438,36 +3480,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   else
     return PL_domain_error("ssl_role", role);
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-  if (!PL_get_atom(method, &method_name))
-     return PL_domain_error("ssl_method", method);
-  if (method_name == ATOM_sslv23)
-    ssl_method = SSLv23_method();
-#ifndef OPENSSL_NO_SSL2
-  else if (method_name == ATOM_sslv2)
-    ssl_method = SSLv2_method();
-#endif
-#ifndef OPENSSL_NO_SSL3_METHOD
-  else if (method_name == ATOM_sslv3)
-    ssl_method = SSLv3_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1
-  else if (method_name == ATOM_tlsv1)
-    ssl_method = TLSv1_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1_1
-  else if (method_name == ATOM_tlsv1_1)
-    ssl_method = TLSv1_1_method();
-#endif
-#ifdef SSL_OP_NO_TLSv1_2
-  else if (method_name == ATOM_tlsv1_2)
-    ssl_method = TLSv1_2_method();
-#endif
-  else
-    return PL_domain_error("ssl_method", method);
-#else
-    ssl_method = TLS_method();  /* In OpenSSL >= 1.1.0, always use TLS_method() */
-#endif
+  if ( !(ssl_method = get_ssl_method(method)) )
+    return FALSE;
 
   if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
@@ -3498,6 +3512,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
     { STACK_OF(X509_CRL) *crls = sk_X509_CRL_new_null();
       term_t list_head = PL_new_term_ref();
       term_t list_tail = PL_new_term_ref();
+
       _PL_get_arg(1, head, list_tail);
       while( PL_get_list(list_tail, list_head, list_tail) )
       { atom_t crl_name;
@@ -3520,17 +3535,21 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( !get_file_arg(1, head, &file) )
 	return FALSE;
 
-      if (conf->certificate_file) free(conf->certificate_file);
+      if (conf->certificate_file)
+	free(conf->certificate_file);
       conf->certificate_file = ssl_strdup(file);
     } else if ( name == ATOM_cacerts && arity == 1 )
     { term_t CATail = PL_new_term_ref();
       term_t CAHead = PL_new_term_ref();
+
       _PL_get_arg(1, head, CATail);
       if (conf->cacerts)
 	sk_X509_pop_free(conf->cacerts, X509_free);
+
       conf->cacerts = sk_X509_new_null();
       while (PL_get_list_ex(CATail, CAHead, CATail))
       { X509* cert = NULL;
+
         if (PL_is_functor(CAHead, FUNCTOR_certificate1))
         { _PL_get_arg(1, CAHead, CAHead);
           if (!get_certificate_blob(CAHead, &cert))
@@ -3543,8 +3562,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	     The duplicates will be cleaned up when the conf is freed
 	  */
 	  sk_X509_push(conf->cacerts, X509_dup(cert));
-	}
-	else if (PL_is_functor(CAHead, FUNCTOR_file1))
+	} else if (PL_is_functor(CAHead, FUNCTOR_file1))
 	{ char *file;
 	  _PL_get_arg(1, CAHead, CAHead);
 	  /* These certificate(s) will be cleaned up when the conf is freed */
@@ -3553,10 +3571,10 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	    conf->cacerts = NULL;
 	    return FALSE;
 	  }
-	}
-	else if (PL_is_functor(CAHead, FUNCTOR_system1))
-	{ _PL_get_arg(1, CAHead, CAHead);
-	  atom_t a;
+	} else if (PL_is_functor(CAHead, FUNCTOR_system1))
+	{ atom_t a;
+
+	  _PL_get_arg(1, CAHead, CAHead);
 	  if ( !PL_get_atom_ex(CAHead, &a) )
 	    return FALSE;
 	  if ( a == ATOM_root_certificates )
@@ -3574,6 +3592,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 	  }
 	}
       }
+
       if (!PL_get_nil_ex(CATail))
       { sk_X509_pop_free(conf->cacerts, X509_free);
 	conf->cacerts = NULL;
