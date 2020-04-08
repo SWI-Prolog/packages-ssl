@@ -146,15 +146,15 @@ static functor_t FUNCTOR_file1;
 static functor_t FUNCTOR_certificate1;
 
 typedef enum
-{ PL_SSL_NONE
-, PL_SSL_SERVER
-, PL_SSL_CLIENT
+{ PL_SSL_NONE,
+  PL_SSL_SERVER,
+  PL_SSL_CLIENT
 } PL_SSL_ROLE;
 
 typedef enum
-{ SSL_PL_OK
-, SSL_PL_RETRY
-, SSL_PL_ERROR
+{ SSL_PL_OK,
+  SSL_PL_RETRY,
+  SSL_PL_ERROR
 } SSL_PL_STATUS;
 
 #define SSL_CERT_VERIFY_MORE 0
@@ -169,88 +169,88 @@ static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ssl_idx;
 static int ctx_idx;
 
-typedef struct pl_cert_key_pair {
-    X509                *certificate_X509;
-    char                *key;
-    char                *certificate;
+typedef struct pl_cert_key_pair
+{ X509	*certificate_X509;
+  char  *key;
+  char  *certificate;
 } PL_CERT_KEY_PAIR;
 
-typedef struct pl_ssl_callback {
-    record_t goal;
-    module_t module;
+typedef struct pl_ssl_callback
+{ record_t goal;
+  module_t module;
 } PL_SSL_CALLBACK;
 
-typedef struct pl_ssl_protocol {
-    BOOL is_set;
-    int version;
+typedef struct pl_ssl_protocol
+{ BOOL is_set;
+  int version;
 } PL_SSL_PROTOCOL;
 
-typedef struct pl_ssl {
-    long                 magic;
+typedef struct pl_ssl
+{ long                 magic;
     /*
      * Are we server or client
      */
-    PL_SSL_ROLE          role;
+  PL_SSL_ROLE          role;
 
-    int                  close_parent;
-    atom_t               atom;
-    BOOL                 close_notify;
+  int                  close_parent;
+  atom_t               atom;
+  BOOL                 close_notify;
 
-    /*
-     * Context, Certificate, SSL info
-     */
-    SSL_CTX             *ctx;
-    int                  idx;
-    X509                *peer_cert;
+  /*
+   * Context, Certificate, SSL info
+   */
+  SSL_CTX             *ctx;
+  int                  idx;
+  X509                *peer_cert;
 
-    /*
-     * In case of the client the host we're connecting to.
-     */
-    char                *host;
+  /*
+   * In case of the client the host we're connecting to.
+   */
+  char                *host;
 
-    /*
-     * Various parameters affecting the SSL layer
-     */
-    STACK_OF(X509)      *cacerts;
+  /*
+   * Various parameters affecting the SSL layer
+   */
+  STACK_OF(X509)      *cacerts;
 
-    char                *certificate_file;
-    char                *key_file;
-    PL_CERT_KEY_PAIR     cert_key_pairs[SSL_MAX_CERT_KEY_PAIRS];
-    int                  num_cert_key_pairs;
+  char                *certificate_file;
+  char                *key_file;
+  PL_CERT_KEY_PAIR     cert_key_pairs[SSL_MAX_CERT_KEY_PAIRS];
+  int                  num_cert_key_pairs;
 
-    char                *cipher_list;
-    char                *ecdh_curve;
-    STACK_OF(X509_CRL)  *crl_list;
-    char                *password;
-    BOOL                 crl_required;
-    BOOL                 peer_cert_required;
+  char                *cipher_list;
+  char                *ecdh_curve;
+  STACK_OF(X509_CRL)  *crl_list;
+  char                *password;
+  BOOL                 crl_required;
+  BOOL                 peer_cert_required;
 
-    PL_SSL_PROTOCOL      min_protocol;
-    PL_SSL_PROTOCOL      max_protocol;
+  PL_SSL_PROTOCOL      min_protocol;
+  PL_SSL_PROTOCOL      max_protocol;
 
-    /*
-     * Application defined handlers
-     */
-    PL_SSL_CALLBACK      cb_cert_verify;
-    PL_SSL_CALLBACK      cb_pem_passwd;
-    PL_SSL_CALLBACK      cb_sni;
-    PL_SSL_CALLBACK      cb_alpn_proto;
+  /*
+   * Application defined handlers
+   */
+  PL_SSL_CALLBACK      cb_cert_verify;
+  PL_SSL_CALLBACK      cb_pem_passwd;
+  PL_SSL_CALLBACK      cb_sni;
+  PL_SSL_CALLBACK      cb_alpn_proto;
 #ifndef HAVE_X509_CHECK_HOST
-    int                  hostname_check_status;
+  int                  hostname_check_status;
 #endif
-    unsigned char       *alpn_protos;
-    size_t               alpn_protos_len;
+  unsigned char       *alpn_protos;
+  size_t               alpn_protos_len;
 } PL_SSL;
 
-typedef struct ssl_instance {
-    PL_SSL              *config;
-    SSL                 *ssl;
-    IOSTREAM            *sread;         /* wire streams */
-    IOSTREAM            *swrite;
-    IOSTREAM            *dread;         /* data streams */
-    IOSTREAM            *dwrite;
-    int                  close_needed;
-    BOOL                 fatal_alert;
+typedef struct ssl_instance
+{ PL_SSL	*config;
+  SSL		*ssl;
+  IOSTREAM	*sread;         /* wire streams */
+  IOSTREAM	*swrite;
+  IOSTREAM	*dread;         /* data streams */
+  IOSTREAM	*dwrite;
+  int		close_needed;
+  BOOL		fatal_alert;
 } PL_SSL_INSTANCE;
 
 
@@ -263,10 +263,7 @@ get_char_arg(int a, term_t t, char **s)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_chars(t2, s, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
-    return FALSE;
-
-  return TRUE;
+  return PL_get_chars(t2, s, CVT_ATOM|CVT_STRING|CVT_EXCEPTION);
 }
 
 
@@ -275,10 +272,7 @@ get_bool_arg(int a, term_t t, int *i)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_bool_ex(t2, i) )
-    return FALSE;
-
-  return TRUE;
+  return PL_get_bool_ex(t2, i);
 }
 
 
@@ -287,24 +281,22 @@ get_file_arg(int a, term_t t, char **f)
 { term_t t2 = PL_new_term_ref();
 
   _PL_get_arg(a, t, t2);
-  if ( !PL_get_file_name(t2, f, PL_FILE_EXIST) )
-    return FALSE;
-
-  return TRUE;
+  return PL_get_file_name(t2, f, PL_FILE_EXIST);
 }
 
 
 static int
 unify_bignum(term_t t, const BIGNUM *bn)
-{
-  int rc;
+{ int rc;
+
   if ( bn )
   { char *hex = BN_bn2hex(bn);
 
     rc = PL_unify_chars(t, PL_STRING|REP_ISO_LATIN_1, (size_t)-1, hex);
     OPENSSL_free(hex);
   } else
-    rc = PL_unify_atom(t, ATOM_minus);
+  { rc = PL_unify_atom(t, ATOM_minus);
+  }
 
   return rc;
 }
@@ -344,7 +336,8 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
 
   if (time->type == V_ASN1_UTCTIME)
   {  if ((length < 11) || (length > 17))
-     {  ssl_deb(2, "Unable to parse time - expected either 11 or 17 chars, not %d", length);
+     {  ssl_deb(2, "Unable to parse time - expected either 11 or 17 chars,"
+		   " not %d", length);
         return FALSE;
      }
      /* Otherwise just get the first 10 chars - ignore seconds */
@@ -354,7 +347,8 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
      length -= 10;
   } else
   { if (length < 13)
-     {  ssl_deb(2, "Unable to parse time - expected at least 13 chars, not %d", length);
+     {  ssl_deb(2, "Unable to parse time - expected at least 13 chars,"
+		   " not %d", length);
         return FALSE;
      }
      /* Otherwise just get the first 12 chars - ignore seconds */
@@ -381,8 +375,8 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
 
   /* If not UTC, calculate offset */
   if (*source == 'Z')
-     lSecondsFromUTC = 0;
-  else
+  { lSecondsFromUTC = 0;
+  } else
   { if ( length < 6 || (*source != '+' && source[5] != '-') )
      {  ssl_deb(2, "Unable to parse time. Missing UTC offset");
         return FALSE;
@@ -403,7 +397,8 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
      time_tm.tm_year += 100; /* according to RFC 2459 */
   time_tm.tm_wday = 0;
   time_tm.tm_yday = 0;
-  time_tm.tm_isdst = 0;  /* No DST adjustment requested, though mktime might do it anyway */
+  time_tm.tm_isdst = 0;  /* No DST adjustment requested, though */
+			 /* mktime might do it anyway */
 
 #ifdef HAVE_TIMEGM
   result = timegm(&time_tm);
@@ -415,7 +410,8 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   }
 #else
   result = mktime(&time_tm);
-  /* mktime assumes that the time_tm contains information for localtime. Convert back to UTC: */
+  /* mktime assumes that the time_tm contains information for localtime. */
+  /* Convert back to UTC: */
   if ((time_t)-1 != result)
   { result += lSecondsFromUTC; /* Add in the UTC offset of the original value */
     result -= timezone; /* Adjust for localtime */
@@ -431,8 +427,8 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
 static const EVP_MD *
 algorithm_to_type(const ASN1_OBJECT* algorithm, int *nid)
 { *nid = OBJ_obj2nid(algorithm);
-  /* Annoyingly, EVP_get_digestbynid doesnt work for some of these algorithms. Instead check for
-     them explicitly and set the digest manually
+  /* Annoyingly, EVP_get_digestbynid doesnt work for some of these
+     algorithms. Instead check for them explicitly and set the digest manually
   */
   switch (*nid)
   { case NID_ecdsa_with_SHA1:
@@ -453,33 +449,33 @@ algorithm_to_type(const ASN1_OBJECT* algorithm, int *nid)
 #if defined(HAVE_X509_DIGEST) && defined(HAVE_X509_CRL_DIGEST)
 
 static int
-hash_X509_digest_wrapper(const void *data, const EVP_MD *type, unsigned char* md, unsigned int *l)
-{
-  return X509_digest((X509 *) data, type, md, l);
+hash_X509_digest_wrapper(const void *data, const EVP_MD *type,
+			 unsigned char* md, unsigned int *l)
+{ return X509_digest((X509 *) data, type, md, l);
 }
 
 static int
-hash_X509_crl_digest_wrapper(const void *data, const EVP_MD *type, unsigned char* md, unsigned int *l)
-{
-  return X509_CRL_digest((X509_CRL *) data, type, md, l);
+hash_X509_crl_digest_wrapper(const void *data, const EVP_MD *type,
+			     unsigned char* md, unsigned int *l)
+{ return X509_CRL_digest((X509_CRL *) data, type, md, l);
 }
 
 static int
 unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
-           int (*data_to_digest)(const void*, const EVP_MD *, unsigned char*, unsigned int*),
+           int (*data_to_digest)(const void*, const EVP_MD *,
+				 unsigned char*, unsigned int*),
            void *data)
-{
-  int nid;
+{ int nid;
   const EVP_MD *type = algorithm_to_type(algorithm, &nid);
   unsigned char digest[EVP_MAX_MD_SIZE];
   unsigned int digest_length;
 
-  if (type == NULL)
+  if ( type == NULL )
     return PL_unify_term(hash,
                          PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
                          PL_INT, nid);
 
-  if (!data_to_digest(data, type, digest, &digest_length))
+  if ( !data_to_digest(data, type, digest, &digest_length) )
     return FALSE;
 
   return unify_bytes_hex(hash, digest_length, digest);
@@ -487,14 +483,14 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
 
 #else
 
-static int i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
-{
-   return i2d_X509_CRL_INFO(i, d);
+static int
+i2d_X509_CRL_INFO_wrapper(void* i, unsigned char** d)
+{ return i2d_X509_CRL_INFO(i, d);
 }
 
-static int i2d_X509_CINF_wrapper(void* i, unsigned char** d)
-{
-   return i2d_X509_CINF(i, d);
+static int
+i2d_X509_CINF_wrapper(void* i, unsigned char** d)
+{ return i2d_X509_CINF(i, d);
 }
 
 
@@ -511,14 +507,14 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
   unsigned char* p;
   /* Generate hash */
 
-  if (type == NULL)
+  if ( type == NULL )
     return PL_unify_term(hash,
                          PL_FUNCTOR, FUNCTOR_unsupported_hash_algorithm1,
                          PL_INT, nid);
 
   digestible_length=i2d(data,NULL);
   digest_buffer = PL_malloc(digestible_length);
-  if (digest_buffer == NULL)
+  if ( digest_buffer == NULL )
     return PL_resource_error("memory");
 
   /* i2d_X509_CINF will change the value of p. We need to pass in a copy */
@@ -553,9 +549,9 @@ unify_name(term_t term, X509_NAME* name)
   term_t list = PL_copy_term_ref(term);
   term_t item = PL_new_term_ref();
 
-  if (name == NULL)
-     return PL_unify_term(term,
-                          PL_CHARS, "<null>");
+  if ( name == NULL )
+    return PL_unify_term(term, PL_CHARS, "<null>");
+
   for (ni = 0; ni < X509_NAME_entry_count(name); ni++)
   { X509_NAME_ENTRY* e = X509_NAME_get_entry(name, ni);
     ASN1_STRING* entry_data = X509_NAME_ENTRY_get_data(e);
@@ -566,15 +562,17 @@ unify_name(term_t term, X509_NAME* name)
       return PL_resource_error("memory");
 
     rc = ( PL_unify_list(list, item, list) &&
-	   PL_unify_term(item,
-			 PL_FUNCTOR, FUNCTOR_equals2,
-			 PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(X509_NAME_ENTRY_get_object(e))),
-			 PL_UTF8_CHARS, utf8_data)
+	   PL_unify_term(
+	       item,
+	       PL_FUNCTOR, FUNCTOR_equals2,
+	       PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(X509_NAME_ENTRY_get_object(e))),
+	       PL_UTF8_CHARS, utf8_data)
 	 );
     OPENSSL_free(utf8_data);
     if ( !rc )
       return FALSE;
   }
+
   return PL_unify_nil(list);
 }
 
@@ -586,10 +584,11 @@ unify_name(term_t term, X509_NAME* name)
 #ifndef HAVE_X509_CRL_GET0_SIGNATURE
 /* Avoid conflict if the prototype is there, but the function is not */
 #define X509_CRL_get0_signature my_X509_CRL_get0_signature
+
 static void
-X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig, const X509_ALGOR **palg)
-{
-  *psig = crl->signature;
+X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig,
+			const X509_ALGOR **palg)
+{ *psig = crl->signature;
   *palg = crl->sig_alg;
 }
 #endif
@@ -597,8 +596,10 @@ X509_CRL_get0_signature(const X509_CRL *crl, const ASN1_BIT_STRING **psig, const
 #ifndef HAVE_X509_GET0_SIGNATURE
 /* Avoid conflict if the prototype is there, but the function is not */
 #define X509_get0_signature my_X509_get0_signature
+
 static void
-X509_get0_signature(const ASN1_BIT_STRING **psig, const X509_ALGOR **palg, const X509 *data)
+X509_get0_signature(const ASN1_BIT_STRING **psig, const X509_ALGOR **palg,
+		    const X509 *data)
 {
   *psig = data->signature;
   *palg = data->sig_alg;
@@ -608,8 +609,7 @@ X509_get0_signature(const ASN1_BIT_STRING **psig, const X509_ALGOR **palg, const
 
 static int
 unify_crl(term_t term, X509_CRL* crl)
-{
-  const ASN1_BIT_STRING *psig;
+{ const ASN1_BIT_STRING *psig;
   const X509_ALGOR *palg;
   STACK_OF(X509_REVOKED) *revoked = X509_CRL_get_REVOKED(crl);
   int i;
@@ -635,7 +635,7 @@ unify_crl(term_t term, X509_CRL* crl)
   i2a_ASN1_INTEGER(mem, (ASN1_BIT_STRING *) psig);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
 #ifdef HAVE_X509_CRL_DIGEST
-        unify_hash(hash, palg->algorithm, hash_X509_crl_digest_wrapper, crl) &&
+	unify_hash(hash, palg->algorithm, hash_X509_crl_digest_wrapper, crl) &&
 #else
         unify_hash(hash, palg->algorithm, i2d_X509_CRL_INFO_wrapper, crl->crl) &&
 #endif
@@ -653,28 +653,29 @@ unify_crl(term_t term, X509_CRL* crl)
                       PL_TERM, next_update,
                       PL_FUNCTOR, FUNCTOR_revocations1,
                       PL_TERM, revocations)))
-  {
-     return FALSE;
+  { return FALSE;
   }
+
   for (i = 0; i < sk_X509_REVOKED_num(revoked); i++)
-  {  X509_REVOKED *r = sk_X509_REVOKED_value(revoked, i);
-     (void)BIO_reset(mem);
-     i2a_ASN1_INTEGER(mem, X509_REVOKED_get0_serialNumber(r));
-     result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
-                PL_unify_list(list, item, list) &&
-                (revocation_date = PL_new_term_ref()) &&
-                unify_asn1_time(revocation_date, X509_REVOKED_get0_revocationDate(r)) &&
-                PL_unify_term(item,
-                              PL_FUNCTOR, FUNCTOR_revoked2,
-                              PL_NCHARS, (size_t)n, p,
-                              PL_TERM, revocation_date));
-     if (BIO_reset(mem) != 1)
-     {
-        BIO_free(mem);
-        // The only reason I can imagine this would fail is out of memory
-        return PL_resource_error("memory");
-     }
+  { X509_REVOKED *r = sk_X509_REVOKED_value(revoked, i);
+
+    (void)BIO_reset(mem);
+    i2a_ASN1_INTEGER(mem, X509_REVOKED_get0_serialNumber(r));
+    result &= (((n = BIO_get_mem_data(mem, &p)) > 0) &&
+	       PL_unify_list(list, item, list) &&
+	       (revocation_date = PL_new_term_ref()) &&
+	       unify_asn1_time(revocation_date, X509_REVOKED_get0_revocationDate(r)) &&
+	       PL_unify_term(item,
+			     PL_FUNCTOR, FUNCTOR_revoked2,
+			     PL_NCHARS, (size_t)n, p,
+			     PL_TERM, revocation_date));
+    if ( BIO_reset(mem) != 1 )
+    { BIO_free(mem);
+      // The only reason I can imagine this would fail is out of memory
+      return PL_resource_error("memory");
+    }
   }
+
   BIO_free(mem);
   return result && PL_unify_nil(list);
 }
@@ -717,8 +718,7 @@ unify_rsa(term_t item, RSA* rsa)
 #ifndef OPENSSL_NO_EC
 static int
 unify_ec(term_t item, EC_KEY *key)
-{
-  unsigned char *buf = NULL;
+{ unsigned char *buf = NULL;
   int rc, publen;
   term_t privkey, pubkey;
 
@@ -2205,8 +2205,6 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
     return preverify_ok;
 }
 
-static int
-ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
 /*
  * We're called since the OpenSSL library needs a password to access
  * the private key. The method to require the password is defined in
@@ -2214,45 +2212,38 @@ ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
  * Fill the supplied buffer with the password and return its length
  * or 0 on failure.
  */
-{
-    PL_SSL *config = (PL_SSL *) userdata;
-    char   *passwd = NULL;
-    int     len    = 0;
 
-    if (config->cb_pem_passwd.goal) {
-        /*
-         * Callback installed
-         */
-        passwd = pl_pem_passwd_hook(config, buf, size);
-    } else
-    if (config->password) {
-        /*
-         * Password defined
-         */
-        passwd = config->password;
-    }
+static int
+ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
+{ PL_SSL *config = userdata;
+  char   *passwd = NULL;
+  int     len    = 0;
 
-    if (passwd) {
-        if ((len = (int)strlen(passwd)) < size) {
-            strcpy(buf, passwd);
-        } else {
-            len = 0;
-        }
-    }
+  if ( config->cb_pem_passwd.goal )
+  { passwd = pl_pem_passwd_hook(config, buf, size);
+  } else if (config->password)
+  { passwd = config->password;
+  }
 
-    return len;
+  if ( passwd )
+  { if ( (len = (int)strlen(passwd)) < size )
+      strcpy(buf, passwd);
+    else
+      len = 0;
+  }
+
+  return len;
 }
 
 
 #ifndef OPENSSL_NO_TLSEXT
 static int
 ssl_cb_sni(SSL *s, int *ad, void *arg)
-{
-  PL_SSL *config = (PL_SSL *) arg,
-         *new_config = NULL;
+{ PL_SSL *config     = arg;
+  PL_SSL *new_config = NULL;
   const char *servername;
 
-  if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) != NULL )
+  if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) )
     new_config = pl_sni_hook(config, servername);
 
   if ( new_config == NULL &&
@@ -2335,7 +2326,6 @@ ERR_print_errors_pl()
 { char errmsg[1024];
 
   ERR_error_string_n(ERR_get_error(), errmsg, sizeof(errmsg));
-
   Sdprintf("%s\n", errmsg);
 }
 
