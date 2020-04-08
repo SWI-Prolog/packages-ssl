@@ -3228,10 +3228,10 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
   { atom_t name;
     size_t arity;
 
-    if ( !PL_get_name_arity(head, &name, &arity) )
+    if ( !(PL_get_name_arity(head, &name, &arity) && arity == 1) )
       return PL_type_error("ssl_option", head);
 
-    if ( name == ATOM_cipher_list && arity == 1 )
+    if ( name == ATOM_cipher_list )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
@@ -3239,7 +3239,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
       if (conf->cipher_list) free(conf->cipher_list);
       conf->cipher_list = ssl_strdup(s);
-    } else if ( name == ATOM_ecdh_curve && arity == 1 )
+    } else if ( name == ATOM_ecdh_curve )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
@@ -3247,7 +3247,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
       if (conf->ecdh_curve) free(conf->ecdh_curve);
       conf->ecdh_curve = ssl_strdup(s);
-    } else if ( name == ATOM_host && arity == 1 )
+    } else if ( name == ATOM_host )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
@@ -3255,14 +3255,14 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
       if (conf->host) free(conf->host);
       conf->host = ssl_strdup(s);
-    } else if ( name == ATOM_peer_cert && arity == 1 )
+    } else if ( name == ATOM_peer_cert )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
       conf->peer_cert_required = val;
-    } else if ( name == ATOM_cert_verify_hook && arity == 1 )
+    } else if ( name == ATOM_cert_verify_hook )
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
 
@@ -3271,14 +3271,14 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
       conf->cb_cert_verify.goal   = PL_record(cb);
       conf->cb_cert_verify.module = module;
-    } else if ( name == ATOM_close_parent && arity == 1 )
+    } else if ( name == ATOM_close_parent )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
       conf->close_parent = val;
-    } else if ( name == ATOM_disable_ssl_methods && arity == 1 )
+    } else if ( name == ATOM_disable_ssl_methods )
     { term_t opt_head = PL_new_term_ref();
       term_t opt_tail = PL_new_term_ref();
       long options = 0;
@@ -3313,7 +3313,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
       if ( (isset=(SSL_CTX_set_options(conf->ctx, options)&options)) != options )
 	ssl_deb(1, "SSL_CTX_set_options 0x%lx only set 0x%lx\n", options, isset);
-    } else if ( name == ATOM_min_protocol_version && arity == 1 )
+    } else if ( name == ATOM_min_protocol_version )
     { term_t val = PL_new_term_ref();
       int version;
 
@@ -3323,7 +3323,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
         return FALSE;
       conf->min_protocol.is_set  = TRUE;
       conf->min_protocol.version = version;
-    } else if ( name == ATOM_max_protocol_version && arity == 1 )
+    } else if ( name == ATOM_max_protocol_version )
     { term_t val = PL_new_term_ref();
       int version;
 
@@ -3343,14 +3343,14 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
       conf->cb_sni.goal   = PL_record(cb);
       conf->cb_sni.module = module;
-    } else if ( name == ATOM_close_notify && arity == 1 )
+    } else if ( name == ATOM_close_notify )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
 	return FALSE;
 
       conf->close_notify = val;
-    } else if ( name == ATOM_alpn_protocols && arity == 1 )
+    } else if ( name == ATOM_alpn_protocols )
     { term_t protos_tail = PL_new_term_ref();
       term_t protos_head = PL_new_term_ref();
       _PL_get_arg(1, head, protos_tail);
@@ -3381,7 +3381,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       }
       conf->alpn_protos = protos_vec;
       conf->alpn_protos_len = current_size;
-    } else if ( name == ATOM_alpn_protocol_hook && arity == 1 &&
+    } else if ( name == ATOM_alpn_protocol_hook &&
                 conf->role == PL_SSL_SERVER )
     { term_t cb = PL_new_term_ref();
       _PL_get_arg(1, head, cb);
@@ -3471,6 +3471,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
   if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
+
   while( PL_get_list(tail, head, tail) )
   { atom_t name;
     size_t arity;
