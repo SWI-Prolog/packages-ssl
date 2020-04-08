@@ -274,7 +274,6 @@ attr_set_string(char **where, const char *str)
     *where = ssl_strdup(str);
 }
 
-
 		 /*******************************
 		 *   GET TYPED TERM ARGUMENTS	*
 		 *******************************/
@@ -1975,60 +1974,52 @@ ssl_config_new  ( void *            ctx
 }
 
 static int
-ssl_config_dup  ( CRYPTO_EX_DATA *  to
-                ,
+ssl_config_dup(CRYPTO_EX_DATA *to,
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-                  CRYPTO_EX_DATA *  from
+	       CRYPTO_EX_DATA *from,
 #else
-                  const CRYPTO_EX_DATA *  from
+	       const CRYPTO_EX_DATA *from,
 #endif
-                , void *            pl_ssl
-                , int               parent_ctx_idx
-                , long  argl
-                , void *argp
-                )
-{
-    return 1;
+	      void  *pl_ssl,
+	      int    parent_ctx_idx,
+	      long  argl,
+	      void *argp)
+{ return 1;
 }
 
 static void
-ssl_config_free( void *            ctx
-               , void *            pl_ssl
-               , CRYPTO_EX_DATA *  parent_ctx
-               , int               parent_ctx_idx
-               , long  argl
-               , void *argp
-               )
-{
-    PL_SSL *config = NULL;
+ssl_config_free(void *ctx,
+		void *pl_ssl,
+		CRYPTO_EX_DATA *parent_ctx,
+	        int parent_ctx_idx,
+		long  argl,
+		void *argp)
+{ PL_SSL *config = NULL;
 
-    ssl_deb(1, "calling ssl_config_free()\n");
-    if ((config = SSL_CTX_get_ex_data(ctx, ctx_idx)) != NULL) {
-        assert(config->magic == SSL_CONFIG_MAGIC);
-        ssl_free(config);
-    }
+  ssl_deb(1, "calling ssl_config_free()\n");
+  if ( (config=SSL_CTX_get_ex_data(ctx, ctx_idx)))
+  { assert(config->magic == SSL_CONFIG_MAGIC);
+    ssl_free(config);
+  }
 }
 
 
-static int
-ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 /*
  * Function handling certificate verification
  */
-{
-    SSL    * ssl    = NULL;
-    PL_SSL * config = NULL;
-    /*
-     * Get our config data
-     */
-    ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    config = SSL_get_ex_data(ssl, ssl_idx);
 
+static int
+ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
+{ SSL	 *ssl    = NULL;
+  PL_SSL *config = NULL;
+  /*
+   * Get our config data
+   */
+  ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
+  config = SSL_get_ex_data(ssl, ssl_idx);
 
-
-    ssl_deb(1, " ---- INIT Handling certificate verification\n");
-    ssl_deb(1, "      Certificate preverified %sok\n",
-            preverify_ok ? "" : "NOT ");
+  ssl_deb(1, " ---- INIT Handling certificate verification\n");
+  ssl_deb(1, "      Certificate preverified %sok\n", preverify_ok ? "" : "NOT ");
 #ifndef HAVE_X509_CHECK_HOST
     /* If OpenSSL does not have X509_check_host() then the hostname has not yet been verified.
        Note that we only want to check the hostname of the FIRST certificate. There appears to be no easy way of
