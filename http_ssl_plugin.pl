@@ -97,7 +97,7 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
     add_secure_ciphers(SSLOptions0, SSLOptions1),
     disable_sslv3(SSLOptions1, SSLOptions),
     make_socket(Port, Socket, Options1),
-    ssl_context(server, SSL0, M:SSLOptions),
+    ssl_context(server, SSL0, M:[close_parent(true)|SSLOptions]),
     (   http:ssl_server_create_hook(SSL0, SSL, Options1)
     ->  true
     ;   SSL = SSL0
@@ -188,15 +188,14 @@ thread_httpd:open_client_hook(ssl_client(SSL0, Client, Goal, Peer),
                               Goal, In, Out,
                               [peer(Peer), protocol(https)],
                               Options) :-
-    (   http:ssl_server_open_client_hook(SSL0, SSL1, Options)
+    (   http:ssl_server_open_client_hook(SSL0, SSL, Options)
     ->  true
-    ;   SSL1 = SSL0
+    ;   SSL = SSL0
     ),
     option(timeout(TMO), Options, 60),
     tcp_open_socket(Client, Read, Write),
     set_stream(Read, timeout(TMO)),
     set_stream(Write, timeout(TMO)),
-    ssl_set_options(SSL1, SSL, [close_parent(true)]),
     catch(ssl_negotiate(SSL, Read, Write, In, Out),
           E,
           ssl_failed(Read, Write, E)).
