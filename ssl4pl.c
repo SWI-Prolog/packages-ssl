@@ -258,6 +258,27 @@ typedef enum
 { RSA_MODE, EVP_MODE
 } crypt_mode_t;
 
+
+		 /*******************************
+		 *     MANAGE STRUCT VALUES	*
+		 *******************************/
+
+#define set_string(obj, field, str) \
+	attr_set_string(&((obj)->field), str)
+
+static void
+attr_set_string(char **where, const char *str)
+{ if ( *where )
+    free(*where);
+  if ( str )
+    *where = ssl_strdup(str);
+}
+
+
+		 /*******************************
+		 *   GET TYPED TERM ARGUMENTS	*
+		 *******************************/
+
 static int
 get_char_arg(int a, term_t t, char **s)
 { term_t t2 = PL_new_term_ref();
@@ -3831,41 +3852,43 @@ pl_ssl_copy_context(term_t term_old, term_t term_new)
     return FALSE;				/* TBD: cleanup */
 
   new->role                = old->role;
-  new->password            = ssl_strdup(old->password);
-
   new->close_parent        = old->close_parent;
   new->close_notify        = old->close_notify;
-  new->host                = ssl_strdup(old->host);
-  new->cacerts             = old->cacerts?sk_X509_deep_copy(old->cacerts, x509dup, X509_free):NULL;
-  new->certificate_file    = ssl_strdup(old->certificate_file);
-  new->key_file            = ssl_strdup(old->key_file);
   new->min_protocol        = old->min_protocol;
   new->max_protocol        = old->max_protocol;
   new->peer_cert_required  = old->peer_cert_required;
-  new->cipher_list         = ssl_strdup(old->cipher_list);
-  new->ecdh_curve          = ssl_strdup(old->ecdh_curve);
+
+  set_string(new, password,	    old->password);
+  set_string(new, host,		    old->host);
+  set_string(new, certificate_file, old->certificate_file);
+  set_string(new, key_file,	    old->key_file);
+  set_string(new, cipher_list,	    old->cipher_list);
+  set_string(new, ecdh_curve,	    old->ecdh_curve);
+
+  new->cacerts = old->cacerts?sk_X509_deep_copy(old->cacerts, x509dup, X509_free):NULL;
 
 #ifndef HAVE_X509_CHECK_HOST
   new->hostname_check_status = old->hostname_check_status;
 #endif
 
-  if (old->crl_list)
+  if ( old->crl_list )
     new->crl_list          = sk_X509_CRL_dup(old->crl_list);
   new->crl_required        = old->crl_required;
 
   ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
-  ssl_copy_callback(old->cb_pem_passwd, &new->cb_pem_passwd);
-  ssl_copy_callback(old->cb_sni, &new->cb_sni);
-  ssl_copy_callback(old->cb_alpn_proto, &new->cb_alpn_proto);
+  ssl_copy_callback(old->cb_pem_passwd,  &new->cb_pem_passwd);
+  ssl_copy_callback(old->cb_sni,	 &new->cb_sni);
+  ssl_copy_callback(old->cb_alpn_proto,  &new->cb_alpn_proto);
 
-  for (idx = 0; idx < old->num_cert_key_pairs; idx++)
+  for(idx = 0; idx < old->num_cert_key_pairs; idx++)
   { new->cert_key_pairs[idx].certificate = ssl_strdup(old->cert_key_pairs[idx].certificate);
     new->cert_key_pairs[idx].key = ssl_strdup(old->cert_key_pairs[idx].key);
     new->num_cert_key_pairs++;
   }
 
-  if ( old->alpn_protos ) {
-    unsigned char *protos_copy = malloc(old->alpn_protos_len * sizeof(unsigned char));
+  if ( old->alpn_protos )
+  { unsigned char *protos_copy = malloc(old->alpn_protos_len *
+					sizeof(unsigned char));
     if ( protos_copy == NULL )
       return PL_resource_error("memory");
     memcpy(old->alpn_protos, protos_copy, old->alpn_protos_len);
