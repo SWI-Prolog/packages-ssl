@@ -3457,6 +3457,29 @@ pl_ssl_set_options(term_t config, term_t options)
 }
 
 
+static foreign_t
+pl_ssl_property(term_t config, term_t prop)
+{ PL_SSL *conf;
+  atom_t name;
+  size_t arity;
+
+  if ( !get_conf(config, &conf) )
+    return FALSE;
+
+  if ( PL_get_name_arity(prop, &name, &arity) && arity == 1 )
+  { term_t arg = PL_new_term_ref();
+
+    _PL_get_arg(1, prop, arg);
+    if ( name == ATOM_close_parent )
+      return PL_unify_bool(arg, conf->close_parent);
+
+    return FALSE;
+  }
+
+  return PL_type_error("ssl_property", prop);
+}
+
+
 static const SSL_METHOD *
 get_ssl_method(term_t method)
 { const SSL_METHOD *ssl_method = NULL;
@@ -4328,6 +4351,7 @@ install_ssl4pl(void)
   PL_register_foreign("_ssl_add_certificate_key",
 					3, pl_ssl_add_certificate_key, 0);
   PL_register_foreign("_ssl_set_options", 2, pl_ssl_set_options, 0);
+  PL_register_foreign("ssl_property",   2, pl_ssl_property,   0);
   PL_register_foreign("ssl_debug",	1, pl_ssl_debug,      0);
   PL_register_foreign("ssl_session",    2, pl_ssl_session,    0);
   PL_register_foreign("ssl_peer_certificate",

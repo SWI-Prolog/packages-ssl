@@ -5,6 +5,7 @@
     WWW:           http://www.swi-prolog.org
     Copyright (c)  2004-2020, SWI-Prolog Foundation
                               VU University Amsterdam
+                              CWI, Amsterdam
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -48,6 +49,7 @@
             ssl_context/3,                % +Role, -Config, :Options
             ssl_add_certificate_key/4,    % +Config, +Cert, +Key, -Config
             ssl_set_options/3,            % +Config0, -Config, +Options
+            ssl_property/2,               % +Config, ?Property
             ssl_negotiate/5,              % +Config, +PlainRead, +PlainWrite,
                                           %          -SSLRead,   -SSLWrite
             ssl_peer_certificate/2,       % +Stream, -Certificate
@@ -375,6 +377,16 @@ ssl_add_certificate_key(SSL0, Cert, Key, SSL) :-
 ssl_set_options(SSL0, SSL, Options) :-
     ssl_copy_context(SSL0, SSL),
     '_ssl_set_options'(SSL, Options).
+
+%!  ssl_property(+SSL, ?Property) is semidet.
+%
+%   True when Property is a property of SSL. Defined properties are:
+%
+%     - close_parent(?Bool)
+%
+%   @tbd This version is a very   minimal  implementation of the generic
+%   property interface. Future versions  will   add  more properties and
+%   non-determinism.
 
 %!  ssl_negotiate(+SSL,
 %!                +PlainRead, +PlainWrite,

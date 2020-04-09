@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2007-2018, University of Amsterdam
+    Copyright (c)  2007-2020, University of Amsterdam
                               VU University Amsterdam
     All rights reserved.
 
@@ -38,6 +38,7 @@
 :- use_module(library(ssl),
               [ ssl_context/3,
                 ssl_secure_ciphers/1,
+                ssl_property/2,
                 ssl_set_options/3,
                 ssl_negotiate/5
               ]).
@@ -98,8 +99,8 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
     disable_sslv3(SSLOptions1, SSLOptions),
     make_socket(Port, Socket, Options1),
     ssl_context(server, SSL0, M:[close_parent(true)|SSLOptions]),
-    (   http:ssl_server_create_hook(SSL0, SSL, Options1)
-    ->  true
+    (   http:ssl_server_create_hook(SSL0, SSL1, Options1)
+    ->  ensure_close_parent(SSL1, SSL)
     ;   SSL = SSL0
     ),
     atom_concat('httpsd', Port, Queue),
@@ -108,6 +109,12 @@ thread_httpd:make_socket_hook(Port, M:Options0, Options) :-
                 ssl_instance(SSL)
               | Options1
               ].
+
+ensure_close_parent(SSL0, SSL) :-
+    (   ssl_property(SSL0, close_parent(true))
+    ->  SSL = SSL0
+    ;   ssl_set_options(SSL0, SSL, [close_parent(true)])
+    ).
 
 %!  add_secure_ciphers(+SSLOptions0, -SSLOptions)
 %
@@ -154,13 +161,14 @@ make_socket(Port, Socket, _Options) :-
 %   Implement the accept for HTTPS connections.
 
 thread_httpd:accept_hook(Goal, Options) :-
-    memberchk(ssl_instance(SSL), Options),
+    memberchk(ssl_instance(SSL0), Options),
     !,
     memberchk(queue(Queue), Options),
     memberchk(tcp_socket(Socket), Options),
     tcp_accept(Socket, Client, Peer),
     debug(http(connection), 'New HTTPS connection from ~p', [Peer]),
     http_enough_workers(Queue, accept, Peer),
+    ensure_close_parent(SSL0, SSL),
     thread_send_message(Queue, ssl_client(SSL, Client, Goal, Peer)).
 
 %!  http:ssl_server_create_hook(+SSL0, -SSL, +Options) is semidet.
