@@ -185,6 +185,11 @@ typedef struct pl_ssl_protocol
   int version;
 } PL_SSL_PROTOCOL;
 
+typedef struct
+{ int		       references;
+  STACK_OF(X509)      *cacerts;
+} cacert_stack;
+
 typedef struct pl_ssl
 { long                 magic;
     /*
@@ -211,7 +216,7 @@ typedef struct pl_ssl
   /*
    * Various parameters affecting the SSL layer
    */
-  STACK_OF(X509)      *cacerts;
+  cacert_stack        *cacerts;
 
   char                *certificate_file;
   char                *key_file;
@@ -260,6 +265,16 @@ typedef enum
 
 
 		 /*******************************
+		 *	       ATOMIC		*
+		 *******************************/
+
+#define ATOMIC_ADD(ptr, v)	__atomic_add_fetch(ptr, v, __ATOMIC_SEQ_CST)
+#define ATOMIC_SUB(ptr, v)	__atomic_sub_fetch(ptr, v, __ATOMIC_SEQ_CST)
+#define ATOMIC_INC(ptr)		ATOMIC_ADD(ptr, 1) /* ++(*ptr) */
+#define ATOMIC_DEC(ptr)		ATOMIC_SUB(ptr, 1) /* --(*ptr) */
+
+
+		 /*******************************
 		 *     MANAGE STRUCT VALUES	*
 		 *******************************/
 
@@ -272,6 +287,37 @@ attr_set_string(char **where, const char *str)
     free(*where);
   if ( str )
     *where = ssl_strdup(str);
+}
+
+static cacert_stack *
+new_cacert_stack(void)
+{ cacert_stack *s = malloc(sizeof(*s));
+
+  if ( s )
+  { s->references = 1;
+    if ( !(s->cacerts=sk_X509_new_null()) )
+    { free(s);
+      s = NULL;
+    }
+  }
+
+  return s;
+}
+
+static cacert_stack *
+dup_cacert_stack(cacert_stack *s)
+{ if ( s )
+    ATOMIC_INC(&s->references);
+
+  return s;
+}
+
+static void
+free_cacert_stack(cacert_stack *s)
+{ if ( s && ATOMIC_DEC(&s->references) == 0 )
+  { sk_X509_pop_free(s->cacerts, X509_free);
+    free(s);
+  }
 }
 
 		 /*******************************
@@ -1907,8 +1953,7 @@ ssl_free(PL_SSL *config)
     assert(config->magic == SSL_CONFIG_MAGIC);
     config->magic = 0;
     free(config->host);
-    if (config->cacerts)
-      sk_X509_pop_free(config->cacerts, X509_free);
+    free_cacert_stack(config->cacerts);
     free(config->certificate_file);
     free(config->key_file);
     free(config->cipher_list);
@@ -2556,30 +2601,28 @@ static void
 ssl_init_verify_locations(PL_SSL *config)
 { if ( config->cacerts )
   { X509_STORE *store = X509_STORE_new();
+
     if ( store )
     { int index = 0;
-      while (index < sk_X509_num(config->cacerts))
-      { X509_STORE_add_cert(store, sk_X509_value(config->cacerts, index++));
+      STACK_OF(X509) *cacerts = config->cacerts->cacerts;
+
+      while( index < sk_X509_num(cacerts) )
+      { X509_STORE_add_cert(store, sk_X509_value(cacerts, index++));
       }
       SSL_CTX_set_cert_store(config->ctx, store);
     }
-    ssl_deb(1, "certificate authority(s) installed from individual certificates\n");
+    ssl_deb(1, "certificate authority(s) installed from certificates\n");
   }
+
   if ( config->crl_list )
   { X509_STORE *store = SSL_CTX_get_cert_store(config->ctx);
     int i = 0;
+
     while (i < sk_X509_CRL_num(config->crl_list))
     { X509_STORE_add_crl(store, sk_X509_CRL_value(config->crl_list, i));
-    /*
-      Sdprintf("Added a CRL...\n");
-      BIO * bio = BIO_new_fp(stdout, BIO_NOCLOSE);
-      X509_CRL_print(bio, sk_X509_CRL_value(config->crl_list, i));
-      BIO_free(bio);
-    */
       i++;
     }
   }
-
 }
 
 /* The following keys were generated with:
@@ -3459,6 +3502,73 @@ get_ssl_method(term_t method)
 }
 
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Create a cacert_stack from a  Prolog   list  of certificate sources. The
+certificates are all duplicated using X509_dup()   such that they can be
+freed uniformely when the stack is freed.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+static int
+get_cacerts(term_t CATail, cacert_stack **stackp)
+{ term_t CAHead = PL_new_term_ref();
+  cacert_stack *stack;
+
+  if ( !(stack=new_cacert_stack()) )
+  { PL_resource_error("memory");
+    return FALSE;
+  }
+
+  while( PL_get_list_ex(CATail, CAHead, CATail) )
+  { X509* cert = NULL;
+
+    if ( PL_is_functor(CAHead, FUNCTOR_certificate1) )
+    { _PL_get_arg(1, CAHead, CAHead);
+
+      if ( !get_certificate_blob(CAHead, &cert) )
+      { error:
+	free_cacert_stack(stack);
+	return FALSE;
+      }
+      sk_X509_push(stack->cacerts, X509_dup(cert));
+    } else if ( PL_is_functor(CAHead, FUNCTOR_file1) )
+    { char *file;
+
+      _PL_get_arg(1, CAHead, CAHead);
+
+      if ( !PL_get_file_name(CAHead, &file, PL_FILE_EXIST) ||
+	   !load_certificates_from_file(file, stack->cacerts))
+	goto error;
+    } else if ( PL_is_functor(CAHead, FUNCTOR_system1) )
+    { atom_t a;
+
+      _PL_get_arg(1, CAHead, CAHead);
+
+      if ( !PL_get_atom_ex(CAHead, &a) )
+	goto error;
+
+      if ( a == ATOM_root_certificates )
+      { STACK_OF(X509) *system_certs = system_root_certificates();
+
+	if ( system_certs )
+	{ int index = 0;
+
+	  while( index < sk_X509_num(system_certs) )
+	  { sk_X509_push(stack->cacerts,
+			 X509_dup(sk_X509_value(system_certs, index++)));
+	  }
+	}
+      }
+    }
+  }
+
+  if ( !PL_get_nil_ex(CATail) )
+    goto error;
+
+  *stackp = stack;
+  return TRUE;
+}
+
+
 
 static foreign_t
 pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
@@ -3539,64 +3649,13 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 
       set_string(conf, certificate_file, file);
     } else if ( name == ATOM_cacerts )
-    { term_t CATail = PL_new_term_ref();
-      term_t CAHead = PL_new_term_ref();
+    { term_t arg = PL_new_term_ref();
+      cacert_stack *stack;
 
-      _PL_get_arg(1, head, CATail);
-      if (conf->cacerts)
-	sk_X509_pop_free(conf->cacerts, X509_free);
-
-      conf->cacerts = sk_X509_new_null();
-      while (PL_get_list_ex(CATail, CAHead, CATail))
-      { X509* cert = NULL;
-
-        if (PL_is_functor(CAHead, FUNCTOR_certificate1))
-        { _PL_get_arg(1, CAHead, CAHead);
-          if (!get_certificate_blob(CAHead, &cert))
-	  { sk_X509_pop_free(conf->cacerts, X509_free);
-	    conf->cacerts = NULL;
-	    return FALSE;
-	  }
-	  /* Duplicate the certificate here so that if it is freed by AGC the
-	     certificate is still valid in conf->cacerts.
-	     The duplicates will be cleaned up when the conf is freed
-	  */
-	  sk_X509_push(conf->cacerts, X509_dup(cert));
-	} else if (PL_is_functor(CAHead, FUNCTOR_file1))
-	{ char *file;
-	  _PL_get_arg(1, CAHead, CAHead);
-	  /* These certificate(s) will be cleaned up when the conf is freed */
-	  if ( !PL_get_file_name(CAHead, &file, PL_FILE_EXIST) || !load_certificates_from_file(file, conf->cacerts))
-	  { sk_X509_pop_free(conf->cacerts, X509_free);
-	    conf->cacerts = NULL;
-	    return FALSE;
-	  }
-	} else if (PL_is_functor(CAHead, FUNCTOR_system1))
-	{ atom_t a;
-
-	  _PL_get_arg(1, CAHead, CAHead);
-	  if ( !PL_get_atom_ex(CAHead, &a) )
-	    return FALSE;
-	  if ( a == ATOM_root_certificates )
-	  { STACK_OF(X509) *system_certs = system_root_certificates();
-	    if ( system_certs )
-	    { int index = 0;
-	      /* We make a copy of all the system certs here since we later free all the
-		 certificates and do not want to free the ones in the system_root_certificates
-		 stack. The duplicates will be cleaned up when the conf is freed
-	      */
-	      while (index < sk_X509_num(system_certs))
-	      { sk_X509_push(conf->cacerts, X509_dup(sk_X509_value(system_certs, index++)));
-	      }
-	    }
-	  }
-	}
-      }
-
-      if (!PL_get_nil_ex(CATail))
-      { sk_X509_pop_free(conf->cacerts, X509_free);
-	conf->cacerts = NULL;
-	return FALSE;
+      _PL_get_arg(1, head, arg);
+      if ( get_cacerts(arg, &stack) )
+      { free_cacert_stack(conf->cacerts);
+	conf->cacerts = stack;
       }
     } else if ( name == ATOM_certificate_file )
     { char *file;
@@ -3807,14 +3866,6 @@ ssl_copy_callback(const PL_SSL_CALLBACK old, PL_SSL_CALLBACK *new)
   }
 }
 
-/* This is used to avoid casting a function pointer. The second argument of sk_X509_deep_copy
-   expects a function with a const argument
-*/
-static X509 *x509dup(const X509 *cx)
-{ X509 *x = (X509 *)cx;
-  return X509_dup(x);
-}
-
 static foreign_t
 pl_ssl_copy_context(term_t term_old, term_t term_new)
 { PL_SSL *old, *new;
@@ -3848,7 +3899,7 @@ pl_ssl_copy_context(term_t term_old, term_t term_new)
   set_string(new, cipher_list,	    old->cipher_list);
   set_string(new, ecdh_curve,	    old->ecdh_curve);
 
-  new->cacerts = old->cacerts?sk_X509_deep_copy(old->cacerts, x509dup, X509_free):NULL;
+  new->cacerts = dup_cacert_stack(old->cacerts);
 
 #ifndef HAVE_X509_CHECK_HOST
   new->hostname_check_status = old->hostname_check_status;
