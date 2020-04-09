@@ -55,6 +55,7 @@
 
 :- autoload(library(lists),[select/3]).
 :- autoload(library(option),[option/2,option/3]).
+:- autoload(library(apply), [include/3]).
 :- autoload(library(http/http_header),[http_read_reply_header/2]).
 :- autoload(library(http/thread_httpd),[http_enough_workers/3]).
 
@@ -231,15 +232,22 @@ http:http_protocol_hook(wss, Parts, PlainStreamPair, StreamPair, Options) :-
 
 ssl_protocol_hook(Parts, PlainStreamPair, StreamPair, Options) :-
     memberchk(host(Host), Parts),
+    include(ssl_option, Options, SSLOptions),
     ssl_context(client, SSL, [ host(Host),
                                close_parent(true)
-                             | Options
+                             | SSLOptions
                              ]),
     stream_pair(PlainStreamPair, PlainIn, PlainOut),
     % if an exception arises, http_open/3 closes the stream for us
     ssl_negotiate(SSL, PlainIn, PlainOut, In, Out),
     stream_pair(StreamPair, In, Out).
 
+% Might be better to be more  selective,   but  passing the options from
+% http_open/3 with more than 1 argument makes ssl_context/3 fail.
+
+ssl_option(Term) :-
+    compound(Term),
+    compound_name_arity(Term, _, 1).
 
 %!  http:http_connection_over_proxy(+Proxy, +Parts, +HostPort, -StreamPair,
 %!                                  +OptionsIn, -OptionsOut)
