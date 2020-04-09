@@ -272,6 +272,16 @@ typedef enum
 #define ATOMIC_SUB(ptr, v)	__atomic_sub_fetch(ptr, v, __ATOMIC_SEQ_CST)
 #define ATOMIC_INC(ptr)		ATOMIC_ADD(ptr, 1) /* ++(*ptr) */
 #define ATOMIC_DEC(ptr)		ATOMIC_SUB(ptr, 1) /* --(*ptr) */
+#define __COMPARE_AND_SWAP(at, from, to) \
+	__atomic_compare_exchange_n(at, &(from), to, FALSE, \
+				    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+
+static inline int
+COMPARE_AND_SWAP_PTR(void *at, void *from, void *to)
+{ void **ptr = at;
+
+  return __COMPARE_AND_SWAP(ptr, from, to);
+}
 
 
 		 /*******************************
@@ -3525,6 +3535,61 @@ get_ssl_method(term_t method)
 }
 
 
+static cacert_stack *root_cacert_stack = NULL;
+
+static int
+add_system_root_certificates(cacert_stack *stack)
+{ STACK_OF(X509) *system_certs = system_root_certificates();
+
+  if ( system_certs )
+  { int index = 0;
+
+    while( index < sk_X509_num(system_certs) )
+    { sk_X509_push(stack->cacerts,
+		   X509_dup(sk_X509_value(system_certs, index++)));
+    }
+  }
+
+  return TRUE;
+}
+
+
+static int
+get_cacerts_roots_only(term_t term, cacert_stack **stackp)
+{ term_t tail = PL_copy_term_ref(term);
+  term_t head = PL_new_term_ref();
+
+  if ( PL_get_list(tail, head, tail) && PL_get_nil(tail) &&
+       PL_is_functor(head, FUNCTOR_system1) )
+  { atom_t a;
+
+    _PL_get_arg(1, head, head);
+    if ( PL_get_atom(head, &a) && a == ATOM_root_certificates )
+    { if ( root_cacert_stack )
+      { *stackp = dup_cacert_stack(root_cacert_stack);
+	return TRUE;
+      } else
+      { cacert_stack *stack;
+
+	if ( !(stack=new_cacert_stack()) ||
+	     !add_system_root_certificates(stack) )
+	  return FALSE;
+	if ( COMPARE_AND_SWAP_PTR(&root_cacert_stack, NULL, stack) )
+	{ (void)dup_cacert_stack(root_cacert_stack);
+	} else
+	{ free_cacert_stack(stack);
+	}
+
+	*stackp = dup_cacert_stack(root_cacert_stack);
+	return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Create a cacert_stack from a  Prolog   list  of certificate sources. The
 certificates are all duplicated using X509_dup()   such that they can be
@@ -3533,8 +3598,14 @@ freed uniformely when the stack is freed.
 
 static int
 get_cacerts(term_t CATail, cacert_stack **stackp)
-{ term_t CAHead = PL_new_term_ref();
+{ term_t CAHead;
   cacert_stack *stack;
+
+  if ( get_cacerts_roots_only(CATail, stackp) )
+    return TRUE;
+
+  if ( !(CAHead = PL_new_term_ref()) )
+    return FALSE;
 
   if ( !(stack=new_cacert_stack()) )
   { PL_resource_error("memory");
@@ -3570,16 +3641,8 @@ get_cacerts(term_t CATail, cacert_stack **stackp)
 	goto error;
 
       if ( a == ATOM_root_certificates )
-      { STACK_OF(X509) *system_certs = system_root_certificates();
-
-	if ( system_certs )
-	{ int index = 0;
-
-	  while( index < sk_X509_num(system_certs) )
-	  { sk_X509_push(stack->cacerts,
-			 X509_dup(sk_X509_value(system_certs, index++)));
-	  }
-	}
+      { if ( !add_system_root_certificates(stack) )
+	  goto error;
       }
     }
   }
