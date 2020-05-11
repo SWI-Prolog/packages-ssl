@@ -3499,9 +3499,11 @@ get_ssl_method(term_t method)
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
   if ( !method )
-    method_name = ATOM_sslv23;
-  else if ( !PL_get_atom(method, &method_name) )
-    return PL_domain_error("ssl_method", method);
+  { method_name = ATOM_sslv23;
+  } else if ( !PL_get_atom(method, &method_name) )
+  { PL_domain_error("ssl_method", method);
+    return NULL;
+  }
 
   if ( method_name == ATOM_sslv23 )
     ssl_method = SSLv23_method();
@@ -3526,7 +3528,9 @@ get_ssl_method(term_t method)
     ssl_method = TLSv1_2_method();
 #endif
   else
-    return PL_domain_error("ssl_method", method);
+  { PL_domain_error("ssl_method", method);
+    return NULL;
+  }
 #else
   ssl_method = TLS_method();  /* In OpenSSL >= 1.1.0, always use TLS_method() */
 #endif
