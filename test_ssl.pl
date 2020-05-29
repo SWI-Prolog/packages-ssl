@@ -65,7 +65,7 @@ test_ssl :-
     copy_error/1.
 
 run_network_tests :-
-    \+ getenv('USE_PUBLIC_NETWORK_TESTS', false).
+    getenv('SWIPL_PUBLIC_NETWORK_TESTS', true).
 
 %!  cert_file(+File, -Absolute)
 %
