@@ -113,7 +113,7 @@ endif()
 
 configure_file(config.h.cmake config.h)
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT SKIP_SSL_TESTS)
   if(NOT PROG_OPENSSL)
     set(prog_openssl_new ON)
   endif()
@@ -174,7 +174,7 @@ if(BUILD_TESTING)
 	      COMPONENT Tests)
     endif()
   endif()
-endif(BUILD_TESTING)
+endif(BUILD_TESTING AND NOT SKIP_SSL_TESTS)
 
 has_package(http HAVE_HTTP)
 
