@@ -32,7 +32,7 @@ copy_extensions = copy                  # We need this to support the SubjectAlt
 # crl_extensions	= crl_ext
 
 default_enddate	= 19990101120000Z       # Already expired
-default_crl_days= 30			# how long before next CRL
+default_crl_days= 1095			# how long before next CRL
 default_md	= default		# use public key default MD
 preserve	= no			# keep passed DN ordering
 
