@@ -31,8 +31,8 @@ copy_extensions = copy                  # We need this to support the SubjectAlt
 # crlnumber must also be commented out to leave a V1 CRL.
 # crl_extensions	= crl_ext
 
-default_days	= 365                   # Already expired
-default_crl_days= 30			# how long before next CRL
+default_days	= 1095                   # Already expired
+default_crl_days= 1095			# how long before next CRL
 default_md	= default		# use public key default MD
 preserve	= no			# keep passed DN ordering
 

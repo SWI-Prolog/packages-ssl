@@ -33,7 +33,7 @@ copy_extensions = copy                  # We need this to support the SubjectAlt
 
 default_startdate= 20800101120000Z      # I will be expired before this is valid
 default_days    = 365
-default_crl_days= 30			# how long before next CRL
+default_crl_days= 1095			# how long before next CRL
 default_md	= default		# use public key default MD
 preserve	= no			# keep passed DN ordering
 
