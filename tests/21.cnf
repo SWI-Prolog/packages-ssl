@@ -13,16 +13,16 @@ database	= $dir/index.txt	# database index file.
 #unique_subject	= no			# Set to 'no' to allow creation of
 					# several ctificates with same subject.
 new_certs_dir	= $dir/newcerts		# default place for new certs.
-certificate	= $dir/cacert.pem 	# The CA certificate
-serial		= $dir/serial 		# The current serial number
+certificate	= $dir/cacert.pem	# The CA certificate
+serial		= $dir/serial		# The current serial number
 crlnumber	= $dir/crlnumber	# the current crl number
 					# must be commented out to leave a V1 CRL
-crl		= $dir/crl.pem 		# The current CRL
+crl		= $dir/crl.pem		# The current CRL
 private_key	= $dir/private/cakey.pem# The private key
 RANDFILE	= $dir/private/.rand	# private random number file
 x509_extensions	= usr_cert		# The extentions to add to the cert
-name_opt 	= ca_default		# Subject Name options
-cert_opt 	= ca_default		# Certificate field options
+name_opt	= ca_default		# Subject Name options
+cert_opt	= ca_default		# Certificate field options
 
 copy_extensions = copy                  # We need this to support the SubjectAltNames in tests
 
@@ -32,7 +32,7 @@ copy_extensions = copy                  # We need this to support the SubjectAlt
 # crl_extensions	= crl_ext
 
 default_startdate= 20800101120000Z      # I will be expired before this is valid
-default_days     = 365
+default_days     = 1095
 default_crl_days= 1095			# how long before next CRL
 default_md	= default		# use public key default MD
 preserve	= no			# keep passed DN ordering
@@ -55,18 +55,18 @@ default_bits = 2048
 default_keyfile = 2.key
 encrypt_key = no
 distinguished_name = req_distinguished_name
- 
+
 string_mask = utf8only
- 
+
 req_extensions = v3_req
- 
+
 [ req_distinguished_name ]
 O=SWI-Prolog
 L=Edinburgh
 ST=Scotland
 C=UK
 CN=Expired Testing Intermediary
- 
+
 [ v3_req ]
 basicConstraints = CA:TRUE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment, keyCertSign
