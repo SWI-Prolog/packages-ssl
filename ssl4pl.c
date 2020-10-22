@@ -3746,7 +3746,8 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
       if ( get_cacerts(arg, &stack) )
       { free_cacert_stack(conf->cacerts);
 	conf->cacerts = stack;
-      }
+      } else
+	return FALSE;
     } else if ( name == ATOM_certificate_file )
     { char *file;
 
