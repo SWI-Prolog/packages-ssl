@@ -449,7 +449,8 @@ do_verification_test(Key, Goal, VerificationResults, Status) :-
     ),
     findall(VerificationResult,
             retract(certificate_verification_result(VerificationResult)),
-            VerificationResults).
+            VerificationResults0),
+    sort(VerificationResults0, VerificationResults).
 
 stop_verification_server(Id):-
     assert(stop_server(Id)),
@@ -619,10 +620,10 @@ test('Hostname containing embedded NULL, signed by trusted CA',
      ]):-
     do_verification_test(11, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
-test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [verified, expired]:true):-
+test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [expired, verified]:true):-
     do_verification_test(12, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
-test('Certificate which is not yet valid, signed by trusted CA', VerificationResults:Status == [verified, not_yet_valid]:true):-
+test('Certificate which is not yet valid, signed by trusted CA', VerificationResults:Status == [not_yet_valid, verified]:true):-
     do_verification_test(13, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate is not issued by trusted CA'):-
@@ -635,7 +636,7 @@ test('Certificate is not issued by trusted CA'):-
         true
     ).
 
-test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [verified, bad_signature]:true):-
+test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [bad_signature, verified]:true):-
     do_verification_test(15, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate is not intended for SSL', VerificationResults:Status == [bad_certificate_use, verified]:true):-
@@ -644,13 +645,13 @@ test('Certificate is not intended for SSL', VerificationResults:Status == [bad_c
 test('Certificate signed not-explicitly-trusted intermediary requiring us to follow the chain', VerificationResults:Status == [verified]:true):-
     do_verification_test(18, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
-test('Chain involving expired intermediary', VerificationResults:Status == [verified, expired]:true):-
+test('Chain involving expired intermediary', VerificationResults:Status == [expired, verified]:true):-
     do_verification_test(20, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
-test('Chain involving not-yet-valid intermediary', VerificationResults:Status == [verified, not_yet_valid]:true):-
+test('Chain involving not-yet-valid intermediary', VerificationResults:Status == [not_yet_valid, verified]:true):-
     do_verification_test(21, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
-test('Chain involving intermediary not authorized to sign certificates', VerificationResults:Status == [invalid_ca, bad_certificate_use, verified]:true):-
+test('Chain involving intermediary not authorized to sign certificates', VerificationResults:Status == [bad_certificate_use, invalid_ca, verified]:true):-
     do_verification_test(22, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Confirm that a failure in the verification callback triggers a connection abort', Status = error(_)):-
