@@ -29,6 +29,8 @@
    asserta(user:file_search_path(library, DD)).
 :- if(exists_source(library(http/examples/demo_body))).
 :- use_module(library(http/examples/demo_body)).    % location in source tree
+:- elif(exists_source(swi(doc/packages/examples/http/demo_body))).
+:- use_module(swi(doc/packages/examples/http/demo_body)).
 :- else.
 :- use_module(library(http/demo_body)).             % location in demo tree
 :- endif.
