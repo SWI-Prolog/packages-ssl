@@ -244,10 +244,14 @@ bio_gets(BIO* bio, char* buf, int len)
   for (r = 0; r < len; r++)
   { int c = Sgetc(stream);
     if (c == EOF)
-      return r-1;
+    { buf[r] = '\0';
+      break;
+    }
     buf[r] = (char)c;
     if (buf[r] == '\n')
+    { buf[++r] = '\0';
       break;
+    }
   }
 
   return r;
