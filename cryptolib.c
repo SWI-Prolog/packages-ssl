@@ -241,7 +241,7 @@ bio_gets(BIO* bio, char* buf, int len)
   int r = 0;
   stream = BIO_get_app_data(bio);
 
-  for (r = 0; r < len; r++)
+  for (r = 0; r < len-1; r++)
   { int c = Sgetc(stream);
     if (c == EOF)
     { buf[r] = '\0';
