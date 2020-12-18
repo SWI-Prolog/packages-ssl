@@ -629,10 +629,13 @@ test('Certificate which is not yet valid, signed by trusted CA', VerificationRes
 test('Certificate is not issued by trusted CA'):-
     do_verification_test(14, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status),
     ( VerificationResults:Status == [unknown_issuer]:true ->
-        % OpenSSL 1.0.2 and above
+        % OpenSSL 1.0.2 - 1.1.1h
         true
     ; VerificationResults:Status == [unknown_issuer, not_trusted]:true ->
         % OpenSSL 1.0.1 and below
+        true
+    ; VerificationResults:Status == [unknown_issuer, verified]:true ->
+        % OpenSSL 1.1.1i and above
         true
     ).
 
