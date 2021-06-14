@@ -41,7 +41,7 @@
 #include <assert.h>
 #include <string.h>
 #include <openssl/rand.h>
-#ifdef _REENTRANT
+#ifdef O_PLMT
 #include <pthread.h>
 #endif
 
@@ -161,7 +161,9 @@ typedef enum
 
 static STACK_OF(X509) *system_root_store = NULL;
 static int system_root_store_fetched = FALSE;
+#ifdef O_PLMT
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 /*
  * Index of our config data in the SSL data
@@ -2596,12 +2598,17 @@ ssl_system_verify_locations(void)
 
 static STACK_OF(X509) *
 system_root_certificates(void)
-{ pthread_mutex_lock(&root_store_lock);
+{
+#ifdef O_PLMT
+  pthread_mutex_lock(&root_store_lock);
+#endif
   if ( !system_root_store_fetched )
   { system_root_store_fetched = TRUE;
     system_root_store = ssl_system_verify_locations();
   }
+#ifdef O_PLMT
   pthread_mutex_unlock(&root_store_lock);
+#endif
 
   return system_root_store;
 }
