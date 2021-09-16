@@ -848,7 +848,9 @@ get_padding(term_t t, crypt_mode_t mode, int *padding)
   { if      ( a == ATOM_pkcs1 && mode == RSA_MODE )      *padding = RSA_PKCS1_PADDING;
     else if ( a == ATOM_pkcs1_oaep && mode == RSA_MODE ) *padding = RSA_PKCS1_OAEP_PADDING;
     else if ( a == ATOM_none && mode == RSA_MODE  )      *padding = RSA_NO_PADDING;
+#ifdef RSA_SSLV23_PADDING    /* removed from OpenSSL 3.0 */
     else if ( a == ATOM_sslv23  && mode == RSA_MODE )    *padding = RSA_SSLV23_PADDING;
+#endif
     else if ( a == ATOM_none  && mode == EVP_MODE )      *padding = 0;
     else if ( a == ATOM_block  && mode == EVP_MODE )     *padding = 1;
     else return PL_domain_error("padding", t);
