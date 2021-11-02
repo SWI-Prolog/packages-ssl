@@ -73,6 +73,8 @@ unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
     out = tmp;
   else if ( !(out = malloc(len*2)) )
     return PL_resource_error("memory");
+  tmp[0] = 0;					/* Silence GCC >= 11 */
+  out[0] = 0;
 
   for(o=out ; data < end; data++)
   { *o++ = tohex[(*data >> 4) & 0xf];
