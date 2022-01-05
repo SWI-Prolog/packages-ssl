@@ -4252,7 +4252,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
        !(session = SSL_get1_session(ssl)) )
     return PL_existence_error("ssl_session", stream_t);
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3040000fL)
   version = session->ssl_version;
   master_key = session->master_key;
   master_key_length = session->master_key_length;
@@ -4288,7 +4288,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 		       master_key_length, master_key) )
     goto err;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3040000fL)
   if ( !add_key_string(list_t, FUNCTOR_session_id1,
 		       session->session_id_length, session->session_id) )
     goto err;
