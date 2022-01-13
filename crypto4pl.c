@@ -770,10 +770,17 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
 }
 
 #ifndef OPENSSL_NO_EC
+
+#ifdef HAVE_EVP_PKEY_Q_KEYGEN
+#define ECKEY EVP_PKEY
+#else
+#define ECKEY EC_KEY
+#endif
+
 static int
-recover_ec(term_t t, EC_KEY **rec)
+recover_ec(term_t t, ECKEY **rec)
 {
-  EC_KEY *ec;
+  ECKEY *key;
   BIGNUM *privkey = NULL;
   term_t pubkey;
   unsigned char *codes;
@@ -784,27 +791,52 @@ recover_ec(term_t t, EC_KEY **rec)
   if ( !(tcurve &&
          PL_get_arg(3, t, tcurve) &&
          PL_get_chars(tcurve, &curve, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) &&
-         (ec = EC_KEY_new_by_curve_name(OBJ_sn2nid(curve)))) )
+#ifdef HAVE_EVP_PKEY_Q_KEYGEN
+         (key = EVP_EC_gen(curve))
+#else
+         (key = EC_KEY_new_by_curve_name(OBJ_sn2nid(curve)))
+#endif
+     ) )
     return FALSE;
 
   if ( !get_bn_arg(1, t, &privkey) )
-  { EC_KEY_free(ec);
+  {
+#ifdef HAVE_EVP_PKEY_FREE
+    EVP_PKEY_free(key);
+#else
+    EC_KEY_free(key);
+#endif
     return FALSE;
   }
 
   if ( privkey )
-    EC_KEY_set_private_key(ec, privkey);
+  {
+#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+    EVP_PKEY_set_bn_param(key, "priv", privkey);
+#else
+    EC_KEY_set_private_key(key, privkey);
+#endif
+  }
 
   if ( (pubkey=PL_new_term_ref()) &&
        PL_get_arg(2, t, pubkey) &&
        PL_get_nchars(pubkey, &codes_len, (char **) &codes,
                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) &&
-       (ec = o2i_ECPublicKey(&ec, (const unsigned char**) &codes, codes_len)) )
-  { *rec = ec;
+#ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
+        EVP_PKEY_set_octet_string_param(key, "pub", (const unsigned char*) codes, codes_len)
+#else
+       (key = o2i_ECPublicKey(&key, (const unsigned char**) &codes, codes_len)) 
+#endif
+  )
+  { *rec = key;
     return TRUE;
   }
 
-  EC_KEY_free(ec);
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
+  EC_KEY_free(key);
+#endif
   return FALSE;
 }
 #endif
@@ -1002,20 +1034,36 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
 #ifndef OPENSSL_NO_ECDSA
   unsigned char *data;
   size_t data_len;
-  EC_KEY *key;
-  ECDSA_SIG *sig;
+  ECKEY *key;
   unsigned char *signature = NULL;
-  int signature_len, rc;
+  int rc;
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  size_t signature_len;
+#else
+  ECDSA_SIG *sig;
+  unsigned int signature_len;
+#endif
 
   if ( !recover_ec(Private, &key) ||
        !get_enc_text(Data, Enc, &data_len, &data) )
     return FALSE;
 
+#ifdef HAVE_EVP_PKEY_SIGN
+  signature_len = EVP_PKEY_get_size(key);
+  EVP_PKEY_CTX *sign_ctx = EVP_PKEY_CTX_new(key, NULL);
+  EVP_PKEY_sign_init(sign_ctx);
+  rc = EVP_PKEY_sign(sign_ctx,
+		                 signature, &signature_len,
+		                 data, (unsigned int)data_len);
+  EVP_PKEY_CTX_free(sign_ctx);
+  if (!rc) 
+    return raise_ssl_error(ERR_get_error());
+#else
   sig = ECDSA_do_sign(data, (unsigned int)data_len, key);
   EC_KEY_free(key);
-
   if ( (signature_len = i2d_ECDSA_SIG(sig, &signature)) < 0 )
     return raise_ssl_error(ERR_get_error());
+#endif
 
   rc = unify_bytes_hex(Signature, signature_len, signature);
   OPENSSL_free(signature);
@@ -1032,7 +1080,7 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
 #ifndef OPENSSL_NO_ECDSA
   unsigned char *data;
   size_t data_len;
-  EC_KEY *key;
+  ECKEY *key;
   ECDSA_SIG *sig;
   unsigned char *signature;
   const unsigned char *copy;
@@ -1049,9 +1097,19 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
   if ( !(sig = d2i_ECDSA_SIG(NULL, &copy, signature_len)) )
     return FALSE;
 
+#ifdef HAVE_EVP_PKEY_VERIFY
+  EVP_PKEY_CTX *verify_ctx = EVP_PKEY_CTX_new(key, NULL);
+  EVP_PKEY_verify_init(verify_ctx);
+  rc = EVP_PKEY_verify(verify_ctx,
+                       signature, (unsigned int)signature_len,
+                       data, (unsigned int)data_len);
+  EVP_PKEY_CTX_free(verify_ctx);
+  EVP_PKEY_free(key);
+#else
   rc = ECDSA_do_verify(data, data_len, sig, key);
 
   EC_KEY_free(key);
+#endif
   ECDSA_SIG_free(sig);
 
   if (rc == 0 || rc == 1 )
@@ -1754,7 +1812,16 @@ pl_crypto_is_prime(term_t tprime, term_t tnchecks)
 
   if ( ( ctx = BN_CTX_new() ) &&
        get_bn_arg(1, tprime, &prime) )
-  { ret = BN_is_prime_ex(prime, nchecks, ctx, NULL);
+  {
+#ifdef HAVE_BN_CHECK_PRIME
+  // Note that we ignore nchecks here. BN_check_prime is listed as the replacement for BN_is_prime_ex
+  // but I could not find any information *anywhere* about how to pass in nchecks. Looking at the code in openssl
+  // it appears that they take some steps to correctly determine the value of nchecks. See
+  //     hhttps://github.com/openssl/openssl/blob/26b3e44a661899f0d0cb709482170cc411a94233/crypto/bn/bn_prime.c#L247
+  ret = BN_check_prime(prime, ctx, NULL);
+#else
+  ret = BN_is_prime_ex(prime, nchecks, ctx, NULL);
+#endif
   }
 
   BN_free(prime);
@@ -1956,9 +2023,9 @@ pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
 
   if ( ( x = BN_new() ) &&
        ( y = BN_new() ) &&
-       EC_POINT_get_affine_coordinates_GFp(curve->group,
-                                           EC_GROUP_get0_generator(curve->group),
-                                           x, y, curve->ctx) &&
+       EC_POINT_get_affine_coordinates(curve->group,
+                                       EC_GROUP_get0_generator(curve->group),
+                                       x, y, curve->ctx) &&
        ( xhex = BN_bn2hex(x) ) &&
        ( yhex = BN_bn2hex(y) ) )
   { rc = PL_unify_chars(tx, PL_STRING|REP_ISO_LATIN_1, strlen(xhex), xhex)
@@ -2000,12 +2067,12 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
        get_bn_arg(1, tx, &x) &&
        get_bn_arg(1, ty, &y)  &&
        ( q = EC_POINT_new(curve->group) ) &&
-       EC_POINT_set_affine_coordinates_GFp(curve->group, q, x, y, curve->ctx) &&
+       EC_POINT_set_affine_coordinates(curve->group, q, x, y, curve->ctx) &&
        ( r = EC_POINT_new(curve->group) ) &&
        EC_POINT_mul(curve->group, r, NULL, q, s, curve->ctx) &&
        ( a = BN_new() ) &&
        ( b = BN_new() ) &&
-       EC_POINT_get_affine_coordinates_GFp(curve->group, r, a, b, curve->ctx) &&
+       EC_POINT_get_affine_coordinates(curve->group, r, a, b, curve->ctx) &&
        ( ahex = BN_bn2hex(a) ) &&
        ( bhex = BN_bn2hex(b) ) )
   { rc = PL_unify_chars(ta, PL_STRING|REP_ISO_LATIN_1, strlen(ahex), ahex)
