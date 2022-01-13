@@ -824,14 +824,21 @@ unify_ec(term_t item, ECKEY *key)
   BIGNUM* priv_bn;
 #ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
   size_t publen;
+  size_t grouplen;
+  unsigned char* group;
   EVP_PKEY_get_octet_string_param(key, "pub", NULL, 0, &publen);
   buf = OPENSSL_malloc(publen);
-  EVP_PKEY_get_octet_string_param(key, "pub", buf, publen, &publen);
+  EVP_PKEY_get_octet_string_param(key, "pub", buf, publen, NULL);
   EVP_PKEY_get_bn_param(key, "priv", &priv_bn);
+  EVP_PKEY_get_octet_string_param(key, "group", NULL, 0, &grouplen);
+  group = PL_malloc(grouplen);
+  EVP_PKEY_get_octet_string_param(key, "group", group, grouplen, NULL);
+
 #else
   int publen;
   publen = i2o_ECPublicKey(key, &buf);
   priv_bn = EC_KEY_get0_private_key(key);
+  const char* group = OBJ_nid2sn(EC_GROUP_get_curve_name(EC_KEY_get0_group(key)));
 #endif
   if ( publen < 0 )
     return raise_ssl_error(ERR_get_error());
@@ -844,9 +851,12 @@ unify_ec(term_t item, ECKEY *key)
                        PL_FUNCTOR, FUNCTOR_ec3,
                        PL_TERM, privkey,
                        PL_TERM, pubkey,
-                       PL_CHARS, OBJ_nid2sn(EC_GROUP_get_curve_name(EC_KEY_get0_group(key)))) );
+                       PL_CHARS, group));
 
   OPENSSL_free(buf);
+#ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
+  PL_free(group);
+#endif
   return rc;
 }
 #endif
@@ -2079,7 +2089,11 @@ ssl_config_dup(CRYPTO_EX_DATA *to,
 #else
 	       const CRYPTO_EX_DATA *from,
 #endif
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
 	      void  *pl_ssl,
+#else
+	      void  **pl_ssl,
+#endif
 	      int    parent_ctx_idx,
 	      long  argl,
 	      void *argp)
@@ -2989,8 +3003,7 @@ set_malleable_options(PL_SSL *config)
 {
 
 #ifndef OPENSSL_NO_EC
-  EC_KEY *ecdh;
-  int nid;
+  ECKEY *ecdh;
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
   char *curve = "prime256v1";
 #else
@@ -3009,12 +3022,21 @@ set_malleable_options(PL_SSL *config)
     curve = config->ecdh_curve;
 
   if (curve)
-  { nid = OBJ_sn2nid(curve);
-    if ( !(ecdh = EC_KEY_new_by_curve_name(nid)) )
+  {
+#ifdef HAVE_EVP_PKEY_Q_KEYGEN
+    if ( !(ecdh = EVP_EC_gen(curve)) )
       return raise_ssl_error(ERR_get_error());
+#else
+    if ( !(ecdh = EC_KEY_new_by_curve_name(OBJ_sn2nid(curve))) )
+      return raise_ssl_error(ERR_get_error());
+#endif
     if ( !SSL_CTX_set_tmp_ecdh(config->ctx, ecdh) )
       return raise_ssl_error(ERR_get_error());
+#ifdef HAVE_EVP_PKEY_FREE
+    EVP_PKEY_free(ecdh);
+#else
     EC_KEY_free(ecdh);          /* Safe because of reference counts */
+#endif
   }
 #endif
 
