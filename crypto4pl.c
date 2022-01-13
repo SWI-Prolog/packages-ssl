@@ -131,16 +131,24 @@ typedef struct hash_context
   int             close_parent;
 
   EVP_MD_CTX     *ctx;
-  HMAC_CTX       *hmac_ctx;
-  char           *hmac_key;
+#if defined HAVE_EVP_MAC_FETCH
+  EVP_MAC         *mac;
+  EVP_MAC_CTX     *mac_ctx;
+#else
+  HMAC_CTX       *mac_ctx;
+#endif
+  char           *mac_key;
 } PL_CRYPTO_HASH_CONTEXT;
 
 static void
 free_crypto_hash_context(PL_CRYPTO_HASH_CONTEXT *c)
 { EVP_MD_CTX_free(c->ctx);
-  free(c->hmac_key);
-#ifdef HAVE_HMAC_CTX_FREE
-  HMAC_CTX_free(c->hmac_ctx);
+  free(c->mac_key);
+#ifdef HAVE_EVP_MAC_CTX_FREE
+  EVP_MAC_free(c->mac);
+  EVP_MAC_CTX_free(c->mac_ctx);
+#elif defined HAVE_HMAC_CTX_FREE
+  HMAC_CTX_free(c->mac_ctx);
 #endif
   free(c);
 }
@@ -310,7 +318,7 @@ hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
         if ( !PL_get_nchars(a, &key_len, &key,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
           return FALSE;
-        result->hmac_key = ssl_strdup(key);
+        result->mac_key = ssl_strdup(key);
       } else if ( aname == ATOM_close_parent )
       { if ( !PL_get_bool_ex(a, &result->close_parent) )
           return FALSE;
@@ -345,8 +353,8 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
 
   context->magic    = HASH_CONTEXT_MAGIC;
   context->ctx      = NULL;
-  context->hmac_ctx = NULL;
-  context->hmac_key = NULL;
+  context->mac_ctx  = NULL;
+  context->mac_key  = NULL;
 
   context->parent_stream = NULL;
   context->hash_stream   = NULL;
@@ -354,19 +362,41 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   if ( !hash_options(options, context) )
     return FALSE;
 
-#ifdef HAVE_HMAC_CTX_NEW
-  if ( context->hmac_key )
-  { context->hmac_ctx = HMAC_CTX_new();
-    if ( !HMAC_Init_ex(context->hmac_ctx,
-                       context->hmac_key, strlen(context->hmac_key),
+#ifdef HAVE_EVP_MAC_FETCH
+  if ( context->mac_key )
+  { OSSL_PARAM params[2];
+    context->mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    if ( context->mac == NULL )
+    { return FALSE;
+    }
+    context->mac_ctx = EVP_MAC_CTX_new(context->mac);
+    if ( context->mac_ctx == NULL )
+    { EVP_MAC_free(context->mac);
+      return FALSE;
+    }
+    params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)EVP_MD_name(context->algorithm), 0);
+    params[1] = OSSL_PARAM_construct_end();
+    if ( !EVP_MAC_init(context->mac_ctx,
+                       (unsigned char*)context->mac_key, strlen(context->mac_key),
+                       params) )
+    { EVP_MAC_CTX_free(context->mac_ctx);
+      EVP_MAC_free(context->mac);
+      return FALSE;
+    }
+  }
+#elif defined HAVE_HMAC_CTX_NEW
+  if ( context->mac_key )
+  { context->mac_ctx = HMAC_CTX_new();
+    if ( !HMAC_Init_ex(context->mac_ctx,
+                       context->mac_key, strlen(context->mac_key),
                        context->algorithm, NULL) )
-    { HMAC_CTX_free(context->hmac_ctx);
+    { HMAC_CTX_free(context->mac_ctx);
       return FALSE;
     }
   }
 #endif
 
-  if ( !context->hmac_ctx )
+  if ( !context->mac_ctx )
   { context->ctx = EVP_MD_CTX_new();
     if ( !EVP_DigestInit_ex(context->ctx, context->algorithm, NULL) )
     { EVP_MD_CTX_free(context->ctx);
@@ -392,7 +422,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
     return FALSE;
 
   out->magic = HASH_CONTEXT_MAGIC;
-  out->hmac_key = ssl_strdup(in->hmac_key);
+  out->mac_key = ssl_strdup(in->mac_key);
 
   out->encoding = in->encoding;
   out->algorithm = in->algorithm;
@@ -405,21 +435,27 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
     }
     rc = EVP_MD_CTX_copy_ex(out->ctx, in->ctx);
   }
+#if defined(HAVE_EVP_MAC_FETCH) && defined(HAVE_EVP_MAC_CTX_FREE)
+  out->mac = in->mac;
+  if ( in->mac != NULL )
+  { EVP_MAC_up_ref(in->mac);
+  }
+  out->mac_ctx = in->mac_ctx ? EVP_MAC_CTX_dup(in->mac_ctx) : NULL;
+  rc = TRUE;
+#elif defined(HAVE_HMAC_CTX_NEW) && defined(HAVE_HMAC_CTX_FREE)
+  out->mac_ctx = in->mac_ctx ? HMAC_CTX_new() : NULL;
 
-#if defined(HAVE_HMAC_CTX_NEW) && defined(HAVE_HMAC_CTX_FREE)
-  out->hmac_ctx = in->hmac_ctx ? HMAC_CTX_new() : NULL;
-
-  if ( out->hmac_ctx )
-  { if ( !HMAC_Init_ex(out->hmac_ctx,
-                       out->hmac_key, strlen(out->hmac_key),
+  if ( out->mac_ctx )
+  { if ( !HMAC_Init_ex(out->mac_ctx,
+                       out->mac_key, strlen(out->mac_key),
                        out->algorithm, NULL) )
-    { HMAC_CTX_free(out->hmac_ctx);
+    { HMAC_CTX_free(out->mac_ctx);
       return FALSE;
     }
-    rc = HMAC_CTX_copy(out->hmac_ctx, in->hmac_ctx);
+    rc = HMAC_CTX_copy(out->mac_ctx, in->mac_ctx);
   }
 #else
-  out->hmac_ctx = NULL;
+  out->mac_ctx = NULL;
 #endif
 
   return unify_hash_context(tout, out) && rc;
@@ -429,8 +465,14 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
 static int
 hash_append(PL_CRYPTO_HASH_CONTEXT *context, void *data, size_t size)
 {
-  if ( context->hmac_ctx )
-    return HMAC_Update(context->hmac_ctx, data, size);
+  if ( context->mac_ctx )
+  {
+#ifdef HAVE_EVP_MAC_UPDATE
+    return  EVP_MAC_update(context->mac_ctx, data, size);
+#else
+    return HMAC_Update(context->mac_ctx, data, size);
+#endif
+  }
 
   return EVP_DigestUpdate(context->ctx, data, size);
 }
@@ -459,15 +501,23 @@ pl_crypto_hash_context_hash(term_t tcontext, term_t hash)
 {
   PL_CRYPTO_HASH_CONTEXT *context = NULL;
   unsigned char digest[EVP_MAX_MD_SIZE];
-  unsigned int len;
-
+  size_t len;
   if ( !get_hash_context(tcontext, &context) )
     return FALSE;
 
-  if ( context->hmac_ctx )
-  { HMAC_Final(context->hmac_ctx, digest, &len);
+  if ( context->mac_ctx )
+  {
+#ifdef HAVE_EVP_MAC_FINAL
+    EVP_MAC_final(context->mac_ctx, digest, &len, EVP_MAX_MD_SIZE);
+#else
+    unsigned int ulen;
+    HMAC_Final(context->mac_ctx, digest, &ulen);
+    len = ulen;
+#endif
   } else
-  { EVP_DigestFinal_ex(context->ctx, digest, &len);
+  { unsigned int ulen;
+    EVP_DigestFinal_ex(context->ctx, digest, &ulen);
+    len = ulen;
   }
 
   return PL_unify_list_ncodes(hash, len, (char *) digest);
@@ -677,9 +727,9 @@ pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
 
   if ( (EVP_PKEY_derive_init(pctx) > 0) &&
        (EVP_PKEY_CTX_set_hkdf_md(pctx, alg) > 0) &&
-       (EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, saltlen) > 0) &&
-       (EVP_PKEY_CTX_set1_hkdf_key(pctx, key, keylen) > 0) &&
-       (EVP_PKEY_CTX_add1_hkdf_info(pctx, info, infolen) > 0) &&
+       (EVP_PKEY_CTX_set1_hkdf_salt(pctx, (unsigned char*)salt, saltlen) > 0) &&
+       (EVP_PKEY_CTX_set1_hkdf_key(pctx, (unsigned char*)key, keylen) > 0) &&
+       (EVP_PKEY_CTX_add1_hkdf_info(pctx, (unsigned char*)info, infolen) > 0) &&
        (EVP_PKEY_derive(pctx, out, &outlen) > 0) )
   { int rc = PL_unify_list_ncodes(tout, outlen, (char *) out);
     free(out);
