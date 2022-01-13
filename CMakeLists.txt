@@ -49,6 +49,7 @@ AC_CHECK_FUNCS(EVP_blake2b512 EVP_blake2s256)
 AC_CHECK_FUNCS(EVP_sha3_224 EVP_sha3_256 EVP_sha3_384 EVP_sha3_512)
 AC_CHECK_FUNCS(HMAC_CTX_new HMAC_CTX_free)
 AC_CHECK_FUNCS(EVP_MAC_fetch EVP_MAC_CTX_free EVP_MAC_update EVP_MAC_final)
+AC_CHECK_FUNCS(EVP_PKEY_new EVP_PKEY_free EVP_PKEY_get_bn_param EVP_PKEY_get_size EVP_PKEY_decrypt EVP_PKEY_encrypt EVP_PKEY_sign EVP_PKEY_verify)
 AC_CHECK_FUNCS(SSL_CTX_set_alpn_protos)
 
 AC_CHECK_HEADERS(openssl/kdf.h)

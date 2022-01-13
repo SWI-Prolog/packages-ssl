@@ -809,9 +809,20 @@ recover_ec(term_t t, EC_KEY **rec)
 }
 #endif
 
+
+#ifdef HAVE_EVP_PKEY_NEW
+#define RSAKEY EVP_PKEY
+#else
+#define RSAKEY RSA
+#endif
 static int
-recover_rsa(term_t t, RSA** rsap)
-{ RSA *rsa = RSA_new();
+recover_rsa(term_t t, RSAKEY** keyp)
+{
+#ifdef HAVE_EVP_PKEY_NEW
+  RSAKEY* key = EVP_PKEY_new();
+#else
+  RSAKEY *key = RSA_new();
+#endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
   if ( get_bn_arg(1, t, &rsa->n) &&
@@ -837,25 +848,42 @@ recover_rsa(term_t t, RSA** rsap)
        get_bn_arg(7, t, &dmq1) &&
        get_bn_arg(8, t, &iqmp) )
   {
-    if ( !RSA_set0_key(rsa, n, e, d) ||
-         ( (p || q) && !RSA_set0_factors(rsa, p, q) ) ||
+#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+  if ( ! ( EVP_PKEY_set_bn_param(key, "n", n) &&
+           EVP_PKEY_set_bn_param(key, "e", e) &&
+           EVP_PKEY_set_bn_param(key, "d", d) ) ||
+        ( ( p || q ) && ( EVP_PKEY_set_bn_param(key, "p", p) &&
+                          EVP_PKEY_set_bn_param(key, "q", q) ) ) ||
+        ( ( dmp1 || dmq1 || iqmp ) && ( EVP_PKEY_set_bn_param(key, "dmp1", dmp1) &&
+                                        EVP_PKEY_set_bn_param(key, "dmq1", dmq1) &&
+                                        EVP_PKEY_set_bn_param(key, "iqmp", iqmp) ) ) )
+  { EVP_PKEY_free(key);
+    return FALSE;
+  }
+#else
+    if ( !RSA_set0_key(key, n, e, d) ||
+         ( (p || q) && !RSA_set0_factors(key, p, q) ) ||
          ( (dmp1 || dmq1 || iqmp) &&
-           !RSA_set0_crt_params(rsa, dmp1, dmq1, iqmp)) )
-    { RSA_free(rsa);
+           !RSA_set0_crt_params(key, dmp1, dmq1, iqmp)) )
+    { RSA_free(key);
       return FALSE;
     }
 #endif
-    *rsap = rsa;
+#endif
+    *keyp = key;
     return TRUE;
   }
-
-  RSA_free(rsa);
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
+  RSA_free(key);
+#endif
   return FALSE;
 }
 
 
 static int
-recover_private_key(term_t t, RSA** rsap)
+recover_private_key(term_t t, RSAKEY** rsap)
 { if ( PL_is_functor(t, FUNCTOR_private_key1) )
   { term_t arg;
 
@@ -871,7 +899,7 @@ recover_private_key(term_t t, RSA** rsap)
 
 
 static int
-recover_public_key(term_t t, RSA** rsap)
+recover_public_key(term_t t, RSAKEY** rsap)
 { if ( PL_is_functor(t, FUNCTOR_public_key1) )
   { term_t arg;
 
@@ -1048,8 +1076,12 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  size_t outsize;
+#else
   int outsize;
-  RSA* key;
+#endif
+  RSAKEY* key;
   int rep = REP_UTF8;
   int padding = RSA_PKCS1_PADDING;
   int retval;
@@ -1062,11 +1094,36 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
     return FALSE;
   if ( !recover_private_key(private_t, &key) )
     return FALSE;
-
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  outsize = EVP_PKEY_get_size(key);
+#else
   outsize = RSA_size(key);
+#endif
   ssl_deb(1, "Output size is going to be %d", outsize);
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
+#ifdef HAVE_EVP_PKEY_DECRYPT
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
+  if ( !ctx )
+  { EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_decrypt_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0)
+  { EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_decrypt(ctx, plain, &outsize, cipher, cipher_length) <= 0)
+  { ssl_deb(1, "Failure to decrypt!");
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  EVP_PKEY_CTX_free(ctx);
+#else
   if ((outsize = RSA_private_decrypt((int)cipher_length, cipher,
 				     plain, key, padding)) <= 0)
   { ssl_deb(1, "Failure to decrypt!");
@@ -1074,9 +1131,14 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
     PL_free(plain);
     return raise_ssl_error(ERR_get_error());
   }
+#endif
   ssl_deb(1, "decrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
   RSA_free(key);
+#endif
   ssl_deb(1, "Assembling plaintext");
   retval = PL_unify_chars(plain_t, rep | PL_STRING, outsize, (char*)plain);
   ssl_deb(1, "Freeing plaintext");
@@ -1092,8 +1154,12 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  size_t outsize;
+#else
   int outsize;
-  RSA* key;
+#endif
+  RSAKEY* key;
   int rep = REP_UTF8;
   int padding = RSA_PKCS1_PADDING;
   int retval;
@@ -1105,11 +1171,36 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
     return FALSE;
   if ( !recover_public_key(public_t, &key) )
     return FALSE;
-
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  outsize = EVP_PKEY_get_size(key);
+#else
   outsize = RSA_size(key);
+#endif
   ssl_deb(1, "Output size is going to be %d", outsize);
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
+#ifdef HAVE_EVP_PKEY_DECRYPT
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
+  if ( !ctx )
+  { EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_decrypt_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0)
+  { EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if (EVP_PKEY_decrypt(ctx, plain, &outsize, cipher, cipher_length) <= 0)
+  { ssl_deb(1, "Failure to decrypt!");
+    EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  EVP_PKEY_CTX_free(ctx);
+#else
   if ((outsize = RSA_public_decrypt((int)cipher_length, cipher,
                                     plain, key, padding)) <= 0)
   { ssl_deb(1, "Failure to decrypt!");
@@ -1117,9 +1208,14 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
     PL_free(plain);
     return raise_ssl_error(ERR_get_error());
   }
+#endif
   ssl_deb(1, "decrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
   RSA_free(key);
+#endif
   ssl_deb(1, "Assembling plaintext");
   retval = PL_unify_chars(plain_t, rep | PL_STRING, outsize, (char*)plain);
   ssl_deb(1, "Freeing plaintext");
@@ -1135,8 +1231,12 @@ pl_rsa_public_encrypt(term_t public_t,
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  size_t outsize;
+#else
   int outsize;
-  RSA* key;
+#endif
+  RSAKEY* key;
   int rep = REP_UTF8;
   int padding = RSA_PKCS1_PADDING;
   int retval;
@@ -1152,10 +1252,35 @@ pl_rsa_public_encrypt(term_t public_t,
   if ( !recover_public_key(public_t, &key) )
     return FALSE;
 
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  outsize = EVP_PKEY_get_size(key);
+#else
   outsize = RSA_size(key);
+#endif
   ssl_deb(1, "Output size is going to be %d\n", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext\n", outsize);
+#ifdef HAVE_EVP_PKEY_ENCRYPT
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
+  if ( !ctx )
+  { EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_decrypt_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0)
+  { EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_encrypt(ctx, cipher, &outsize, plain, plain_length) <= 0 )
+  { ssl_deb(1, "Failure to encrypt!");
+    EVP_PKEY_CTX_free(ctx);
+    PL_free(cipher);
+    EVP_PKEY_free(key);
+    return raise_ssl_error(ERR_get_error());
+  }
+#else
   if ( (outsize = RSA_public_encrypt((int)plain_length, plain,
 				     cipher, key, padding)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
@@ -1163,9 +1288,14 @@ pl_rsa_public_encrypt(term_t public_t,
     RSA_free(key);
     return raise_ssl_error(ERR_get_error());
   }
+#endif
   ssl_deb(1, "encrypted bytes: %d\n", outsize);
   ssl_deb(1, "Freeing RSA");
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
   RSA_free(key);
+#endif
   ssl_deb(1, "Assembling plaintext");
   retval = PL_unify_chars(cipher_t, PL_STRING|REP_ISO_LATIN_1,
 			  outsize, (char*)cipher);
@@ -1183,8 +1313,12 @@ pl_rsa_private_encrypt(term_t private_t,
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  size_t outsize;
+#else
   int outsize;
-  RSA* key;
+#endif
+  RSAKEY* key;
   int rep = REP_UTF8;
   int padding = RSA_PKCS1_PADDING;
   int retval;
@@ -1198,10 +1332,35 @@ pl_rsa_private_encrypt(term_t private_t,
   if ( !recover_private_key(private_t, &key) )
     return FALSE;
 
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  outsize = EVP_PKEY_get_size(key);
+#else
   outsize = RSA_size(key);
+#endif
   ssl_deb(1, "Output size is going to be %d", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext", outsize);
+#ifdef HAVE_EVP_PKEY_ENCRYPT
+  EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
+  if ( !ctx )
+  { EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_decrypt_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0)
+  { EVP_PKEY_CTX_free(ctx);
+    EVP_PKEY_free(key);
+    PL_free(plain);
+    return raise_ssl_error(ERR_get_error());
+  }
+  if ( EVP_PKEY_encrypt(ctx, cipher, &outsize, plain, plain_length) <= 0 )
+  { ssl_deb(1, "Failure to encrypt!");
+    EVP_PKEY_CTX_free(ctx);
+    PL_free(cipher);
+    EVP_PKEY_free(key);
+    return raise_ssl_error(ERR_get_error());
+  }
+#else
   if ((outsize = RSA_private_encrypt((int)plain_length, plain,
                                      cipher, key, padding)) <= 0)
   { ssl_deb(1, "Failure to encrypt!");
@@ -1209,9 +1368,14 @@ pl_rsa_private_encrypt(term_t private_t,
     RSA_free(key);
     return raise_ssl_error(ERR_get_error());
   }
+#endif
   ssl_deb(1, "encrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
   RSA_free(key);
+#endif
   ssl_deb(1, "Assembling plaintext");
   retval = PL_unify_chars(cipher_t, PL_STRING|REP_ISO_LATIN_1,
 			  outsize, (char*)cipher);
@@ -1250,9 +1414,13 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
 	    term_t Data, term_t Signature)
 { unsigned char *data;
   size_t data_len;
-  RSA *key;
+  RSAKEY *key;
   unsigned char *signature;
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  size_t signature_len;
+#else
   unsigned int signature_len;
+#endif
   int rc;
   int type;
 
@@ -1261,12 +1429,32 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
        !get_digest_type(Type, &type) )
     return FALSE;
 
+#ifdef HAVE_EVP_PKEY_GET_SIZE
+  signature_len = EVP_PKEY_get_size(key);
+#else
   signature_len = RSA_size(key);
+#endif
   signature = PL_malloc(signature_len);
+#ifdef HAVE_EVP_PKEY_SIGN
+  OSSL_PARAM params[2];
+  params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)OBJ_nid2ln(type), 0);
+  params[1] = OSSL_PARAM_construct_end();
+  EVP_PKEY_CTX *sign_ctx = EVP_PKEY_CTX_new(key, NULL);
+  EVP_PKEY_sign_init_ex(sign_ctx, params);
+  rc = EVP_PKEY_sign(sign_ctx,
+		signature, &signature_len,
+		data, (unsigned int)data_len);
+  EVP_PKEY_CTX_free(sign_ctx);
+#else
   rc = RSA_sign(type,
 		data, (unsigned int)data_len,
 		signature, &signature_len, key);
+#endif
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
   RSA_free(key);
+#endif
   if ( rc != 1 )
   { PL_free(signature);
     return raise_ssl_error(ERR_get_error());
@@ -1282,7 +1470,7 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
 	    term_t Data, term_t Signature)
 { unsigned char *data;
   size_t data_len;
-  RSA *key;
+  RSAKEY *key;
   unsigned char *signature;
   size_t signature_len;
   int rc;
@@ -1293,11 +1481,26 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
        !get_digest_type(Type, &type) ||
        !PL_get_nchars(Signature, &signature_len, (char**)&signature, REP_ISO_LATIN_1|CVT_LIST|CVT_EXCEPTION) )
     return FALSE;
-
+#ifdef HAVE_EVP_PKEY_VERIFY
+  OSSL_PARAM params[2];
+  params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)OBJ_nid2ln(type), 0);
+  params[1] = OSSL_PARAM_construct_end();
+  EVP_PKEY_CTX *verify_ctx = EVP_PKEY_CTX_new(key, NULL);
+  EVP_PKEY_verify_init_ex(verify_ctx, params);
+  rc = EVP_PKEY_verify(verify_ctx,
+                       signature, (unsigned int)signature_len,
+                       data, (unsigned int)data_len);
+  EVP_PKEY_CTX_free(verify_ctx);
+#else
   rc = RSA_verify(type,
                   data, (unsigned int)data_len,
                   signature, (unsigned int)signature_len, key);
+#endif
+#ifdef HAVE_EVP_PKEY_FREE
+  EVP_PKEY_free(key);
+#else
   RSA_free(key);
+#endif
 
   if ( rc == 0 || rc == 1 )
     return rc;
