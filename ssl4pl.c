@@ -145,6 +145,14 @@ static functor_t FUNCTOR_alpn_protocol1;
 static functor_t FUNCTOR_file1;
 static functor_t FUNCTOR_certificate1;
 
+#ifdef HAVE_EVP_PKEY_NEW
+#define RSAKEY EVP_PKEY
+#define ECKEY EVP_PKEY
+#else
+#define RSAKEY RSA
+#define ECKEY EC_KEY
+#endif
+
 typedef enum
 { PL_SSL_NONE,
   PL_SSL_SERVER,
@@ -760,7 +768,7 @@ unify_crl(term_t term, X509_CRL* crl)
 
 
 static int
-unify_rsa(term_t item, RSA* rsa)
+unify_rsa(term_t item, RSAKEY* rsa)
 {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
   return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
@@ -774,12 +782,26 @@ unify_rsa(term_t item, RSA* rsa)
 	   unify_bignum_arg(8, item, rsa->iqmp)
 	 );
 #else
+#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+  BIGNUM *n = NULL, *e = NULL, *d = NULL,
+    *p = NULL, *q = NULL,
+    *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
+  EVP_PKEY_get_bn_param(rsa, "n", &n);
+  EVP_PKEY_get_bn_param(rsa, "e", &e);
+  EVP_PKEY_get_bn_param(rsa, "d", &d);
+  EVP_PKEY_get_bn_param(rsa, "p", &p);
+  EVP_PKEY_get_bn_param(rsa, "q", &q);
+  EVP_PKEY_get_bn_param(rsa, "dmp1", &dmp1);
+  EVP_PKEY_get_bn_param(rsa, "dmq1", &dmq1);
+  EVP_PKEY_get_bn_param(rsa, "iqmp", &iqmp);
+#else
   const BIGNUM *n = NULL, *e = NULL, *d = NULL,
     *p = NULL, *q = NULL,
     *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
   RSA_get0_key(rsa, &n, &e, &d);
   RSA_get0_factors(rsa, &p, &q);
   RSA_get0_crt_params(rsa, &dmp1, &dmq1, &iqmp);
+#endif
   return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
 	   unify_bignum_arg(1, item, n) &&
 	   unify_bignum_arg(2, item, e) &&
@@ -795,19 +817,28 @@ unify_rsa(term_t item, RSA* rsa)
 
 #ifndef OPENSSL_NO_EC
 static int
-unify_ec(term_t item, EC_KEY *key)
+unify_ec(term_t item, ECKEY *key)
 { unsigned char *buf = NULL;
-  int rc, publen;
+  int rc;
   term_t privkey, pubkey;
-
+  BIGNUM* priv_bn;
+#ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
+  size_t publen;
+  EVP_PKEY_get_octet_string_param(key, "pub", NULL, 0, &publen);
+  buf = OPENSSL_malloc(publen);
+  EVP_PKEY_get_octet_string_param(key, "pub", buf, publen, &publen);
+  EVP_PKEY_get_bn_param(key, "priv", &priv_bn);
+#else
+  int publen;
   publen = i2o_ECPublicKey(key, &buf);
-
+  priv_bn = EC_KEY_get0_private_key(key);
+#endif
   if ( publen < 0 )
     return raise_ssl_error(ERR_get_error());
 
   rc = ( (pubkey = PL_new_term_ref()) &&
          (privkey = PL_new_term_ref()) &&
-         unify_bignum(privkey, EC_KEY_get0_private_key(key)) &&
+         unify_bignum(privkey, priv_bn) &&
          unify_bytes_hex(pubkey, publen, buf) &&
          PL_unify_term(item,
                        PL_FUNCTOR, FUNCTOR_ec3,
@@ -826,25 +857,35 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 { if ( !PL_unify_functor(item, type) ||
        !PL_get_arg(1, item, item) )
     return FALSE;
-
  /* EVP_PKEY_get1_* returns a copy of the existing key */
+ /* We can just call unify_rsa or unify_ec directly if we are using OpenSSL 3.0+ since
+    those functions just take a EVP_PKEY in
+  */
   switch (EVP_PKEY_base_id(key))
   { int rc;
 #ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
-    { RSA* rsa = EVP_PKEY_get1_RSA(key);
+#ifdef HAVE_EVP_PKEY_NEW
+    return unify_rsa(item, key);
+#else
+    { RSAKEY* rsa = EVP_PKEY_get1_RSA(key);
       rc = unify_rsa(item, rsa);
       RSA_free(rsa);
       return rc;
     }
 #endif
+#endif
 #ifndef OPENSSL_NO_EC
     case EVP_PKEY_EC:
+#ifdef HAVE_EVP_PKEY_NEW
+    return unify_ec(item, key);
+#else
     { EC_KEY* ec = EVP_PKEY_get1_EC_KEY(key);
       rc = unify_ec(item, ec);
       EC_KEY_free(ec);
       return rc;
     }
+#endif
 #endif
 #ifndef OPENSSL_NO_DH
     case EVP_PKEY_DH:
@@ -868,6 +909,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
   }
   return TRUE;
 }
+
 
 static int
 unify_public_key(EVP_PKEY* key, term_t item)
