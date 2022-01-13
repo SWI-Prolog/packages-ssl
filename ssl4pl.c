@@ -148,9 +148,11 @@ static functor_t FUNCTOR_certificate1;
 #ifdef HAVE_EVP_PKEY_NEW
 #define RSAKEY EVP_PKEY
 #define ECKEY EVP_PKEY
+#define DHKEY EVP_PKEY
 #else
 #define RSAKEY RSA
 #define ECKEY EC_KEY
+#define DHKEY DH
 #endif
 
 typedef enum
@@ -872,7 +874,10 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
     those functions just take a EVP_PKEY in
   */
   switch (EVP_PKEY_base_id(key))
-  { int rc;
+  {
+#ifndef HAVE_EVP_PKEY_NEW
+    int rc;
+#endif
 #ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
 #ifdef HAVE_EVP_PKEY_NEW
@@ -899,19 +904,27 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 #endif
 #ifndef OPENSSL_NO_DH
     case EVP_PKEY_DH:
+#ifdef HAVE_EVP_PKEY_NEW
+    return PL_unify_atom_chars(item, "dh_key");
+#else
     { DH* dh = EVP_PKEY_get1_DH(key);
       rc = PL_unify_atom_chars(item, "dh_key");
       DH_free(dh);
       return rc;
     }
 #endif
+#endif
 #ifndef OPENSSL_NO_DSA
     case EVP_PKEY_DSA:
+#ifdef HAVE_EVP_PKEY_NEW
+    return PL_unify_atom_chars(item, "dsa_key");
+#else
     { DSA* dsa = EVP_PKEY_get1_DSA(key);
       rc = PL_unify_atom_chars(item, "dsa_key");
       DSA_free(dsa);
       return rc;
     }
+#endif
 #endif
   default:
     /* Unknown key type */
@@ -2706,7 +2719,7 @@ ssl_init_verify_locations(PL_SSL *config)
 #ifndef HEADER_DH_H
 #include <openssl/dh.h>
 #endif
-static DH *
+static DHKEY *
 get_dh2048(void)
         {
         static unsigned char dhp_2048[]={
@@ -2736,9 +2749,12 @@ get_dh2048(void)
         static unsigned char dhg_2048[]={
                 0x02,
                 };
-
-        DH *dh = DH_new();
+#ifdef HAVE_EVP_PKEY_NEW
+        DHKEY *dh = EVP_PKEY_new();
+#else
+        DHKEY *dh = DH_new();
         if (dh == NULL) return NULL;
+#endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
         dh->p=BN_bin2bn(dhp_2048,sizeof(dhp_2048),NULL);
@@ -2750,9 +2766,16 @@ get_dh2048(void)
 
         dhp_bn = BN_bin2bn(dhp_2048, sizeof (dhp_2048), NULL);
         dhg_bn = BN_bin2bn(dhg_2048, sizeof (dhg_2048), NULL);
+#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+        if (dhp_bn == NULL || dhg_bn == NULL
+            || !EVP_PKEY_set_bn_param(dh, "p", dhp_bn)
+            || !EVP_PKEY_set_bn_param(dh, "g", dhg_bn)) {
+          EVP_PKEY_free(dh);
+#else
         if (dhp_bn == NULL || dhg_bn == NULL
             || !DH_set0_pqg(dh, dhp_bn, NULL, dhg_bn)) {
           DH_free(dh);
+#endif
           BN_free(dhp_bn);
           BN_free(dhg_bn);
           return NULL;
@@ -3067,7 +3090,7 @@ ssl_config(PL_SSL *config)
  * Initialize various SSL layer parameters using the supplied
  * config parameters.
  */
-{ static DH *dh_2048 = NULL;
+{ static DHKEY *dh_2048 = NULL;
 
   ssl_init_verify_locations(config);
 
