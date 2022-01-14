@@ -52,6 +52,9 @@
 #define NEED_BIO 1
 #define NEED_SSL_ERR 1
 #include "cryptolib.c"
+#ifdef HAVE_OPENSSL_CORE_NAMES_H
+#include <openssl/core_names.h>
+#endif
 
 #ifdef LIBRESSL_VERSION_NUMBER
 #undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */
@@ -788,14 +791,14 @@ unify_rsa(term_t item, RSAKEY* rsa)
   BIGNUM *n = NULL, *e = NULL, *d = NULL,
     *p = NULL, *q = NULL,
     *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
-  EVP_PKEY_get_bn_param(rsa, "n", &n);
-  EVP_PKEY_get_bn_param(rsa, "e", &e);
-  EVP_PKEY_get_bn_param(rsa, "d", &d);
-  EVP_PKEY_get_bn_param(rsa, "p", &p);
-  EVP_PKEY_get_bn_param(rsa, "q", &q);
-  EVP_PKEY_get_bn_param(rsa, "dmp1", &dmp1);
-  EVP_PKEY_get_bn_param(rsa, "dmq1", &dmq1);
-  EVP_PKEY_get_bn_param(rsa, "iqmp", &iqmp);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_N, &n);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_E, &e);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_D, &d);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_FACTOR1, &p);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_FACTOR2, &q);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_EXPONENT1, &dmp1);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_EXPONENT2, &dmq1);
+  EVP_PKEY_get_bn_param(rsa, OSSL_PKEY_PARAM_RSA_COEFFICIENT1, &iqmp);
 #else
   const BIGNUM *n = NULL, *e = NULL, *d = NULL,
     *p = NULL, *q = NULL,

@@ -53,8 +53,11 @@ AC_CHECK_FUNCS(EVP_PKEY_new EVP_PKEY_free EVP_PKEY_get_bn_param EVP_PKEY_get_oct
 AC_CHECK_FUNCS(EVP_PKEY_Q_keygen)
 AC_CHECK_FUNCS(BN_check_prime)
 AC_CHECK_FUNCS(SSL_CTX_set_alpn_protos)
+AC_CHECK_FUNCS(OSSL_PARAM_BLD_new)
 
 AC_CHECK_HEADERS(openssl/kdf.h)
+AC_CHECK_HEADERS(openssl/core_names.h)
+AC_CHECK_HEADERS(openssl/param_build.h)
 
 if(NOT DEFINED GET0SIG_CONST_T)
   if(HAVE_X509_GET0_SIGNATURE)
