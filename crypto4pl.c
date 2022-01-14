@@ -892,7 +892,7 @@ recover_rsa(term_t t, RSAKEY** keyp)
        get_bn_arg(7, t, &dmq1) &&
        get_bn_arg(8, t, &iqmp) )
   {
-#ifdef HAVE_OSSL_PARAM_BLD_NEW
+#ifdef USE_EVP_API
   OSSL_PARAM_BLD *param_builder;
   OSSL_PARAM *params = NULL;
   EVP_PKEY_CTX* ctx;
