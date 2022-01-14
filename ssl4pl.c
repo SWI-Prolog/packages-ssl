@@ -2597,7 +2597,11 @@ ssl_system_verify_locations(void)
                                      "/Library/Keychains/System.keychain",
                                      NULL};
   for (const char** keystoreLocation = keystoreLocations; *keystoreLocation; keystoreLocation++)
-  { status = SecKeychainOpen(*keystoreLocation, &keychain);
+  {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    status = SecKeychainOpen(*keystoreLocation, &keychain);
+#pragma GCC diagnostic pop
     if ( status == errSecSuccess )
     { CFDictionaryRef query = NULL;
       CFArrayRef certs = NULL;
