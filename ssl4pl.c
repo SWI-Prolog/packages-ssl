@@ -830,8 +830,8 @@ unify_ec(term_t item, ECKEY *key)
 { unsigned char *buf = NULL;
   int rc;
   term_t privkey, pubkey;
-  BIGNUM* priv_bn;
 #ifdef USE_EVP_API
+  BIGNUM* priv_bn;
   size_t publen;
   size_t grouplen;
   unsigned char* group;
@@ -844,9 +844,8 @@ unify_ec(term_t item, ECKEY *key)
   EVP_PKEY_get_octet_string_param(key, "group", group, grouplen, NULL);
 
 #else
-  int publen;
-  publen = i2o_ECPublicKey(key, &buf);
-  priv_bn = EC_KEY_get0_private_key(key);
+  int publen = i2o_ECPublicKey(key, &buf);
+  const BIGNUM* priv_bn = EC_KEY_get0_private_key(key);
   const char* group = OBJ_nid2sn(EC_GROUP_get_curve_name(EC_KEY_get0_group(key)));
 #endif
   if ( publen < 0 )
