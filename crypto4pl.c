@@ -87,6 +87,17 @@ typedef enum
 { RSA_MODE, EVP_MODE
 } crypt_mode_t;
 
+#if defined HAVE_EVP_PKEY_NEW && defined HAVE_EVP_PKEY_FREE && defined HAVE_EVP_PKEY_GET_BN_PARAM && defined HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM && defined HAVE_EVP_PKEY_GET_SIZE && defined HAVE_EVP_PKEY_DECRYPT && defined HAVE_EVP_PKEY_ENCRYPT && defined HAVE_EVP_PKEY_SIGN && defined HAVE_EVP_PKEY_VERIFY && defined HAVE_EVP_PKEY_Q_KEYGEN && defined HAVE_OSSL_PARAM_CONSTRUCT_UTF8_STRING && defined HAVE_BN_CHECK_PRIME && defined HAVE_OSSL_PARAM_BLD_NEW
+#define USE_EVP_API 1
+#endif
+
+#ifdef USE_EVP_API
+#define RSAKEY EVP_PKEY
+#else
+#define RSAKEY RSA
+#endif
+
+
 
                  /***************************
                  *       RANDOM BYTES       *
@@ -137,7 +148,7 @@ typedef struct hash_context
   int             close_parent;
 
   EVP_MD_CTX     *ctx;
-#if defined HAVE_EVP_MAC_FETCH
+#if defined USE_EVP_API
   EVP_MAC         *mac;
   EVP_MAC_CTX     *mac_ctx;
 #else
@@ -150,7 +161,7 @@ static void
 free_crypto_hash_context(PL_CRYPTO_HASH_CONTEXT *c)
 { EVP_MD_CTX_free(c->ctx);
   free(c->mac_key);
-#ifdef HAVE_EVP_MAC_CTX_FREE
+#ifdef USE_EVP_API
   EVP_MAC_free(c->mac);
   EVP_MAC_CTX_free(c->mac_ctx);
 #elif defined HAVE_HMAC_CTX_FREE
@@ -368,7 +379,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   if ( !hash_options(options, context) )
     return FALSE;
 
-#ifdef HAVE_EVP_MAC_FETCH
+#ifdef USE_EVP_API
   if ( context->mac_key )
   { OSSL_PARAM params[2];
     context->mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
@@ -441,7 +452,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
     }
     rc = EVP_MD_CTX_copy_ex(out->ctx, in->ctx);
   }
-#if defined(HAVE_EVP_MAC_FETCH) && defined(HAVE_EVP_MAC_CTX_FREE)
+#if defined(USE_EVP_API) && defined(USE_EVP_API)
   out->mac = in->mac;
   if ( in->mac != NULL )
   { EVP_MAC_up_ref(in->mac);
@@ -473,7 +484,7 @@ hash_append(PL_CRYPTO_HASH_CONTEXT *context, void *data, size_t size)
 {
   if ( context->mac_ctx )
   {
-#ifdef HAVE_EVP_MAC_UPDATE
+#ifdef USE_EVP_API
     return  EVP_MAC_update(context->mac_ctx, data, size);
 #else
     return HMAC_Update(context->mac_ctx, data, size);
@@ -513,7 +524,7 @@ pl_crypto_hash_context_hash(term_t tcontext, term_t hash)
 
   if ( context->mac_ctx )
   {
-#ifdef HAVE_EVP_MAC_FINAL
+#ifdef USE_EVP_API
     EVP_MAC_final(context->mac_ctx, digest, &len, EVP_MAX_MD_SIZE);
 #else
     unsigned int ulen;
@@ -777,7 +788,7 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
 
 #ifndef OPENSSL_NO_EC
 
-#ifdef HAVE_EVP_PKEY_Q_KEYGEN
+#ifdef USE_EVP_API
 #define ECKEY EVP_PKEY
 #else
 #define ECKEY EC_KEY
@@ -797,7 +808,7 @@ recover_ec(term_t t, ECKEY **rec)
   if ( !(tcurve &&
          PL_get_arg(3, t, tcurve) &&
          PL_get_chars(tcurve, &curve, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) &&
-#ifdef HAVE_EVP_PKEY_Q_KEYGEN
+#ifdef USE_EVP_API
          (key = EVP_EC_gen(curve))
 #else
          (key = EC_KEY_new_by_curve_name(OBJ_sn2nid(curve)))
@@ -807,7 +818,7 @@ recover_ec(term_t t, ECKEY **rec)
 
   if ( !get_bn_arg(1, t, &privkey) )
   {
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
     EVP_PKEY_free(key);
 #else
     EC_KEY_free(key);
@@ -817,7 +828,7 @@ recover_ec(term_t t, ECKEY **rec)
 
   if ( privkey )
   {
-#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+#ifdef USE_EVP_API
     EVP_PKEY_set_bn_param(key, "priv", privkey);
 #else
     EC_KEY_set_private_key(key, privkey);
@@ -828,7 +839,7 @@ recover_ec(term_t t, ECKEY **rec)
        PL_get_arg(2, t, pubkey) &&
        PL_get_nchars(pubkey, &codes_len, (char **) &codes,
                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) &&
-#ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
+#ifdef USE_EVP_API
         EVP_PKEY_set_octet_string_param(key, "pub", (const unsigned char*) codes, codes_len)
 #else
        (key = o2i_ECPublicKey(&key, (const unsigned char**) &codes, codes_len)) 
@@ -838,7 +849,7 @@ recover_ec(term_t t, ECKEY **rec)
     return TRUE;
   }
 
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   EC_KEY_free(key);
@@ -848,15 +859,10 @@ recover_ec(term_t t, ECKEY **rec)
 #endif
 
 
-#ifdef HAVE_EVP_PKEY_NEW
-#define RSAKEY EVP_PKEY
-#else
-#define RSAKEY RSA
-#endif
 static int
 recover_rsa(term_t t, RSAKEY** keyp)
 {
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
   RSAKEY* key = EVP_PKEY_new();
 #else
   RSAKEY *key = RSA_new();
@@ -940,7 +946,7 @@ recover_rsa(term_t t, RSAKEY** keyp)
     *keyp = key;
     return TRUE;
   }
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);
@@ -1072,7 +1078,7 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
   ECKEY *key;
   unsigned char *signature = NULL;
   int rc;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   size_t signature_len;
 #else
   ECDSA_SIG *sig;
@@ -1083,7 +1089,7 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
        !get_enc_text(Data, Enc, &data_len, &data) )
     return FALSE;
 
-#ifdef HAVE_EVP_PKEY_SIGN
+#ifdef USE_EVP_API
   signature_len = EVP_PKEY_get_size(key);
   EVP_PKEY_CTX *sign_ctx = EVP_PKEY_CTX_new(key, NULL);
   EVP_PKEY_sign_init(sign_ctx);
@@ -1132,7 +1138,7 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
   if ( !(sig = d2i_ECDSA_SIG(NULL, &copy, signature_len)) )
     return FALSE;
 
-#ifdef HAVE_EVP_PKEY_VERIFY
+#ifdef USE_EVP_API
   EVP_PKEY_CTX *verify_ctx = EVP_PKEY_CTX_new(key, NULL);
   EVP_PKEY_verify_init(verify_ctx);
   rc = EVP_PKEY_verify(verify_ctx,
@@ -1169,7 +1175,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   size_t outsize;
 #else
   int outsize;
@@ -1187,7 +1193,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
     return FALSE;
   if ( !recover_private_key(private_t, &key) )
     return FALSE;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
 #else
   outsize = RSA_size(key);
@@ -1195,7 +1201,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   ssl_deb(1, "Output size is going to be %d", outsize);
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
-#ifdef HAVE_EVP_PKEY_DECRYPT
+#ifdef USE_EVP_API
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
   if ( !ctx )
   { EVP_PKEY_free(key);
@@ -1227,7 +1233,7 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
 #endif
   ssl_deb(1, "decrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);
@@ -1247,7 +1253,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
 { size_t cipher_length;
   unsigned char* cipher;
   unsigned char* plain;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   size_t outsize;
 #else
   int outsize;
@@ -1264,7 +1270,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
     return FALSE;
   if ( !recover_public_key(public_t, &key) )
     return FALSE;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
 #else
   outsize = RSA_size(key);
@@ -1272,7 +1278,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   ssl_deb(1, "Output size is going to be %d", outsize);
   plain = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for plaintext", outsize);
-#ifdef HAVE_EVP_PKEY_DECRYPT
+#ifdef USE_EVP_API
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
   if ( !ctx )
   { EVP_PKEY_free(key);
@@ -1306,7 +1312,7 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
 #endif
   ssl_deb(1, "decrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);
@@ -1326,7 +1332,7 @@ pl_rsa_public_encrypt(term_t public_t,
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   size_t outsize;
 #else
   int outsize;
@@ -1347,7 +1353,7 @@ pl_rsa_public_encrypt(term_t public_t,
   if ( !recover_public_key(public_t, &key) )
     return FALSE;
 
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
 #else
   outsize = RSA_size(key);
@@ -1355,7 +1361,7 @@ pl_rsa_public_encrypt(term_t public_t,
   ssl_deb(1, "Output size is going to be %d\n", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext\n", outsize);
-#ifdef HAVE_EVP_PKEY_SIGN
+#ifdef USE_EVP_API
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
   if ( !ctx )
   { EVP_PKEY_free(key);
@@ -1387,7 +1393,7 @@ pl_rsa_public_encrypt(term_t public_t,
 #endif
   ssl_deb(1, "encrypted bytes: %d\n", outsize);
   ssl_deb(1, "Freeing RSA");
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);
@@ -1409,7 +1415,7 @@ pl_rsa_private_encrypt(term_t private_t,
 { size_t plain_length;
   unsigned char* cipher;
   unsigned char* plain;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   size_t outsize;
 #else
   int outsize;
@@ -1428,7 +1434,7 @@ pl_rsa_private_encrypt(term_t private_t,
   if ( !recover_private_key(private_t, &key) )
     return FALSE;
 
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
 #else
   outsize = RSA_size(key);
@@ -1436,7 +1442,7 @@ pl_rsa_private_encrypt(term_t private_t,
   ssl_deb(1, "Output size is going to be %d", outsize);
   cipher = PL_malloc(outsize);
   ssl_deb(1, "Allocated %d bytes for ciphertext", outsize);
-#ifdef HAVE_EVP_PKEY_ENCRYPT
+#ifdef USE_EVP_API
   memset(cipher, 0, outsize);
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
   if ( !ctx )
@@ -1469,7 +1475,7 @@ pl_rsa_private_encrypt(term_t private_t,
 #endif
   ssl_deb(1, "encrypted bytes: %d", outsize);
   ssl_deb(1, "Freeing RSA");
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);
@@ -1514,7 +1520,7 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
   size_t data_len;
   RSAKEY *key;
   unsigned char *signature;
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   size_t signature_len;
 #else
   unsigned int signature_len;
@@ -1527,13 +1533,13 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
        !get_digest_type(Type, &type) )
     return FALSE;
 
-#ifdef HAVE_EVP_PKEY_GET_SIZE
+#ifdef USE_EVP_API
   signature_len = EVP_PKEY_get_size(key);
 #else
   signature_len = RSA_size(key);
 #endif
   signature = PL_malloc(signature_len);
-#ifdef HAVE_EVP_PKEY_SIGN
+#if defined USE_EVP_API
   OSSL_PARAM params[2];
   params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)OBJ_nid2ln(type), 0);
   params[1] = OSSL_PARAM_construct_end();
@@ -1548,7 +1554,7 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
 		data, (unsigned int)data_len,
 		signature, &signature_len, key);
 #endif
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);
@@ -1579,7 +1585,7 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
        !get_digest_type(Type, &type) ||
        !PL_get_nchars(Signature, &signature_len, (char**)&signature, REP_ISO_LATIN_1|CVT_LIST|CVT_EXCEPTION) )
     return FALSE;
-#ifdef HAVE_EVP_PKEY_VERIFY
+#if defined USE_EVP_API
   OSSL_PARAM params[2];
   params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)OBJ_nid2ln(type), 0);
   params[1] = OSSL_PARAM_construct_end();
@@ -1594,7 +1600,7 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
                   data, (unsigned int)data_len,
                   signature, (unsigned int)signature_len, key);
 #endif
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
   EVP_PKEY_free(key);
 #else
   RSA_free(key);

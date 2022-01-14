@@ -60,6 +60,10 @@
 #undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */
 #endif
 
+#if defined HAVE_EVP_PKEY_NEW && defined HAVE_EVP_PKEY_FREE && defined HAVE_EVP_PKEY_GET_BN_PARAM && defined HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM && defined HAVE_EVP_PKEY_GET_SIZE && defined HAVE_EVP_PKEY_DECRYPT && defined HAVE_EVP_PKEY_ENCRYPT && defined HAVE_EVP_PKEY_SIGN && defined HAVE_EVP_PKEY_VERIFY && defined HAVE_EVP_PKEY_Q_KEYGEN && defined HAVE_OSSL_PARAM_CONSTRUCT_UTF8_STRING && defined HAVE_BN_CHECK_PRIME && defined HAVE_OSSL_PARAM_BLD_NEW
+#define USE_EVP_API 1
+#endif
+
 #define SSL_CONFIG_MAGIC 0x539dbe3a
 #ifndef SYSTEM_CACERT_FILENAME
 #define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
@@ -148,7 +152,7 @@ static functor_t FUNCTOR_alpn_protocol1;
 static functor_t FUNCTOR_file1;
 static functor_t FUNCTOR_certificate1;
 
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
 #define RSAKEY EVP_PKEY
 #define ECKEY EVP_PKEY
 #define DHKEY EVP_PKEY
@@ -787,7 +791,7 @@ unify_rsa(term_t item, RSAKEY* rsa)
 	   unify_bignum_arg(8, item, rsa->iqmp)
 	 );
 #else
-#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+#ifdef USE_EVP_API
   BIGNUM *n = NULL, *e = NULL, *d = NULL,
     *p = NULL, *q = NULL,
     *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
@@ -827,7 +831,7 @@ unify_ec(term_t item, ECKEY *key)
   int rc;
   term_t privkey, pubkey;
   BIGNUM* priv_bn;
-#ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
+#ifdef USE_EVP_API
   size_t publen;
   size_t grouplen;
   unsigned char* group;
@@ -859,7 +863,7 @@ unify_ec(term_t item, ECKEY *key)
                        PL_CHARS, group));
 
   OPENSSL_free(buf);
-#ifdef HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM
+#ifdef USE_EVP_API
   PL_free(group);
 #endif
   return rc;
@@ -878,12 +882,12 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
   */
   switch (EVP_PKEY_base_id(key))
   {
-#ifndef HAVE_EVP_PKEY_NEW
+#ifndef USE_EVP_API
     int rc;
 #endif
 #ifndef OPENSSL_NO_RSA
     case EVP_PKEY_RSA:
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
     return unify_rsa(item, key);
 #else
     { RSAKEY* rsa = EVP_PKEY_get1_RSA(key);
@@ -895,7 +899,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 #endif
 #ifndef OPENSSL_NO_EC
     case EVP_PKEY_EC:
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
     return unify_ec(item, key);
 #else
     { EC_KEY* ec = EVP_PKEY_get1_EC_KEY(key);
@@ -907,7 +911,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 #endif
 #ifndef OPENSSL_NO_DH
     case EVP_PKEY_DH:
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
     return PL_unify_atom_chars(item, "dh_key");
 #else
     { DH* dh = EVP_PKEY_get1_DH(key);
@@ -919,7 +923,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 #endif
 #ifndef OPENSSL_NO_DSA
     case EVP_PKEY_DSA:
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
     return PL_unify_atom_chars(item, "dsa_key");
 #else
     { DSA* dsa = EVP_PKEY_get1_DSA(key);
@@ -2752,7 +2756,7 @@ get_dh2048(void)
         static unsigned char dhg_2048[]={
                 0x02,
                 };
-#ifdef HAVE_EVP_PKEY_NEW
+#ifdef USE_EVP_API
         DHKEY *dh = EVP_PKEY_new();
 #else
         DHKEY *dh = DH_new();
@@ -2769,7 +2773,7 @@ get_dh2048(void)
 
         dhp_bn = BN_bin2bn(dhp_2048, sizeof (dhp_2048), NULL);
         dhg_bn = BN_bin2bn(dhg_2048, sizeof (dhg_2048), NULL);
-#ifdef HAVE_EVP_PKEY_GET_BN_PARAM
+#ifdef USE_EVP_API
         if (dhp_bn == NULL || dhg_bn == NULL
             || !EVP_PKEY_set_bn_param(dh, "p", dhp_bn)
             || !EVP_PKEY_set_bn_param(dh, "g", dhg_bn)) {
@@ -3049,7 +3053,7 @@ set_malleable_options(PL_SSL *config)
 
   if (curve)
   {
-#ifdef HAVE_EVP_PKEY_Q_KEYGEN
+#ifdef USE_EVP_API
     if ( !(ecdh = EVP_EC_gen(curve)) )
       return raise_ssl_error(ERR_get_error());
 #else
@@ -3058,7 +3062,7 @@ set_malleable_options(PL_SSL *config)
 #endif
     if ( !SSL_CTX_set_tmp_ecdh(config->ctx, ecdh) )
       return raise_ssl_error(ERR_get_error());
-#ifdef HAVE_EVP_PKEY_FREE
+#ifdef USE_EVP_API
     EVP_PKEY_free(ecdh);
 #else
     EC_KEY_free(ecdh);          /* Safe because of reference counts */
