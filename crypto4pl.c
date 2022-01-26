@@ -842,7 +842,7 @@ recover_ec(term_t t, ECKEY **rec)
 #ifdef USE_EVP_API
         EVP_PKEY_set_octet_string_param(key, "pub", (const unsigned char*) codes, codes_len)
 #else
-       (key = o2i_ECPublicKey(&key, (const unsigned char**) &codes, codes_len)) 
+       (key = o2i_ECPublicKey(&key, (const unsigned char**) &codes, codes_len))
 #endif
   )
   { *rec = key;
@@ -869,14 +869,14 @@ recover_rsa(term_t t, RSAKEY** keyp)
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
-  if ( get_bn_arg(1, t, &rsa->n) &&
-       get_bn_arg(2, t, &rsa->e) &&
-       get_bn_arg(3, t, &rsa->d) &&
-       get_bn_arg(4, t, &rsa->p) &&
-       get_bn_arg(5, t, &rsa->q) &&
-       get_bn_arg(6, t, &rsa->dmp1) &&
-       get_bn_arg(7, t, &rsa->dmq1) &&
-       get_bn_arg(8, t, &rsa->iqmp)
+  if ( get_bn_arg(1, t, &key->n) &&
+       get_bn_arg(2, t, &key->e) &&
+       get_bn_arg(3, t, &key->d) &&
+       get_bn_arg(4, t, &key->p) &&
+       get_bn_arg(5, t, &key->q) &&
+       get_bn_arg(6, t, &key->dmp1) &&
+       get_bn_arg(7, t, &key->dmq1) &&
+       get_bn_arg(8, t, &key->iqmp)
      )
   {
 #else
@@ -1097,7 +1097,7 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
 		                 signature, &signature_len,
 		                 data, (unsigned int)data_len);
   EVP_PKEY_CTX_free(sign_ctx);
-  if (!rc) 
+  if (!rc)
     return raise_ssl_error(ERR_get_error());
 #else
   sig = ECDSA_do_sign(data, (unsigned int)data_len, key);
