@@ -64,6 +64,10 @@
 #define USE_EVP_API 1
 #endif
 
+#if defined(__WINDOWS__) || defined (__CYGWIN__)
+#define timezone _timezone
+#endif
+
 #define SSL_CONFIG_MAGIC 0x539dbe3a
 #ifndef SYSTEM_CACERT_FILENAME
 #define SYSTEM_CACERT_FILENAME "/etc/ssl/certs/ca-certificates.crt"
