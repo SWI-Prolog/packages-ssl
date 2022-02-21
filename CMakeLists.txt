@@ -9,7 +9,7 @@ include(Sockets)
 find_package(OpenSSL)
 if(OPENSSL_FOUND)
 
-if(WIN32)
+if(WIN32 AND NOT OPENSSL_OS_LIBS)
 set(OPENSSL_OS_LIBS ws2_32.lib gdi32.lib crypt32.lib)
 else()
 set(OPENSSL_OS_LIBS)
