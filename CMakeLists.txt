@@ -9,10 +9,12 @@ include(Sockets)
 find_package(OpenSSL)
 if(OPENSSL_FOUND)
 
-if(WIN32)
-set(OPENSSL_OS_LIBS ws2_32.lib gdi32.lib crypt32.lib)
-else()
-set(OPENSSL_OS_LIBS)
+if(NOT OPENSSL_OS_LIBS)
+  if(WIN32)
+    set(OPENSSL_OS_LIBS ws2_32.lib gdi32.lib crypt32.lib)
+  else()
+    set(OPENSSL_OS_LIBS)
+  endif()
 endif()
 
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES}
