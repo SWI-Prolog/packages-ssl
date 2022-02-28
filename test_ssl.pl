@@ -537,7 +537,9 @@ verify_client_1(SSL, PlainIn, PlainOut):-
     set_stream(PlainIn, timeout(1)),
     setup_call_cleanup(ssl_negotiate(SSL, PlainIn, PlainOut, SSLIn, SSLOut),
                        ( format(SSLOut, 'Hello~n', []),
-                         flush_output(SSLOut)
+                         flush_output(SSLOut),
+                         read_line_to_codes(SSLIn, Codes),
+                         Codes == `Hello`
                        ),
                        ( close(SSLOut, [force(true)]),
                          close(SSLIn, [force(true)])
