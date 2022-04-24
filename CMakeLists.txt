@@ -11,14 +11,14 @@ if(OPENSSL_FOUND)
 
 if(NOT OPENSSL_OS_LIBS)
   if(WIN32)
-    set(OPENSSL_OS_LIBS ws2_32.lib gdi32.lib crypt32.lib)
+    set(OPENSSL_OS_LIBS ws2_32.lib gdi32.lib crypt32.lib z.lib)
   else()
     set(OPENSSL_OS_LIBS)
   endif()
 endif()
 
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES}
-    ${OPENSSL_LIBRARIES} ${OPENSSL_CRYPTO_LIBRARY})
+    ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_LIBRARIES} ${OPENSSL_OS_LIBS})
 if(APPLE)
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES}
     "-framework CoreFoundation" "-framework Security")
