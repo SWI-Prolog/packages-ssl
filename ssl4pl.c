@@ -2595,62 +2595,36 @@ ssl_system_verify_locations(void)
     CertCloseStore(hSystemStore, 0);
   }
 #elif defined(HAVE_SECURITY_SECURITY_H) /* __APPLE__ */
-  SecKeychainRef keychain = NULL;
+  CFArrayRef certs = NULL;
   OSStatus status;
-  const char* keystoreLocations[] = {"/System/Library/Keychains/SystemRootCertificates.keychain",
-                                     "/Library/Keychains/System.keychain",
-                                     NULL};
-  for (const char** keystoreLocation = keystoreLocations; *keystoreLocation; keystoreLocation++)
-  {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    status = SecKeychainOpen(*keystoreLocation, &keychain);
-#pragma GCC diagnostic pop
-    if ( status == errSecSuccess )
-    { CFDictionaryRef query = NULL;
-      CFArrayRef certs = NULL;
-      CFArrayRef keychainSingleton = CFArrayCreate(NULL, (const void **)&keychain, 1, &kCFTypeArrayCallBacks);
-      const void *keys[] =   {kSecClass,            kSecMatchSearchList,  kSecMatchTrustedOnly, kSecReturnRef,  kSecMatchLimit,    kSecMatchValidOnDate};
-      const void *values[] = {kSecClassCertificate, keychainSingleton,    kCFBooleanTrue,       kCFBooleanTrue, kSecMatchLimitAll, kCFNull};
-      CFIndex i;
-      CFIndex count;
-      query = CFDictionaryCreate(NULL,
-                                 keys,
-                                 values,
-                                 6,
-                                 &kCFTypeDictionaryKeyCallBacks,
-                                 &kCFTypeDictionaryValueCallBacks);
-      status = SecItemCopyMatching(query, (CFTypeRef *)&certs);
-      if (status == errSecSuccess)
-      { count = CFArrayGetCount(certs);
-        for (i = 0; i < count; i++)
-        { const void *cert = CFArrayGetValueAtIndex(certs, i);
-          CFDataRef cert_data = NULL;
-          const unsigned char *der;
-          unsigned long cert_data_length;
-          X509 *x509 = NULL;
 
-          cert_data = SecCertificateCopyData((SecCertificateRef)cert);
-          der = CFDataGetBytePtr(cert_data);
-          cert_data_length = CFDataGetLength(cert_data);
-          x509 = d2i_X509(NULL, &der, cert_data_length);
-          CFRelease(cert_data);
-          if ( x509 )
-          { if ( !sk_X509_push(system_certs, x509) )
-            { ok = FALSE;
-              break;
-            }
-          }
-        }
-        CFRelease(certs);
+  status = SecTrustCopyAnchorCertificates(&certs);
+  if (status == errSecSuccess)
+  { size_t i, count = CFArrayGetCount(certs);
+
+    for (i = 0; i < count; i++)
+    { const void *cert = CFArrayGetValueAtIndex(certs, i);
+      CFDataRef cert_data = NULL;
+      const unsigned char *der;
+      unsigned long cert_data_length;
+      X509 *x509 = NULL;
+
+      cert_data = SecCertificateCopyData((SecCertificateRef)cert);
+      der = CFDataGetBytePtr(cert_data);
+      cert_data_length = CFDataGetLength(cert_data);
+      x509 = d2i_X509(NULL, &der, cert_data_length);
+      CFRelease(cert_data);
+      if ( x509 )
+      { if ( !sk_X509_push(system_certs, x509) )
+	{ ok = FALSE;
+	  break;
+	}
       }
-      CFRelease(query);
-      CFRelease(keychainSingleton);
-      CFRelease(keychain);
     }
+    CFRelease(certs);
   }
 #else
-{ const char *cacert_filename;
+  const char *cacert_filename;
   if ( (cacert_filename = system_cacert_filename()) )
   { X509 *cert = NULL;
     FILE *cafile = fopen(cacert_filename, "rb");
@@ -2667,7 +2641,6 @@ ssl_system_verify_locations(void)
       fclose(cafile);
     }
   }
-}
 #endif
 
   if ( ok )
