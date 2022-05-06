@@ -64,6 +64,7 @@ files such that we can generate these in the CMAKE binary directory.
 */
 
 main(Argv) :-
+    set_home,
     argv_options(Argv, _, Options),
     (   option(debug(true), Options)
     ->  debug(mkcerts)
@@ -76,6 +77,10 @@ main(Argv) :-
     option(source(SrcDir), Options),
     make_ssl_test_data(SrcDir, test_certs),
     clean_old(test_certs).
+
+set_home :-
+    working_directory(PWD, PWD),
+    setenv('HOME', PWD).
 
 make_ssl_test_data :-
     make_ssl_test_data('../../../packages/ssl/tests', test_certs).
