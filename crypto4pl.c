@@ -364,17 +364,12 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   PL_CRYPTO_HASH_CONTEXT *context = NULL;
 
   context = malloc(sizeof(*context));
+  memset(context, 0, sizeof(PL_CRYPTO_HASH_CONTEXT));
 
   if ( !context )
     return FALSE;
 
   context->magic    = HASH_CONTEXT_MAGIC;
-  context->ctx      = NULL;
-  context->mac_ctx  = NULL;
-  context->mac_key  = NULL;
-
-  context->parent_stream = NULL;
-  context->hash_stream   = NULL;
 
   if ( !hash_options(options, context) )
     return FALSE;
