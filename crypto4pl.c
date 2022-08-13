@@ -364,7 +364,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   PL_CRYPTO_HASH_CONTEXT *context = NULL;
 
   context = malloc(sizeof(*context));
-  memset(context, 0, sizeof(PL_CRYPTO_HASH_CONTEXT));
+  memset(context, 0, sizeof(*context));
 
   if ( !context )
     return FALSE;
