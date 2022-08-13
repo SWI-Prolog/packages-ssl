@@ -364,11 +364,11 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   PL_CRYPTO_HASH_CONTEXT *context = NULL;
 
   context = malloc(sizeof(*context));
-  memset(context, 0, sizeof(*context));
 
   if ( !context )
     return FALSE;
 
+  memset(context, 0, sizeof(*context));
   context->magic    = HASH_CONTEXT_MAGIC;
 
   if ( !hash_options(options, context) )
