@@ -323,10 +323,15 @@ openssl(Args) :-
     ->  true
     ;   OpenSSL = path(openssl)
     ),
+    (   current_prolog_flag(windows, true) % make openssl.exe aware of
+    ->  Env = ['OPENSSL_WIN32_UTF8'=1]     % unicode file names like
+    ;   Env = []                           % \\?\C:\...\
+    ),
     process_create(OpenSSL, Args2,
                    [ stderr(pipe(Error)),
                      stdout(null),
-                     process(PID)
+                     process(PID),
+                     environment(Env)
                    ]),
     read_string(Error, _, ErrorMsg),
     process_wait(PID, Status),
