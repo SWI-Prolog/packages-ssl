@@ -4,8 +4,8 @@
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
     Copyright (c)  2013-2020, University of Amsterdam
-                              VU University Amsterdam
-                              CWI, Amsterdam
+			      VU University Amsterdam
+			      CWI, Amsterdam
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -35,8 +35,8 @@
 */
 
 :- module(test_ssl,
-          [ test_ssl/0
-          ]).
+	  [ test_ssl/0
+	  ]).
 
 :- use_module(library(plunit)).
 :- use_module(library(ssl)).
@@ -54,12 +54,12 @@
 
 test_ssl :-
     run_tests([ ssl_options,
-                ssl_server,
-                ssl_keys,
-                https_open,
-                ssl_certificates,
-                crypto_data_encrypt
-              ]).
+		ssl_server,
+		ssl_keys,
+		https_open,
+		ssl_certificates,
+		crypto_data_encrypt
+	      ]).
 :- dynamic
     option/1,                       % Options to test
     copy_error/1.
@@ -80,8 +80,8 @@ cert_file(File, Abs) :-
 
 test(readme, Title == "# SWI-Prolog SSL interface") :-
     http_download('https://raw.githubusercontent.com\c
-                      /SWI-Prolog/packages-ssl/master/README.md',
-                  String),
+		      /SWI-Prolog/packages-ssl/master/README.md',
+		  String),
     split_string(String, "\n", " \t", [Title|_]).
 
 :- end_tests(https_open).
@@ -99,9 +99,9 @@ public key for encryption and decryption of messages.
 
 from_file(File, Stream, Goal) :-
     setup_call_cleanup(
-        open(File, read, Stream, [type(binary)]),
-        Goal,
-        close(Stream)).
+	open(File, read, Stream, [type(binary)]),
+	Goal,
+	close(Stream)).
 
 %!  skip_to_pem_cert(+Stream) is det.
 %
@@ -114,27 +114,27 @@ skip_to_pem_cert(In) :-
     (   peek_char(In, '-')
     ->  !
     ;   skip(In, 0'\n),  %'
-        at_end_of_stream(In), !
+	at_end_of_stream(In), !
     ).
 
 test(private_key) :-
     from_file('tests/test_certs/server-key.pem', In,
-              load_private_key(In, "apenoot1", Key)),
+	      load_private_key(In, "apenoot1", Key)),
     is_private_key(Key).
 test(certificate, true) :-
     from_file('tests/test_certs/server-cert.pem', In,
-              ( skip_to_pem_cert(In),
-                load_certificate(In, Cert)
-              )),
+	      ( skip_to_pem_cert(In),
+		load_certificate(In, Cert)
+	      )),
     assertion(is_certificate(Cert)).
 test(trip_private_public, In == Out) :-
     In = "Hello World!",
     from_file('tests/test_certs/server-key.pem', S1,
-              load_private_key(S1, "apenoot1", PrivateKey)),
+	      load_private_key(S1, "apenoot1", PrivateKey)),
     from_file('tests/test_certs/server-cert.pem', S2,
-              ( skip_to_pem_cert(S2),
-                load_certificate(S2, Cert)
-              )),
+	      ( skip_to_pem_cert(S2),
+		load_certificate(S2, Cert)
+	      )),
     certificate_field(Cert, public_key(PublicKey)),
     rsa_private_encrypt(PrivateKey, In, Encrypted, []),
     rsa_public_decrypt(PublicKey, Encrypted, Out, []).
@@ -142,22 +142,22 @@ test(trip_private_public, In == Out) :-
     numlist(1040, 1060, L),
     string_codes(In, L),
     from_file('tests/test_certs/server-key.pem', S1,
-              load_private_key(S1, "apenoot1", PrivateKey)),
+	      load_private_key(S1, "apenoot1", PrivateKey)),
     from_file('tests/test_certs/server-cert.pem', S2,
-              ( skip_to_pem_cert(S2),
-                load_certificate(S2, Cert)
-              )),
+	      ( skip_to_pem_cert(S2),
+		load_certificate(S2, Cert)
+	      )),
     certificate_field(Cert, public_key(PublicKey)),
     rsa_private_encrypt(PrivateKey, In, Encrypted, []),
     rsa_public_decrypt(PublicKey, Encrypted, Out, []).
 test(trip_public_private, In == Out) :-
     In = "Hello World!",
     from_file('tests/test_certs/server-key.pem', S1,
-              load_private_key(S1, "apenoot1", PrivateKey)),
+	      load_private_key(S1, "apenoot1", PrivateKey)),
     from_file('tests/test_certs/server-cert.pem', S2,
-              ( skip_to_pem_cert(S2),
-                load_certificate(S2, Cert)
-              )),
+	      ( skip_to_pem_cert(S2),
+		load_certificate(S2, Cert)
+	      )),
     certificate_field(Cert, public_key(PublicKey)),
     rsa_public_encrypt(PublicKey, In, Encrypted, []),
     rsa_private_decrypt(PrivateKey, Encrypted, Out, []).
@@ -182,35 +182,35 @@ test(cert_mismatch, Msg == 'key values mismatch') :-
     cert_file('etc/server/server-cert.pem', CertFile),
     cert_file('etc/client/client-key.pem', KeyFile),
     options_errmsg([certificate_file(CertFile),
-                    key_file(KeyFile),
-                    password(apenoot2)], Msg).
+		    key_file(KeyFile),
+		    password(apenoot2)], Msg).
 test(cert_mismatch, Msg == 'key values mismatch') :-
     cert_file('etc/server/server-key.pem', KeyFile),
     cert_file('etc/client/client-cert.pem', CertFile),
     read_file_to_string(KeyFile, Key, []),
     read_file_to_string(CertFile, Cert, []),
     options_errmsg([certificate_key_pairs([Cert-Key]),
-                    password('apenoot1')], Msg).
+		    password('apenoot1')], Msg).
 test(cert_mismatch, Msg == 'key values mismatch') :-
     cert_file('etc/server/server-key.pem', KeyFile),
     cert_file('etc/client/client-cert.pem', CertFile),
     read_file_to_string(KeyFile, Key, []),
     read_file_to_string(CertFile, Cert, []),
     options_errmsg([certificate_key_pairs([Cert-Key]),
-                    password('apenoot1'),
-                    sni_hook(sni)], Msg).
+		    password('apenoot1'),
+		    sni_hook(sni)], Msg).
 
 % missing certificate (key specified, with and without sni)
 
 test(missing_cert, Msg == 'no certificate assigned') :-
     cert_file('etc/server/server-key.pem', KeyFile),
     options_errmsg([key_file(KeyFile),
-                    password(apenoot1)], Msg).
+		    password(apenoot1)], Msg).
 test(missing_cert, Msg == 'no certificate assigned') :-
     cert_file('etc/server/server-key.pem', KeyFile),
     options_errmsg([key_file(KeyFile),
-                    password(apenoot1),
-                    sni_hook(sni)], Msg).
+		    password(apenoot1),
+		    sni_hook(sni)], Msg).
 
 % missing key (certificate specified, with and without sni)
 
@@ -220,11 +220,11 @@ test(missing_key, Msg == 'no private key assigned') :-
 test(missing_key, Msg == 'no private key assigned') :-
     cert_file('etc/server/server-cert.pem', CertFile),
     options_errmsg([certificate_file(CertFile),
-                    sni_hook(sni)], Msg).
+		    sni_hook(sni)], Msg).
 
 :- end_tests(ssl_options).
 
-:- begin_tests(ssl_server).
+:- begin_tests(ssl_server, [condition(current_prolog_flag(threads, true))]).
 
 % This test creates a server and client and tests the following
 % sequence:
@@ -244,15 +244,15 @@ test(server) :-
     thread_create(server_loop(SSL, Socket), Id, []),
     (   catch(client, E, true)
     ->  (   var(E)
-        ->  thread_join(Id, Status),
-            report_join_status(Status)
-        ;   format(user_error, 'Client error:~n', []),
-            print_message(error, E),
-            thread_signal(Id, abort),
-            thread_join(Id, Status),
-            report_join_status(Status),
-            fail
-        )
+	->  thread_join(Id, Status),
+	    report_join_status(Status)
+	;   format(user_error, 'Client error:~n', []),
+	    print_message(error, E),
+	    thread_signal(Id, abort),
+	    thread_join(Id, Status),
+	    report_join_status(Status),
+	    fail
+	)
     ).
 
 report_join_status(true).
@@ -264,9 +264,9 @@ report_join_status(exception(Term)) :-
 
 test_ssl(N) :-
     (   between(1, N, _),
-        test_ssl,
-        put('.'), flush_output,
-        fail
+	test_ssl,
+	put('.'), flush_output,
+	fail
     ;   true
     ).
 
@@ -274,9 +274,9 @@ ssl_server :-
     make_server(SSL, Socket),
     server_loop(SSL, Socket).
 
-                 /*******************************
-                 *             SERVER           *
-                 *******************************/
+		 /*******************************
+		 *             SERVER           *
+		 *******************************/
 
 :- dynamic
     stop_server/0,
@@ -284,13 +284,13 @@ ssl_server :-
 
 make_server(SSL, Socket) :-
     ssl_context(server, SSL,
-                [ peer_cert(true),
-                  cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
-                  certificate_file('tests/test_certs/server-cert.pem'),
-                  key_file('tests/test_certs/server-key.pem'),
-                  cert_verify_hook(get_cert_verify),
-                  pem_password_hook(get_server_pwd)
-                ]),
+		[ peer_cert(true),
+		  cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
+		  certificate_file('tests/test_certs/server-cert.pem'),
+		  key_file('tests/test_certs/server-key.pem'),
+		  cert_verify_hook(get_cert_verify),
+		  pem_password_hook(get_server_pwd)
+		]),
     tcp_socket(Socket),
     tcp_setopt(Socket, reuseaddr),
     tcp_bind(Socket, localhost:Port),
@@ -308,7 +308,7 @@ server_loop(SSL, Server) :-
     ;   true
     ),
     catch(copy_client(In, Out), E,
-          assert(copy_error(E))),
+	  assert(copy_error(E))),
     call_cleanup(close(In), close(Out)),
     (   retract(stop_server)
     ->  tcp_close_socket(Server)
@@ -320,50 +320,50 @@ copy_client(In, Out) :-
     (   Line == end_of_file
     ->  true
     ;   debug(data, 'SERVER: Got ~s (sleeping 1.5 sec)', [Line]),
-        sleep(1.5),
-        debug(data, 'SERVER: writing ~s', [Line]),
-        format(Out, '~s~n', [Line]),
-        flush_output(Out),
-        (   atom_codes(bye, Line)
-        ->  assert(stop_server)
-        ;   true
-        ),
-        copy_client(In, Out)
+	sleep(1.5),
+	debug(data, 'SERVER: writing ~s', [Line]),
+	format(Out, '~s~n', [Line]),
+	flush_output(Out),
+	(   atom_codes(bye, Line)
+	->  assert(stop_server)
+	;   true
+	),
+	copy_client(In, Out)
     ).
 
 get_server_pwd(_SSL, "apenoot1") :-
     debug(passwd, 'Returning password from server passwd hook', []).
 
 get_cert_verify(SSL,
-                ProblemCertificate, AllCertificates, FirstCertificate,
-                Error) :-
+		ProblemCertificate, AllCertificates, FirstCertificate,
+		Error) :-
     debug(certificate,
-          'Accept from ~p, \c
-               ProblemCert: ~p, AllCerts: ~p, FirstCert: ~p, \c
-               Error: ~p',
-          [ SSL,
-            ProblemCertificate, AllCertificates, FirstCertificate,
-            Error
-          ]),
+	  'Accept from ~p, \c
+	       ProblemCert: ~p, AllCerts: ~p, FirstCert: ~p, \c
+	       Error: ~p',
+	  [ SSL,
+	    ProblemCertificate, AllCertificates, FirstCertificate,
+	    Error
+	  ]),
     (   Error == verified
     ->  true
     ;   domain_error(verified, Error)
     ).
 
 
-                 /*******************************
-                 *             CLIENT           *
-                 *******************************/
+		 /*******************************
+		 *             CLIENT           *
+		 *******************************/
 
 client :-
     ssl_context(client, SSL,
-             [ host('localhost'),
-               cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
-               certificate_file('tests/test_certs/client-cert.pem'),
-               key_file('tests/test_certs/client-key.pem'),
-               close_parent(true),
-               pem_password_hook(get_client_pwd)
-             ]),
+	     [ host('localhost'),
+	       cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
+	       certificate_file('tests/test_certs/client-cert.pem'),
+	       key_file('tests/test_certs/client-key.pem'),
+	       close_parent(true),
+	       pem_password_hook(get_client_pwd)
+	     ]),
     client_loop(SSL).
 
 client_loop(SSL) :-
@@ -376,7 +376,7 @@ client_loop(SSL) :-
     write_server(Message, In, Out),
     (   option(timeout(T))
     ->  Wait is T*2,
-        sleep(Wait)
+	sleep(Wait)
     ;   true
     ),
     write_server(bye, In, Out),
@@ -389,12 +389,12 @@ write_server(Message, In, Out) :-
     sleep(0.1),
     debug(data, 'CLIENT: attempting to read reply (timeout 1 sec)', []),
     catch(read_from_server(In, Message),
-          E,
-          debug(data, 'CLIENT: exception: ~q', [E])),
+	  E,
+	  debug(data, 'CLIENT: exception: ~q', [E])),
     (   var(E)
     ->  true
     ;   debug(data, 'CLIENT: retrying read reply (timeout 1 sec)', []),
-        read_from_server(In, Message)
+	read_from_server(In, Message)
     ).
 
 read_from_server(In, Message) :-
@@ -402,12 +402,12 @@ read_from_server(In, Message) :-
     (   Line == end_of_file
     ->  true
     ;   atom_codes(Reply, Line),
-        debug(data, 'CLIENT: Got ~q', [Reply]),
-        (   Reply == Message
-        ->  true
-        ;   format(user_error, 'CLIENT: ERROR: Sent ~q, Got ~q~n',
-                   [Message, Reply])
-        )
+	debug(data, 'CLIENT: Got ~q', [Reply]),
+	(   Reply == Message
+	->  true
+	;   format(user_error, 'CLIENT: ERROR: Sent ~q, Got ~q~n',
+		   [Message, Reply])
+	)
     ).
 
 get_client_pwd(_SSL, "apenoot2") :-
@@ -415,11 +415,11 @@ get_client_pwd(_SSL, "apenoot2") :-
 
 :- end_tests(ssl_server).
 
-                 /*******************************
-                 *             CERTS            *
-                 *******************************/
+		 /*******************************
+		 *             CERTS            *
+		 *******************************/
 
-:- begin_tests(ssl_certificates).
+:- begin_tests(ssl_certificates, [condition(current_prolog_flag(threads,true))]).
 
 :- dynamic
     certificate_verification_result/1,
@@ -439,17 +439,17 @@ do_verification_test(Key, Goal, VerificationResults, Status) :-
     retractall(test_port(_)),
     asserta(test_port(Port)),
     (   setup_call_cleanup(
-            thread_create(verification_server(Key, ServerFd, Id), Id, []),
-            catch(Goal,
-                  Exception,
-                  Status = error(Exception)),
-            stop_verification_server(Id))
+	    thread_create(verification_server(Key, ServerFd, Id), Id, []),
+	    catch(Goal,
+		  Exception,
+		  Status = error(Exception)),
+	    stop_verification_server(Id))
     ->  ignore(Status = true)
     ;   Status = fail
     ),
     findall(VerificationResult,
-            retract(certificate_verification_result(VerificationResult)),
-            VerificationResults0),
+	    retract(certificate_verification_result(VerificationResult)),
+	    VerificationResults0),
     sort(VerificationResults0, VerificationResults).
 
 stop_verification_server(Id):-
@@ -457,26 +457,26 @@ stop_verification_server(Id):-
     tcp_socket(S),
     test_port(Port),
     catch((tcp_connect(S, localhost:Port, Read, Write),
-           close(Write, [force(true)]),
-           close(Read, [force(true)])),
-          _,
-          tcp_close_socket(S)),
+	   close(Write, [force(true)]),
+	   close(Read, [force(true)])),
+	  _,
+	  tcp_close_socket(S)),
     thread_join(Id, _Status).
 
 verification_server(TestKey, ServerFd, Id):-
     setup_call_cleanup(true,
-                       verification_server_1(TestKey, Id, ServerFd),
-                       tcp_close_socket(ServerFd)).
+		       verification_server_1(TestKey, Id, ServerFd),
+		       tcp_close_socket(ServerFd)).
 
 verification_server_1(TestKey, Id, ServerFd):-
     tcp_listen(ServerFd, 5),
     format(atom(Key), 'tests/test_certs/~w-key.pem', [TestKey]),
     format(atom(Cert), 'tests/test_certs/~w-cert.pem', [TestKey]),
     ssl_context(server, SSL,
-                [ certificate_file(Cert),
-                  key_file(Key),
-                  password("apenoot")
-                ]),
+		[ certificate_file(Cert),
+		  key_file(Key),
+		  password("apenoot")
+		]),
     verification_server_loop(Id, ServerFd, SSL).
 
 verification_server_loop(Id, _ServerFd, _SSL) :-
@@ -485,17 +485,17 @@ verification_server_loop(Id, _ServerFd, _SSL) :-
 
 verification_server_loop(Id, ServerFd, SSL) :-
     catch(accept_client(ServerFd, SSL),
-          _Term,
-          true),
+	  _Term,
+	  true),
     verification_server_loop(Id, ServerFd, SSL).
 
 accept_client(ServerFd, SSL):-
     tcp_accept(ServerFd, ClientFd, _Peer),
     setup_call_cleanup(tcp_open_socket(ClientFd, PlainIn, PlainOut),
-                       dispatch_client(SSL, PlainIn, PlainOut),
-                       ( close(PlainOut, [force(true)]),
-                         close(PlainIn, [force(true)])
-                       )).
+		       dispatch_client(SSL, PlainIn, PlainOut),
+		       ( close(PlainOut, [force(true)]),
+			 close(PlainIn, [force(true)])
+		       )).
 
 
 dispatch_client(SSL, PlainIn, PlainOut):-
@@ -516,45 +516,45 @@ try_ssl_client(Hostname, Hook):-
 try_ssl_client(Hostname, Hook, Options):-
     test_port(Port),
     ssl_context(client, SSL,
-                [ host(Hostname),
-                  port(Port),
-                  cert_verify_hook(Hook),
-                  cacerts([file('tests/test_certs/rootCA/cacert.pem')])
-                | Options
-                ]),
+		[ host(Hostname),
+		  port(Port),
+		  cert_verify_hook(Hook),
+		  cacerts([file('tests/test_certs/rootCA/cacert.pem')])
+		| Options
+		]),
     % Always connect to localhost
     verify_client(localhost:Port, SSL).
 
 verify_client(Address, SSL) :-
     tcp_socket(S),
     setup_call_cleanup(tcp_connect(S, Address, PlainIn, PlainOut),
-                       verify_client_1(SSL, PlainIn, PlainOut),
-                       ( close(PlainOut, [force(true)]),
-                         close(PlainIn, [force(true)])
-                       )).
+		       verify_client_1(SSL, PlainIn, PlainOut),
+		       ( close(PlainOut, [force(true)]),
+			 close(PlainIn, [force(true)])
+		       )).
 
 verify_client_1(SSL, PlainIn, PlainOut):-
     set_stream(PlainIn, timeout(1)),
     setup_call_cleanup(ssl_negotiate(SSL, PlainIn, PlainOut, SSLIn, SSLOut),
-                       ( format(SSLOut, 'Hello~n', []),
-                         flush_output(SSLOut),
-                         read_line_to_codes(SSLIn, Codes),
-                         assertion(Codes == `Hello`)
-                       ),
-                       ( close(SSLOut, [force(true)]),
-                         close(SSLIn, [force(true)])
-                       )).
+		       ( format(SSLOut, 'Hello~n', []),
+			 flush_output(SSLOut),
+			 read_line_to_codes(SSLIn, Codes),
+			 assertion(Codes == `Hello`)
+		       ),
+		       ( close(SSLOut, [force(true)]),
+			 close(SSLIn, [force(true)])
+		       )).
 
 zz(Goal):-
     setup_call_catcher_cleanup(format('CALL : ~q~n', [Goal]),
-                               Goal,
-                               Catcher,
-                               ( Catcher = exception(E) -> format('ERROR: ~q (~q)~n', [Goal, E])
-                               ; Catcher == fail-> format('FAIL : ~q~n', [Goal])
-                               ; format('EXIT : ~q~n', [Goal]))
-                              ),
+			       Goal,
+			       Catcher,
+			       ( Catcher = exception(E) -> format('ERROR: ~q (~q)~n', [Goal, E])
+			       ; Catcher == fail-> format('FAIL : ~q~n', [Goal])
+			       ; format('EXIT : ~q~n', [Goal]))
+			      ),
     ( var(Catcher)->
-        format('PEND : ~q~n', [Goal])
+	format('PEND : ~q~n', [Goal])
     ; true
     ).
 
@@ -570,15 +570,15 @@ fail_verify_hook(_,_,_,_,Error):-
 
 abort_verify_hook(_,_,_,_,Error):-
     ( Error == verified->
-        true
+	true
     ; throw(error(certificate_error(Error), _))
     ).
 
 test_crl_hook(_, _, _, _, verified).
 test_crl_hook(_SSL, Cert, _Chain, _Tail, revoked):-
     setup_call_cleanup(open('tests/test_certs/rootCA-crl.pem', read, Stream),
-                       load_crl(Stream, CRL),
-                       close(Stream)),
+		       load_crl(Stream, CRL),
+		       close(Stream)),
     certificate_field(Cert, serial(Serial)),
     memberchk(revocations(Revocations), CRL),
     \+memberchk(revoked(Serial, _RevocationTime), Revocations).
@@ -616,9 +616,9 @@ test('Valid certificate, illegal wildcard hostname in CN, signed by trusted CA',
 
 test('Hostname containing embedded NULL, signed by trusted CA',
      [ true(VerificationResults:Status ==
-            [hostname_mismatch,verified]:true),
+	    [hostname_mismatch,verified]:true),
        condition((size_file('tests/test_certs/11-cert.pem', Size),
-                  Size > 0))
+		  Size > 0))
      ]):-
     do_verification_test(11, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
@@ -631,14 +631,14 @@ test('Certificate which is not yet valid, signed by trusted CA', VerificationRes
 test('Certificate is not issued by trusted CA'):-
     do_verification_test(14, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status),
     ( VerificationResults:Status == [unknown_issuer]:true ->
-        % OpenSSL 1.0.2 - 1.1.1h
-        true
+	% OpenSSL 1.0.2 - 1.1.1h
+	true
     ; VerificationResults:Status == [unknown_issuer, not_trusted]:true ->
-        % OpenSSL 1.0.1 and below
-        true
+	% OpenSSL 1.0.1 and below
+	true
     ; VerificationResults:Status == [unknown_issuer, verified]:true ->
-        % OpenSSL 1.1.1i and above
-        true
+	% OpenSSL 1.1.1i and above
+	true
     ).
 
 test('Certificate is issued by trusted CA but has been altered so signature is wrong', VerificationResults:Status == [bad_signature, verified]:true):-
@@ -719,9 +719,9 @@ test(roundtrip, RecoveredText == Text) :-
 :- end_tests(crypto_data_encrypt).
 
 
-                 /*******************************
-                 *             UTIL             *
-                 *******************************/
+		 /*******************************
+		 *             UTIL             *
+		 *******************************/
 
 is_certificate(Cert) :-
     blob(Cert, ssl_certificate),
@@ -777,5 +777,3 @@ is_hex_string(S) :-
 is_hex(C) :- between(0'0, 0'9, C), !.
 is_hex(C) :- between(0'A, 0'F, C), !.
 is_hex(C) :- between(0'a, 0'f, C), !.
-
-
