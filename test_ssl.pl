@@ -3,9 +3,10 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2013-2020, University of Amsterdam
+    Copyright (c)  2013-2022, University of Amsterdam
 			      VU University Amsterdam
 			      CWI, Amsterdam
+			      SWI-Prolog Solutions b.v.
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -45,7 +46,9 @@
 :- use_module(library(error)).
 :- use_module(library(readutil)).
 :- use_module(library(socket)).
+:- if(current_prolog_flag(threads, true)).
 :- use_module(https).
+:- endif.
 
 %:- debug(connection).
 %:- debug(certificate).
@@ -83,6 +86,15 @@ test(readme, Title == "# SWI-Prolog SSL interface") :-
 		      /SWI-Prolog/packages-ssl/master/README.md',
 		  String),
     split_string(String, "\n", " \t", [Title|_]).
+
+:- if(\+current_predicate(http_download/2)).
+:- use_module(library(http/http_open)).
+http_download(URL, String) :-
+    http_open(URL, In, []),
+    call_cleanup(
+	read_string(In, _, String),
+	close(In)).
+:- endif.
 
 :- end_tests(https_open).
 
