@@ -61,7 +61,8 @@ test_ssl :-
 		ssl_keys,
 		https_open,
 		ssl_certificates,
-		crypto_data_encrypt
+		crypto_data_encrypt,
+		crypto_hash
 	      ]).
 :- dynamic
     option/1,                       % Options to test
@@ -729,6 +730,17 @@ test(roundtrip, RecoveredText == Text) :-
     crypto_data_decrypt(CipherText, 'aes-128-cbc', Key, IV, RecoveredText, []).
 
 :- end_tests(crypto_data_encrypt).
+
+:- begin_tests(crypto_hash).
+
+test(validate_password) :-
+    crypto_password_hash("root",
+			 '$pbkdf2-sha512$t=131072$\c
+			 fHxS+fONBql1sIqx5wUw2g$\c
+			 JCdZjj3ZLqgl1Yj5jRvDoCIP+FL0A13iem6eXfonBUvs0g6U6fAd8R9PTLQaq\c
+			 sUVawoj2S2z1lPPAMd3EfYVvw').
+
+:- end_tests(crypto_hash).
 
 
 		 /*******************************
