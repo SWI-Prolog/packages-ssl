@@ -35,7 +35,7 @@ Last updated:
 
     creates: newkey.pem and newreq.pem
 
-3. /usr/lib/ssl/misc/CA.pl -signreq
+3. /usr/lib/ssl/misc/CA.pl -sign
 
     apenoot
 
