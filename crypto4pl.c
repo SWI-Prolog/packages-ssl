@@ -719,7 +719,7 @@ pl_crypto_password_hash_bcrypt(term_t tpw, term_t tsetting, term_t tdigest)
 
   char* ret = _crypt_blowfish_rn(pw, setting, (char *) digest, DIGEST_LEN);
   if ( ret == NULL )
-    return FALSE;
+    return PL_domain_error("setting", tsetting);
 
   return PL_unify_chars(tdigest, PL_ATOM | REP_UTF8, DIGEST_LEN - 1, (char *) digest);
 }
