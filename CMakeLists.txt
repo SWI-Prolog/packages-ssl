@@ -201,7 +201,7 @@ swipl_plugin(
     PL_LIBS ssl.pl)
 swipl_plugin(
     crypto4pl
-    C_SOURCES crypto4pl.c ../clib/error.c
+    C_SOURCES crypto4pl.c crypt_blowfish.c ../clib/error.c
     THREADED
     C_LIBS ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_OS_LIBS}
     C_INCLUDE_DIR ${OPENSSL_INCLUDE_DIR}

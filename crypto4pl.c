@@ -48,6 +48,8 @@
 #ifdef HAVE_OPENSSL_KDF_H
 #include <openssl/kdf.h>
 #endif
+#include "crypt_blowfish.h"
+
 #include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
@@ -682,7 +684,7 @@ pl_crypto_stream_hash_context(term_t stream, term_t tcontext)
                  ****************************/
 
 static foreign_t
-pl_crypto_password_hash(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
+pl_crypto_password_hash_pbkdf2(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
 { char *pw, *salt;
   size_t pwlen, saltlen;
   int iter;
@@ -700,6 +702,26 @@ pl_crypto_password_hash(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
                     iter, EVP_sha512(), DIGEST_LEN, digest);
 
   return PL_unify_list_ncodes(tdigest, DIGEST_LEN, (char *) digest);
+}
+
+static foreign_t
+pl_crypto_password_hash_bcrypt(term_t tpw, term_t tsetting, term_t tdigest)
+{ char *pw, *setting;
+  size_t pwlen, settinglen;
+  const int DIGEST_LEN = 7 + 22 + 31 + 1;
+  char digest[DIGEST_LEN];
+
+  if ( !PL_get_nchars(tpw, &pwlen, &pw,
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) ||
+       !PL_get_nchars(tsetting, &settinglen, &setting,
+                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) )
+    return FALSE;
+
+  char* ret = _crypt_blowfish_rn(pw, setting, (char *) digest, DIGEST_LEN);
+  if ( ret == NULL )
+    return FALSE;
+
+  return PL_unify_chars(tdigest, PL_ATOM | REP_UTF8, DIGEST_LEN - 1, (char *) digest);
 }
 
 static foreign_t
@@ -2355,7 +2377,8 @@ install_crypto4pl(void)
   PL_register_foreign("_crypto_stream_hash_context", 2,
                       pl_crypto_stream_hash_context, 0);
 
-  PL_register_foreign("_crypto_password_hash", 4, pl_crypto_password_hash, 0);
+  PL_register_foreign("_crypto_password_hash_pbkdf2", 4, pl_crypto_password_hash_pbkdf2, 0);
+  PL_register_foreign("_crypto_password_hash_bcrypt", 3, pl_crypto_password_hash_bcrypt, 0);
   PL_register_foreign("_crypto_data_hkdf", 7, pl_crypto_data_hkdf, 0);
 
   PL_register_foreign("_crypto_ecdsa_sign", 4, pl_ecdsa_sign, 0);
