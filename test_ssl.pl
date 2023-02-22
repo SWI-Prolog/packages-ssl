@@ -740,6 +740,18 @@ test(validate_password) :-
 			 JCdZjj3ZLqgl1Yj5jRvDoCIP+FL0A13iem6eXfonBUvs0g6U6fAd8R9PTLQaq\c
 			 sUVawoj2S2z1lPPAMd3EfYVvw').
 
+test(validate_password_bcrypt) :-
+    crypto_password_hash("foobar",
+                         '$2a$11$pqt9BvPb4wOjkj5c9F14ge5R8HuI2i07hMXXk.IWciB370d2EXwX2').
+
+test(validate_password_bcrypt_roundtrip) :-
+    crypto_password_hash("hello", Hash, [algorithm(bcrypt)]),
+    crypto_password_hash("hello", Hash).
+
+test(validate_password_bcrypt_negative, [ fail ]) :-
+    crypto_password_hash("hello",
+                         '$2a$11$pqt9BvPb4wOjkj5c9F14ge5R8HuI2i07hMXXk.IWciB370d2EXwX2').
+
 :- end_tests(crypto_hash).
 
 

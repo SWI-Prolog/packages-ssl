@@ -66,7 +66,7 @@
 :- autoload(library(apply),[foldl/4,maplist/3]).
 :- autoload(library(base64),[base64_encoded/3]).
 :- autoload(library(error),[must_be/2,domain_error/2]).
-:- autoload(library(lists),[select/3,reverse/2]).
+:- autoload(library(lists),[append/3,select/3,reverse/2]).
 :- autoload(library(option),[option/3,option/2]).
 
 :- use_foreign_library(foreign(crypto4pl)).
@@ -314,11 +314,16 @@ crypto_stream_hash(Stream, Hash) :-
 crypto_password_hash(Password, Hash) :-
     (   nonvar(Hash) ->
         must_be(atom, Hash),
-        split_string(Hash, "$", "$", ["pbkdf2-sha512",Ps,SaltB64,HashB64]),
-        atom_to_term(Ps, t=Iterations, []),
-        bytes_base64(SaltBytes, SaltB64),
-        bytes_base64(HashBytes, HashB64),
-        '_crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes)
+        split_string(Hash, "$", "$", Parts),
+        ( Parts = ["pbkdf2-sha512",Ps,SaltB64,HashB64] ->
+          atom_to_term(Ps, t=Iterations, []),
+          bytes_base64(SaltBytes, SaltB64),
+          bytes_base64(HashBytes, HashB64),
+          '_crypto_password_hash_pbkdf2'(Password, SaltBytes, Iterations, HashBytes)
+        ; Parts = ["2a", _, _],
+          sub_atom(Hash, 0, 29, 31, Setting),
+          '_crypto_password_hash_bcrypt'(Password, Setting, Hash)
+        )
     ;   crypto_password_hash(Password, Hash, [])
     ).
 
@@ -347,8 +352,8 @@ crypto_password_hash(Password, Hash) :-
 %   Admissible options are:
 %
 %     - algorithm(+Algorithm)
-%       The algorithm to use. Currently, the only available algorithm
-%       is =|pbkdf2-sha512|=, which is therefore also the default.
+%       The algorithm to use. Currently, the only available algorithms
+%       are =|pbkdf2-sha512|= (the default) and =bcrypt=.
 %     - cost(+C)
 %       C is an integer, denoting the binary logarithm of the number
 %       of _iterations_ used for the derivation of the hash. This
@@ -377,17 +382,23 @@ crypto_password_hash(Password, Hash, Options) :-
     must_be(list, Options),
     option(cost(C), Options, 17),
     Iterations is 2^C,
-    Algorithm = 'pbkdf2-sha512', % current default and only option
-    option(algorithm(Algorithm), Options, Algorithm),
+    option(algorithm(Algorithm), Options, 'pbkdf2-sha512'),
+    memberchk(Algorithm, ['pbkdf2-sha512', bcrypt]),
     (   option(salt(SaltBytes), Options) ->
         true
     ;   crypto_n_random_bytes(16, SaltBytes)
     ),
-    '_crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes),
-    bytes_base64(HashBytes, HashB64),
-    bytes_base64(SaltBytes, SaltB64),
-    format(atom(Hash),
-           "$pbkdf2-sha512$t=~d$~w$~w", [Iterations,SaltB64,HashB64]).
+    (  Algorithm == 'pbkdf2-sha512'
+    -> '_crypto_password_hash_pbkdf2'(Password, SaltBytes, Iterations, HashBytes),
+       bytes_base64(HashBytes, HashB64),
+       bytes_base64(SaltBytes, SaltB64),
+       format(atom(Hash),
+              "$pbkdf2-sha512$t=~d$~w$~w", [Iterations,SaltB64,HashB64])
+    ;  bcrypt_bytes_base64(SaltBytes, SaltB64),
+       option(cost(Cost), Options, 11),
+       format(string(Setting), "$2a$~|~`0t~d~2+$~w", [Cost, SaltB64]),
+       '_crypto_password_hash_bcrypt'(Password, Setting, Hash)
+    ).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -403,6 +414,17 @@ bytes_base64(Bytes, Base64) :-
         atom_codes(Atom, Bytes)
     ;   atom_codes(Atom, Bytes),
         base64_encoded(Atom, Base64, [padding(false), encoding(iso_latin_1)])
+    ).
+
+% Bcrypt uses a different alphabeta for base64 encoding, annoyingly
+bcrypt_bytes_base64(Bytes, Base64) :-
+    (   var(Bytes) ->
+        base64_encoded(Atom, Base64, [padding(false), encoding(utf8),
+                                      charset(openbsd)]),
+        atom_codes(Atom, Bytes)
+    ;   atom_codes(Atom, Bytes),
+        base64_encoded(Atom, Base64, [padding(false), encoding(utf8),
+                                      charset(openbsd)])
     ).
 
 
