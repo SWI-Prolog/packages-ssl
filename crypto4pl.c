@@ -683,13 +683,14 @@ pl_crypto_stream_hash_context(term_t stream, term_t tcontext)
                  *    Hashes of passwords   *
                  ****************************/
 
+#define PBKDF2_DIGEST_LEN 64
+
 static foreign_t
 pl_crypto_password_hash_pbkdf2(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
 { char *pw, *salt;
   size_t pwlen, saltlen;
   int iter;
-  const int DIGEST_LEN = 64;
-  unsigned char digest[DIGEST_LEN];
+  unsigned char digest[PBKDF2_DIGEST_LEN];
 
   if ( !PL_get_nchars(tpw, &pwlen, &pw,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) ||
@@ -699,17 +700,18 @@ pl_crypto_password_hash_pbkdf2(term_t tpw, term_t tsalt, term_t titer, term_t td
 
   PKCS5_PBKDF2_HMAC((const char *) pw, pwlen,
                     (const unsigned char *) salt, saltlen,
-                    iter, EVP_sha512(), DIGEST_LEN, digest);
+                    iter, EVP_sha512(), PBKDF2_DIGEST_LEN, digest);
 
-  return PL_unify_list_ncodes(tdigest, DIGEST_LEN, (char *) digest);
+  return PL_unify_list_ncodes(tdigest, PBKDF2_DIGEST_LEN, (char *) digest);
 }
+
+#define BCRYPT_DIGEST_LEN (7 + 22 + 31 + 1)
 
 static foreign_t
 pl_crypto_password_hash_bcrypt(term_t tpw, term_t tsetting, term_t tdigest)
 { char *pw, *setting;
   size_t pwlen, settinglen;
-  const int DIGEST_LEN = 7 + 22 + 31 + 1;
-  char digest[DIGEST_LEN];
+  char digest[BCRYPT_DIGEST_LEN];
 
   if ( !PL_get_nchars(tpw, &pwlen, &pw,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) ||
@@ -717,11 +719,11 @@ pl_crypto_password_hash_bcrypt(term_t tpw, term_t tsetting, term_t tdigest)
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) )
     return FALSE;
 
-  char* ret = _crypt_blowfish_rn(pw, setting, (char *) digest, DIGEST_LEN);
+  char* ret = _crypt_blowfish_rn(pw, setting, (char *) digest, BCRYPT_DIGEST_LEN);
   if ( ret == NULL )
     return PL_domain_error("setting", tsetting);
 
-  return PL_unify_chars(tdigest, PL_ATOM | REP_UTF8, DIGEST_LEN - 1, (char *) digest);
+  return PL_unify_chars(tdigest, PL_ATOM | REP_UTF8, BCRYPT_DIGEST_LEN - 1, (char *) digest);
 }
 
 static foreign_t
@@ -1713,6 +1715,8 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
   return raise_ssl_error(ERR_get_error());
 }
 
+#define MAX_AUTHLEN 256
+
 static foreign_t
 pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
                        term_t key_t, term_t iv_t,
@@ -1732,7 +1736,6 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
   int rep = REP_UTF8;
   int padding = 1;
   int authlen;
-  const int MAX_AUTHLEN = 256;
 #ifdef EVP_CTRL_AEAD_SET_TAG
   char authtag[MAX_AUTHLEN];
 #endif

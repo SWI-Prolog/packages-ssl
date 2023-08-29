@@ -291,6 +291,19 @@ typedef enum
 		 *	       ATOMIC		*
 		 *******************************/
 
+#if O_PLMT
+#ifdef _MSC_VER
+#define ATOMIC_INC(ptr)		_Generic((*ptr), \
+					 int: _InterlockedIncrement((long*)ptr), \
+					 unsigned int: _InterlockedIncrement((long*)ptr), \
+					 size_t: _InterlockedIncrement64((__int64*)ptr), \
+					 __int64: _InterlockedIncrement64((__int64*)ptr))
+#define ATOMIC_DEC(ptr)		_Generic((*ptr), \
+					 int: _InterlockedDecrement((long*)ptr), \
+					 unsigned int: _InterlockedDecrement((long*)ptr), \
+					 size_t:  _InterlockedDecrement64((__int64*)ptr), \
+					 __int64: _InterlockedDecrement64((__int64*)ptr))
+#else
 #define ATOMIC_ADD(ptr, v)	__atomic_add_fetch(ptr, v, __ATOMIC_SEQ_CST)
 #define ATOMIC_SUB(ptr, v)	__atomic_sub_fetch(ptr, v, __ATOMIC_SEQ_CST)
 #define ATOMIC_INC(ptr)		ATOMIC_ADD(ptr, 1) /* ++(*ptr) */
@@ -298,13 +311,31 @@ typedef enum
 #define __COMPARE_AND_SWAP(at, from, to) \
 	__atomic_compare_exchange_n(at, &(from), to, FALSE, \
 				    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+#endif
 
 static inline int
 COMPARE_AND_SWAP_PTR(void *at, void *from, void *to)
-{ void **ptr = at;
-
+{
+#ifdef _MSC_VER
+# if SIZEOF_VOIDP == 4
+  return _InterlockedCompareExchange(at, (long)to, (long)from) == (long)from;
+# else
+  return _InterlockedCompareExchange64(at, (int64_t)to, (int64_t)from) == (int64_t)from;
+#endif
+#else
+  void **ptr = at;
   return __COMPARE_AND_SWAP(ptr, from, to);
+#endif
 }
+
+#else
+
+#define ATOMIC_INC(ptr)			(++(*ptr))
+#define ATOMIC_DEC(ptr)			(--(*ptr))
+#define COMPARE_AND_SWAP(ptr,o,n)	(*ptr == o ? (*ptr = n), 1 : 0)
+#define COMPARE_AND_SWAP_PTR(ptr,o,n)	COMPARE_AND_SWAP(ptr,o,n)
+
+#endif
 
 
 		 /*******************************
