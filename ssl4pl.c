@@ -7,6 +7,7 @@
     Copyright (c)  2004-2020, SWI-Prolog Foundation
                               VU University Amsterdam
 			      CWI, Amsterdam
+			      SWI-Prolog Solutions b.v.
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -35,6 +36,7 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
+#define _CRT_SECURE_NO_WARNINGS 1
 #include <config.h>
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
@@ -543,8 +545,14 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   /* mktime assumes that the time_tm contains information for localtime. */
   /* Convert back to UTC: */
   if ((time_t)-1 != result)
-  { result += lSecondsFromUTC; /* Add in the UTC offset of the original value */
-    result -= timezone; /* Adjust for localtime */
+  { long tz;
+#ifdef __WINDOWS__
+    _get_timezone(&tz);
+#else
+    tz = timezone;
+#endif
+    result += lSecondsFromUTC; /* Add in the UTC offset of the original value */
+    result -= tz;	       /* Adjust for localtime */
   } else
   { ssl_deb(2, "mktime() failed");
     return FALSE;
@@ -1479,7 +1487,7 @@ struct
 static int fetch_field(field_enum *state)
 { if (certificate_fields[state->index].name != 0)
   { term_t arg = PL_new_term_ref();
-    int rc = certificate_fields[state->index].fetch(arg, state->cert);
+    foreign_t rc = certificate_fields[state->index].fetch(arg, state->cert);
     state->current_field = PL_new_term_ref();
     return rc && PL_unify_term(state->current_field,
 			       PL_FUNCTOR_CHARS, certificate_fields[state->index].name, 1,
@@ -3015,7 +3023,8 @@ ssl_server_alpn_select_cb(SSL *ssl,
     return ret;
   } else
   { int ret = SSL_select_next_proto((unsigned char**)out, outlen,
-				    config->alpn_protos, config->alpn_protos_len,
+				    config->alpn_protos,
+				    (unsigned int)config->alpn_protos_len,
 				    in, inlen);
     if ( ret == OPENSSL_NPN_NEGOTIATED )
       return SSL_TLSEXT_ERR_OK;
@@ -3030,7 +3039,8 @@ ssl_init_alpn_protos(PL_SSL *config)
   if ( config->alpn_protos ||
        ( config->role == PL_SSL_SERVER && config->cb_alpn_proto.goal ) ) {
     if ( config->role == PL_SSL_CLIENT ) {
-      SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos, config->alpn_protos_len);
+      SSL_CTX_set_alpn_protos(config->ctx, config->alpn_protos,
+			      (int)config->alpn_protos_len);
     } else if ( config->role == PL_SSL_SERVER ) {
       SSL_CTX_set_alpn_select_cb(config->ctx, &ssl_server_alpn_select_cb, config);
     }
@@ -3296,7 +3306,7 @@ ssl_read(void *handle, char *buf, size_t size)
   assert(ssl != NULL);
 
   for(;;)
-  { int rbytes = SSL_read(ssl, buf, size);
+  { int rbytes = SSL_read(ssl, buf, (int)size);
 
     switch(ssl_inspect_status(instance, rbytes, STAT_READ))
     { case SSL_PL_OK:
@@ -3322,7 +3332,7 @@ ssl_write(void *handle, char *buf, size_t size)
   assert(ssl != NULL);
 
   for(;;)
-  { int wbytes = SSL_write(ssl, buf, size);
+  { int wbytes = SSL_write(ssl, buf, (int)size);
 
     switch(ssl_inspect_status(instance, wbytes, STAT_WRITE))
     { case SSL_PL_OK:
@@ -3541,7 +3551,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
             protos_vec = new_protos_vec;
           }
         }
-        protos_vec[current_size] = proto_len;
+        protos_vec[current_size] = (unsigned char)proto_len;
         memcpy(protos_vec + current_size + 1, proto, proto_len);
         current_size = total_length;
       }
@@ -4344,7 +4354,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   term_t node_t = PL_new_term_ref();
   int version;
   unsigned char *master_key;
-  int master_key_length;
+  size_t master_key_length;
   const char *cipher;
 
   if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
