@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2016, SWI-Prolog Foundation
+    Copyright (c)  2004-2023, SWI-Prolog Solutions b.v.
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,7 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
+#define _CRT_SECURE_NO_WARNINGS 1
 #include <config.h>
 #include <string.h>
 
@@ -109,7 +110,7 @@ ssl_strdup(const char *s)
  * error.  If there is already a pending exception, this is returned.
  *
  */
-static int
+static term_t
 ssl_error_term(long e)
 { term_t ex;
   char buffer[256];
