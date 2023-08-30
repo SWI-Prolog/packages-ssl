@@ -546,7 +546,7 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   /* Convert back to UTC: */
   if ((time_t)-1 != result)
   { long tz;
-#ifdef __WINDOWS__
+#ifdef _MSC_VER
     _get_timezone(&tz);
 #else
     tz = timezone;
