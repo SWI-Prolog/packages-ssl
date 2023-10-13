@@ -40,7 +40,7 @@
 :- autoload(library(c14n2),[xml_write_canonical/3]).
 :- autoload(library(crypto),
 	    [crypto_data_hash/3,rsa_sign/4,hex_bytes/2,rsa_verify/4]).
-:- autoload(library(debug),[debug/3]).
+:- use_module(library(debug),[debug/3]).
 :- autoload(library(error),
 	    [type_error/2,domain_error/2,existence_error/2]).
 :- autoload(library(lists),[member/2]).

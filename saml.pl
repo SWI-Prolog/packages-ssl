@@ -38,7 +38,7 @@
 
 :- autoload(library(base64),[base64/2]).
 :- autoload(library(crypto),[rsa_sign/4,hex_bytes/2]).
-:- autoload(library(debug),[debug/3,debugging/1]).
+:- use_module(library(debug),[debug/3,debugging/1]).
 :- autoload(library(error),
 	    [domain_error/2,existence_error/2,permission_error/3]).
 :- autoload(library(lists),[member/2,subtract/3,select/3]).

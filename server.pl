@@ -35,7 +35,7 @@
 :- module(server,
           [ server/0
           ]).
-:- autoload(library(debug),[debug/1,debug/3]).
+:- use_module(library(debug),[debug/1,debug/3]).
 :- autoload(library(readutil),[read_line_to_codes/2]).
 :- autoload(library(socket),
 	    [ tcp_socket/1,
