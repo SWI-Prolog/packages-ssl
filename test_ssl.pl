@@ -82,7 +82,8 @@ cert_file(File, Abs) :-
 
 :- begin_tests(https_open, [condition(run_network_tests)]).
 
-test(readme, Title == "# SWI-Prolog SSL interface") :-
+test(readme, [Title == "# SWI-Prolog SSL interface",
+              timeout(20)]) :-
     http_download('https://raw.githubusercontent.com\c
 		      /SWI-Prolog/packages-ssl/master/README.md',
 		  String),
@@ -302,7 +303,8 @@ make_server(SSL, Socket) :-
 		  certificate_file('tests/test_certs/server-cert.pem'),
 		  key_file('tests/test_certs/server-key.pem'),
 		  cert_verify_hook(get_cert_verify),
-		  pem_password_hook(get_server_pwd)
+		  pem_password_hook(get_server_pwd),
+                  close_parent(true)
 		]),
     tcp_socket(Socket),
     tcp_setopt(Socket, reuseaddr),
