@@ -65,6 +65,7 @@ files such that we can generate these in the CMAKE binary directory.
 
 main(Argv) :-
     set_home,
+    set_cnf,
     argv_options(Argv, _, Options),
     (   option(debug(true), Options)
     ->  debug(mkcerts)
@@ -81,6 +82,18 @@ main(Argv) :-
 set_home :-
     working_directory(PWD, PWD),
     setenv('HOME', PWD).
+
+set_cnf :-
+    getenv('CONDA_BUILD', _),
+    getenv('PREFIX', OsPrefix),
+    prolog_to_os_filename(Prefix, OsPrefix),
+    directory_file_path(Prefix, 'Library/openssl.cnf', Cnf),
+    exists_file(Cnf),
+    !,
+    prolog_to_os_filename(Cnf, OsCnf),
+    setenv('OPENSSL_CONF', OsCnf).
+set_cnf.
+
 
 make_ssl_test_data :-
     make_ssl_test_data('../../../packages/ssl/tests', test_certs).
