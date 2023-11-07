@@ -4,7 +4,7 @@
 		   Markus Triska and James Cash
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2020, SWI-Prolog Foundation
+    Copyright (c)  2004-2023, SWI-Prolog Foundation
                               VU University Amsterdam
 			      CWI, Amsterdam
 			      SWI-Prolog Solutions b.v.
@@ -57,6 +57,8 @@
 #ifdef HAVE_OPENSSL_CORE_NAMES_H
 #include <openssl/core_names.h>
 #endif
+
+#include "ssl_applink.h"
 
 #ifdef LIBRESSL_VERSION_NUMBER
 #undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */

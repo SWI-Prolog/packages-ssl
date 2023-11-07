@@ -93,3 +93,4 @@
 #cmakedefine WORDS_BIGENDIAN @WORDS_BIGENDIAN@
 #cmakedefine _REENTRANT @_REENTRANT@
 #cmakedefine size_t @size_t@
+#cmakedefine HAVE_OPENSSL_APPLINK_C @HAVE_OPENSSL_APPLINK_C@
