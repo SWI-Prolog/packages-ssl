@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2013-2022, University of Amsterdam
+    Copyright (c)  2013-2023, University of Amsterdam
 			      VU University Amsterdam
 			      CWI, Amsterdam
 			      SWI-Prolog Solutions b.v.
@@ -80,6 +80,17 @@ cert_file(File, Abs) :-
     file_directory_name(MyFile, MyDir),
     atomic_list_concat([MyDir, File], /, Abs).
 
+ssl_test_file(File, File) :-
+    exists_file(File),
+    !.
+ssl_test_file(File0, File) :-
+    prolog_build_home:swipl_package(ssl, BuildDir),
+    directory_file_path(BuildDir, File0, File),
+    exists_file(File),
+    !.
+ssl_test_file(File0, _) :-
+    existence_error(ssl_test_file, File0).
+
 :- begin_tests(https_open, [condition(run_network_tests)]).
 
 test(readme, [Title == "# SWI-Prolog SSL interface",
@@ -111,7 +122,8 @@ public key for encryption and decryption of messages.
 :- meta_predicate
     from_file(+, ?, 0).
 
-from_file(File, Stream, Goal) :-
+from_file(File0, Stream, Goal) :-
+    ssl_test_file(File0, File),
     setup_call_cleanup(
 	open(File, read, Stream, [type(binary)]),
 	Goal,
@@ -297,11 +309,14 @@ ssl_server :-
     server_port/1.
 
 make_server(SSL, Socket) :-
+    ssl_test_file('tests/test_certs/rootCA/cacert.pem', CaCerts),
+    ssl_test_file('tests/test_certs/server-cert.pem', ServerCert),
+    ssl_test_file('tests/test_certs/server-key.pem', ServerKey),
     ssl_context(server, SSL,
 		[ peer_cert(true),
-		  cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
-		  certificate_file('tests/test_certs/server-cert.pem'),
-		  key_file('tests/test_certs/server-key.pem'),
+		  cacerts([file(CaCerts)]),
+		  certificate_file(ServerCert),
+		  key_file(ServerKey),
 		  cert_verify_hook(get_cert_verify),
 		  pem_password_hook(get_server_pwd),
                   close_parent(true)
@@ -371,11 +386,14 @@ get_cert_verify(SSL,
 		 *******************************/
 
 client :-
+    ssl_test_file('tests/test_certs/rootCA/cacert.pem', CaCerts),
+    ssl_test_file('tests/test_certs/client-cert.pem', ClientCert),
+    ssl_test_file('tests/test_certs/client-key.pem', ClientKey),
     ssl_context(client, SSL,
 	     [ host('localhost'),
-	       cacerts([file('tests/test_certs/rootCA/cacert.pem')]),
-	       certificate_file('tests/test_certs/client-cert.pem'),
-	       key_file('tests/test_certs/client-key.pem'),
+               cacerts([file(CaCerts)]),
+               certificate_file(ClientCert),
+               key_file(ClientKey),
 	       close_parent(true),
 	       pem_password_hook(get_client_pwd)
 	     ]),
@@ -485,8 +503,10 @@ verification_server(TestKey, ServerFd, Id):-
 
 verification_server_1(TestKey, Id, ServerFd):-
     tcp_listen(ServerFd, 5),
-    format(atom(Key), 'tests/test_certs/~w-key.pem', [TestKey]),
-    format(atom(Cert), 'tests/test_certs/~w-cert.pem', [TestKey]),
+    format(atom(Key0), 'tests/test_certs/~w-key.pem', [TestKey]),
+    format(atom(Cert0), 'tests/test_certs/~w-cert.pem', [TestKey]),
+    ssl_test_file(Key0, Key),
+    ssl_test_file(Cert0, Cert),
     ssl_context(server, SSL,
 		[ certificate_file(Cert),
 		  key_file(Key),
@@ -530,11 +550,12 @@ try_ssl_client(Hostname, Hook):-
 
 try_ssl_client(Hostname, Hook, Options):-
     test_port(Port),
+    ssl_test_file('tests/test_certs/rootCA/cacert.pem', CaCerts),
     ssl_context(client, SSL,
 		[ host(Hostname),
 		  port(Port),
 		  cert_verify_hook(Hook),
-		  cacerts([file('tests/test_certs/rootCA/cacert.pem')])
+		  cacerts([file(CaCerts)])
 		| Options
 		]),
     % Always connect to localhost
@@ -591,7 +612,8 @@ abort_verify_hook(_,_,_,_,Error):-
 
 test_crl_hook(_, _, _, _, verified).
 test_crl_hook(_SSL, Cert, _Chain, _Tail, revoked):-
-    setup_call_cleanup(open('tests/test_certs/rootCA-crl.pem', read, Stream),
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    setup_call_cleanup(open(CaCrl, read, Stream),
 		       load_crl(Stream, CRL),
 		       close(Stream)),
     certificate_field(Cert, serial(Serial)),
@@ -632,10 +654,14 @@ test('Valid certificate, illegal wildcard hostname in CN, signed by trusted CA',
 test('Hostname containing embedded NULL, signed by trusted CA',
      [ true(VerificationResults:Status ==
 	    [hostname_mismatch,verified]:true),
-       condition((size_file('tests/test_certs/11-cert.pem', Size),
-		  Size > 0))
+       condition(non_empty_file('tests/test_certs/11-cert.pem'))
      ]):-
     do_verification_test(11, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
+
+non_empty_file(File) :-
+    ssl_test_file(File, AbsFile),
+    size_file(AbsFile, Size),
+    Size > 0.
 
 test('Certificate which has expired, signed by trusted CA', VerificationResults:Status == [expired, verified]:true):-
     do_verification_test(12, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
@@ -685,32 +711,41 @@ test('Certificate has a CRL but has not been revoked. We do not provide the CRL'
     do_verification_test(23, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true)]), VerificationResults, Status).
 
 test('Certificate has a CRL but has not been revoked. We do provide the CRL', VerificationResults:Status == [verified]:true):-
-    do_verification_test(23, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(23, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl([CaCrl])]), VerificationResults, Status).
 
 test('Certificate has a CRL and has been revoked. We do not provide the CRL', VerificationResults:Status == [unknown_crl, verified]:true):-
     do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true)]), VerificationResults, Status).
 
 test('Certificate has a CRL and has been revoked. We do provide the CRL', VerificationResults:Status == [revoked, verified]:true):-
-    do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl([CaCrl])]), VerificationResults, Status).
 
 test('Certificate has a CRL but we want to ignore it', VerificationResults:Status == [verified]:true):-
     do_verification_test(24, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
 
 test('Certificate has an illegal CRL', VerificationResults:Status == [bad_certificate_use, verified]:true):-
-    do_verification_test(25, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/25-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    ssl_test_file('tests/test_certs/25-crl.pem', Ca25Crl),
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(25, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl([Ca25Crl, CaCrl])]), VerificationResults, Status).
 
 test('Intermediate CA has revoked the certificate', VerificationResults:Status == [revoked, verified]:true):-
-    do_verification_test(26, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/26-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    ssl_test_file('tests/test_certs/26-crl.pem', Ca26Crl),
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(26, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl([Ca26Crl, CaCrl])]), VerificationResults, Status).
 
 test('root CA has revoked the intermediate CA', VerificationResults:Status == [revoked, verified]:true):-
-    do_verification_test(27, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl(['tests/test_certs/27-crl.pem', 'tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
-
+    ssl_test_file('tests/test_certs/27-crl.pem', Ca27Crl),
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(27, try_ssl_client('www.example.com', test_verify_hook, [require_crl(true), crl([Ca27Crl, CaCrl])]), VerificationResults, Status).
 
 test('Accept a non-revoked certificate ourselves in a callback', VerificationResults:Status == []:true):-
-    do_verification_test(23, try_ssl_client('www.example.com', test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), VerificationResults, Status).
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(23, try_ssl_client('www.example.com', test_crl_hook, [require_crl(true), crl([CaCrl])]), VerificationResults, Status).
 
 test('Reject a revoked certificate ourselves in a callback', Status = error(_)):-
-    do_verification_test(24, try_ssl_client('www.example.com', test_crl_hook, [require_crl(true), crl(['tests/test_certs/rootCA-crl.pem'])]), _, Status).
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CaCrl),
+    do_verification_test(24, try_ssl_client('www.example.com', test_crl_hook, [require_crl(true), crl([CaCrl])]), _, Status).
 
 % It would be really nice if there were some way of adding the CRL to the context and retrying, but I dont think this is possible.
 % Looking at the code in x509_vfy.c, once the callback is called for X509_V_ERR_UNABLE_TO_GET_CRL, regardless of the callback status, it goes to err, skipping the
