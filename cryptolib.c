@@ -89,6 +89,7 @@ unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
   return rc;
 }
 
+#ifdef NEED_SSL_STRDUP
 static char *
 ssl_strdup(const char *s)
 {
@@ -99,6 +100,7 @@ ssl_strdup(const char *s)
     }
     return new;
 }
+#endif
 
 
 /***********************************************************************

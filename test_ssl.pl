@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2013-2023, University of Amsterdam
+    Copyright (c)  2013-2024, University of Amsterdam
 			      VU University Amsterdam
 			      CWI, Amsterdam
 			      SWI-Prolog Solutions b.v.
@@ -788,6 +788,11 @@ test(validate_password_bcrypt_roundtrip) :-
 test(validate_password_bcrypt_negative, [ fail ]) :-
     crypto_password_hash("hello",
                          '$2a$11$pqt9BvPb4wOjkj5c9F14ge5R8HuI2i07hMXXk.IWciB370d2EXwX2').
+
+test(null_hmac) :-
+    crypto_data_hash(`foo`, Hash1, [algorithm(sha256),hmac([1])]),
+    crypto_data_hash(`foo`, Hash2, [algorithm(sha256),hmac([1,0,1])]),
+    assertion(Hash1 \== Hash2).
 
 :- end_tests(crypto_hash).
 

@@ -53,6 +53,7 @@
 #include <openssl/dh.h>
 #define NEED_BIO 1
 #define NEED_SSL_ERR 1
+#define NEED_SSL_STRDUP 1
 #include "cryptolib.c"
 #ifdef HAVE_OPENSSL_CORE_NAMES_H
 #include <openssl/core_names.h>

@@ -2,7 +2,7 @@
 
     Author:        Matt Lilley and Markus Triska
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2023, SWI-Prolog Foundation
+    Copyright (c)  2004-2024, SWI-Prolog Foundation
                               VU University Amsterdam
 			      SWI-Prolog Solutions b.v.
     All rights reserved.
@@ -153,18 +153,20 @@ typedef struct hash_context
 
   EVP_MD_CTX     *ctx;
 #if defined USE_EVP_API
-  EVP_MAC         *mac;
-  EVP_MAC_CTX     *mac_ctx;
+  EVP_MAC	 *mac;
+  EVP_MAC_CTX    *mac_ctx;
 #else
   HMAC_CTX       *mac_ctx;
 #endif
   char           *mac_key;
+  size_t	  mac_key_len;
 } PL_CRYPTO_HASH_CONTEXT;
 
 static void
 free_crypto_hash_context(PL_CRYPTO_HASH_CONTEXT *c)
 { EVP_MD_CTX_free(c->ctx);
-  free(c->mac_key);
+  if ( c->mac_key )
+    PL_free(c->mac_key);	      /* allocated using BUF_MALLOC */
 #ifdef USE_EVP_API
   EVP_MAC_free(c->mac);
   EVP_MAC_CTX_free(c->mac_ctx);
@@ -337,9 +339,11 @@ hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
         char *key;
 
         if ( !PL_get_nchars(a, &key_len, &key,
-                      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
+			    CVT_ATOM|CVT_STRING|CVT_LIST|
+			    CVT_EXCEPTION|BUF_MALLOC) )
           return FALSE;
-        result->mac_key = ssl_strdup(key);
+        result->mac_key = key;
+	result->mac_key_len = key_len;
       } else if ( aname == ATOM_close_parent )
       { if ( !PL_get_bool_ex(a, &result->close_parent) )
           return FALSE;
@@ -364,16 +368,12 @@ hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
 
 static foreign_t
 pl_crypto_hash_context_new(term_t tcontext, term_t options)
-{
-  PL_CRYPTO_HASH_CONTEXT *context = NULL;
+{ PL_CRYPTO_HASH_CONTEXT *context;
 
-  context = malloc(sizeof(*context));
-
-  if ( !context )
-    return FALSE;
-
+  if ( !(context = malloc(sizeof(*context))) )
+    return PL_resource_error("memory");
   memset(context, 0, sizeof(*context));
-  context->magic    = HASH_CONTEXT_MAGIC;
+  context->magic = HASH_CONTEXT_MAGIC;
 
   if ( !hash_options(options, context) )
     return FALSE;
@@ -393,7 +393,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
     params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)EVP_MD_name(context->algorithm), 0);
     params[1] = OSSL_PARAM_construct_end();
     if ( !EVP_MAC_init(context->mac_ctx,
-                       (unsigned char*)context->mac_key, strlen(context->mac_key),
+                       (unsigned char*)context->mac_key, context->mac_key_len,
                        params) )
     { EVP_MAC_CTX_free(context->mac_ctx);
       EVP_MAC_free(context->mac);
@@ -404,7 +404,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   if ( context->mac_key )
   { context->mac_ctx = HMAC_CTX_new();
     if ( !HMAC_Init_ex(context->mac_ctx,
-                       context->mac_key, strlen(context->mac_key),
+                       context->mac_key, context->mac_key_len,
                        context->algorithm, NULL) )
     { HMAC_CTX_free(context->mac_ctx);
       return FALSE;
@@ -432,16 +432,19 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
   if ( !get_hash_context(tin, &in) )
     return FALSE;
 
-  out = malloc(sizeof(*out));
-
-  if ( !out )
-    return FALSE;
-
+  if ( !(out = malloc(sizeof(*out))) )
+    return PL_resource_error("memory");
+  memset(out, 0, sizeof(*out));
   out->magic = HASH_CONTEXT_MAGIC;
-  out->mac_key = ssl_strdup(in->mac_key);
-
   out->encoding = in->encoding;
   out->algorithm = in->algorithm;
+
+  if ( in->mac_key )
+  { char *tmp = PL_malloc(in->mac_key_len+1);
+    memcpy(tmp, in->mac_key, in->mac_key_len+1);
+    out->mac_key = tmp;
+    out->mac_key_len = in->mac_key_len;
+  }
 
   out->ctx = in->ctx ? EVP_MD_CTX_new() : NULL;
   if ( out->ctx )
@@ -463,7 +466,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
 
   if ( out->mac_ctx )
   { if ( !HMAC_Init_ex(out->mac_ctx,
-                       out->mac_key, strlen(out->mac_key),
+                       out->mac_key, out->mac_key_len,
                        out->algorithm, NULL) )
     { HMAC_CTX_free(out->mac_ctx);
       return FALSE;
