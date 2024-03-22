@@ -78,7 +78,7 @@ if(NOT DEFINED GET0SIG_CONST_T)
 	 int main() {
 	   const ASN1_BIT_STRING *psig;
 	   const X509_ALGOR *palg;
-	   const X509 *data;
+	   const X509 *data=NULL;
 
 	   X509_get0_signature(&psig, &palg, data);
 	   return 0;
