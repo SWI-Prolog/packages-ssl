@@ -71,14 +71,14 @@ endif()
 if(NOT DEFINED GET0SIG_CONST_T)
   if(HAVE_X509_GET0_SIGNATURE)
     set(_cmake_saved_dlags ${CMAKE_REQUIRED_FLAGS})
-    set(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS} -Werror)
+    set(CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS} -Werror -c)
     check_c_source_compiles(
 	"#include <openssl/x509.h>
 
 	 int main() {
 	   const ASN1_BIT_STRING *psig;
 	   const X509_ALGOR *palg;
-	   const X509 *data;
+	   const X509 *data=NULL;
 
 	   X509_get0_signature(&psig, &palg, data);
 	   return 0;
