@@ -918,9 +918,14 @@ unify_ec(term_t item, ECKEY *key)
 
 static int
 unify_key(EVP_PKEY* key, functor_t type, term_t item)
-{ if ( !PL_unify_functor(item, type) ||
-       !PL_get_arg(1, item, item) )
-    return FALSE;
+{ if ( type )
+  { term_t arg;
+    if ( !(arg=PL_new_term_ref()) ||
+	 !PL_unify_functor(item, type) ||
+	 !PL_get_arg(1, item, arg) )
+      return FALSE;
+    item = arg;
+  }
  /* EVP_PKEY_get1_* returns a copy of the existing key */
  /* We can just call unify_rsa or unify_ec directly if we are using OpenSSL 3.0+ since
     those functions just take a EVP_PKEY in
@@ -1310,7 +1315,7 @@ fetch_public_key(term_t Field, X509* cert)
   int rc;
   term_t arg = PL_new_term_ref();
   key = X509_get_pubkey(cert);
-  rc = unify_public_key(key, arg);
+  rc = unify_key(key, 0, arg);
   EVP_PKEY_free(key);
   /* Most existing code expects to be able to call memberchk(key(Key), Cert)
      and then pass Key to the rsa_* routines. This is a problem for this new
@@ -1643,7 +1648,7 @@ static int
 release_ssl(atom_t atom)
 { PL_SSL *conf = symbol_ssl(atom);
   ssl_exit(conf);	/* conf is freed by an internal call from OpenSSL
-	                   via ssl_config_free() */
+			   via ssl_config_free() */
   return TRUE;
 }
 
@@ -2169,7 +2174,7 @@ static void
 ssl_config_free(void *ctx,
 		void *pl_ssl,
 		CRYPTO_EX_DATA *parent_ctx,
-	        int parent_ctx_idx,
+		int parent_ctx_idx,
 		long  argl,
 		void *argp)
 { PL_SSL *config = NULL;
@@ -2988,7 +2993,7 @@ ssl_server_alpn_select_cb(SSL *ssl,
 	goto out;
 
       if ( !PL_call_predicate(config->cb_alpn_proto.module,
-	                      PL_Q_PASS_EXCEPTION, call5, av) )
+			      PL_Q_PASS_EXCEPTION, call5, av) )
 	goto out;
 
       PL_SSL *new_config = NULL;

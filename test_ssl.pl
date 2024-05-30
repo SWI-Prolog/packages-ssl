@@ -841,7 +841,7 @@ is_key(ec_key).
 is_key(dh_key).
 is_key(dsa_key).
 
-is_bignum('-').                                 % NULL
+is_bignum('-') :- !.                                 % NULL
 is_bignum(Text) :-
     string_codes(Text, Codes),
     maplist(is_hex, Codes).
