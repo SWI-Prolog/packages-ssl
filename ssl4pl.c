@@ -61,7 +61,7 @@
 
 #include "ssl_applink.h"
 
-#ifdef LIBRESSL_VERSION_NUMBER
+#if defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3080000fL
 #undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */
 #endif
 
@@ -717,7 +717,7 @@ unify_name(term_t term, X509_NAME* name)
   return PL_unify_nil(list);
 }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
 #define X509_REVOKED_get0_serialNumber(R) ((R)->serialNumber)
 #define X509_REVOKED_get0_revocationDate(R) ((R)->revocationDate)
 #define EVP_PKEY_base_id(key) ((key)->type)
@@ -825,7 +825,7 @@ unify_crl(term_t term, X509_CRL* crl)
 static int
 unify_rsa(term_t item, RSAKEY* rsa)
 {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
   return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
 	   unify_bignum_arg(1, item, rsa->n) &&
 	   unify_bignum_arg(2, item, rsa->e) &&
@@ -1376,7 +1376,7 @@ fetch_crls(term_t Field, X509* cert)
   }
 }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define ASN1_STRING_get0_data(D) ASN1_STRING_data(D)
 #define X509_STORE_CTX_get0_cert(C) ((C)->cert)
 #endif
@@ -2491,7 +2491,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
     free(instance);
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
   ERR_free_strings();
 #endif
 
@@ -2790,7 +2790,7 @@ get_dh2048(void)
         if (dh == NULL) return NULL;
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
         dh->p=BN_bin2bn(dhp_2048,sizeof(dhp_2048),NULL);
         dh->g=BN_bin2bn(dhg_2048,sizeof(dhg_2048),NULL);
         if ((dh->p == NULL) || (dh->g == NULL))
@@ -3170,7 +3170,7 @@ ssl_lib_init(void)
  * One-time library initialization code
  */
 {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     (void) SSL_library_init();
     SSL_load_error_strings();
 #endif
@@ -3247,7 +3247,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
       SSL_set_tlsext_host_name(instance->ssl, config->host);
 #endif
 #ifdef HAVE_X509_CHECK_HOST
-#if (defined(HAVE_X509_VERIFY_PARAM_ID) || OPENSSL_VERSION_NUMBER >= 0x10100000L) && !defined(LIBRESSL_VERSION_NUMBER)
+#if (defined(HAVE_X509_VERIFY_PARAM_ID) || OPENSSL_VERSION_NUMBER >= 0x10100000L)
     X509_VERIFY_PARAM *param = SSL_get0_param(instance->ssl);
     /* This could in theory be user-configurable. The documentation at
        https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
