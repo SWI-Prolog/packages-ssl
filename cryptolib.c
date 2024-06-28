@@ -36,6 +36,10 @@
 #include <config.h>
 #include <string.h>
 
+#if defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER >= 0x3050000fL
+#include <pthread.h>
+#endif
+
 #include "cryptolib.h"
 
 /* OPENSSL_zalloc is only used in the EVP_MD_CTX_new defined below */
@@ -329,7 +333,7 @@ bio_control(BIO* bio, int cmd, long num, void* ptr)
 static int
 bio_create(BIO* bio)
 {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
    bio->shutdown = 1;
    bio->init = 1;
    bio->num = -1;
@@ -357,7 +361,7 @@ bio_destroy(BIO* bio)
    return 1;
 }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
 /*
  * Specify the BIO read and write function structures
  */
@@ -419,6 +423,12 @@ bio_write_text_method(void)
  * In OpenSSL >= 1.1.0, the BIO methods are constructed
  * using functions. We initialize them exactly once.
  */
+
+#ifdef LIBRESSL_VERSION_NUMBER
+#define CRYPTO_ONCE                   pthread_once_t
+#define CRYPTO_ONCE_STATIC_INIT       PTHREAD_ONCE_INIT
+#define CRYPTO_THREAD_run_once(a, b)  (pthread_once((a), (b)) == 0)
+#endif
 
 static CRYPTO_ONCE once_read  = CRYPTO_ONCE_STATIC_INIT;
 static CRYPTO_ONCE once_write = CRYPTO_ONCE_STATIC_INIT;

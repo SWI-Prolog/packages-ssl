@@ -892,7 +892,7 @@ recover_rsa(term_t t, RSAKEY** keyp)
   RSAKEY *key = RSA_new();
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
   if ( get_bn_arg(1, t, &key->n) &&
        get_bn_arg(2, t, &key->e) &&
        get_bn_arg(3, t, &key->d) &&
