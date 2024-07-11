@@ -57,6 +57,8 @@ AC_CHECK_FUNCS(OSSL_PARAM_construct_utf8_string)
 AC_CHECK_FUNCS(BN_check_prime)
 AC_CHECK_FUNCS(SSL_CTX_set_alpn_protos)
 AC_CHECK_FUNCS(OSSL_PARAM_BLD_new)
+AC_CHECK_FUNCS(SSL_SESSION_get_protocol_version)
+AC_CHECK_FUNCS(SSL_get_client_random)
 
 AC_CHECK_HEADERS(openssl/kdf.h)
 AC_CHECK_HEADERS(openssl/core_names.h)

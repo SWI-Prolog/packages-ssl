@@ -4,7 +4,7 @@
 		   Markus Triska and James Cash
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2023, SWI-Prolog Foundation
+    Copyright (c)  2004-2024, SWI-Prolog Foundation
                               VU University Amsterdam
 			      CWI, Amsterdam
 			      SWI-Prolog Solutions b.v.
@@ -59,15 +59,8 @@
 #include <openssl/core_names.h>
 #endif
 
+#include "common.h"
 #include "ssl_applink.h"
-
-#if defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3080000fL
-#undef HAVE_X509_CHECK_HOST		/* seems broken. must investigate */
-#endif
-
-#if defined HAVE_EVP_PKEY_NEW && defined HAVE_EVP_PKEY_FREE && defined HAVE_EVP_PKEY_GET_BN_PARAM && defined HAVE_EVP_PKEY_GET_OCTET_STRING_PARAM && defined HAVE_EVP_PKEY_GET_SIZE && defined HAVE_EVP_PKEY_DECRYPT && defined HAVE_EVP_PKEY_ENCRYPT && defined HAVE_EVP_PKEY_SIGN && defined HAVE_EVP_PKEY_VERIFY && defined HAVE_EVP_PKEY_Q_KEYGEN && defined HAVE_OSSL_PARAM_CONSTRUCT_UTF8_STRING && defined HAVE_BN_CHECK_PRIME && defined HAVE_OSSL_PARAM_BLD_NEW
-#define USE_EVP_API 1
-#endif
 
 #if defined(__WINDOWS__) || defined (__CYGWIN__)
 #define timezone _timezone
@@ -717,7 +710,7 @@ unify_name(term_t term, X509_NAME* name)
   return PL_unify_nil(list);
 }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
+#if SSL_API_0
 #define X509_REVOKED_get0_serialNumber(R) ((R)->serialNumber)
 #define X509_REVOKED_get0_revocationDate(R) ((R)->revocationDate)
 #define EVP_PKEY_base_id(key) ((key)->type)
@@ -825,7 +818,7 @@ unify_crl(term_t term, X509_CRL* crl)
 static int
 unify_rsa(term_t item, RSAKEY* rsa)
 {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
+#if SSL_API_0
   return ( PL_unify_functor(item, FUNCTOR_rsa8) &&
 	   unify_bignum_arg(1, item, rsa->n) &&
 	   unify_bignum_arg(2, item, rsa->e) &&
@@ -2115,7 +2108,7 @@ ssl_free(PL_SSL *config)
   }
 }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if SSL_API_0_OR_LIBRESSL
 static int
 #else
 static void
@@ -2143,7 +2136,7 @@ ssl_config_new  ( void *            ctx
         }
     }
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if SSL_API_0_OR_LIBRESSL
     /*
      * 1 = success
      * 0 = failure
@@ -2154,7 +2147,7 @@ ssl_config_new  ( void *            ctx
 
 static int
 ssl_config_dup(CRYPTO_EX_DATA *to,
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if SSL_API_0_OR_LIBRESSL
 	       CRYPTO_EX_DATA *from,
 #else
 	       const CRYPTO_EX_DATA *from,
@@ -2491,7 +2484,7 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
     free(instance);
   }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if SSL_API_0_OR_LIBRESSL
   ERR_free_strings();
 #endif
 
@@ -2790,7 +2783,7 @@ get_dh2048(void)
         if (dh == NULL) return NULL;
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
+#if SSL_API_0
         dh->p=BN_bin2bn(dhp_2048,sizeof(dhp_2048),NULL);
         dh->g=BN_bin2bn(dhg_2048,sizeof(dhg_2048),NULL);
         if ((dh->p == NULL) || (dh->g == NULL))
@@ -4375,7 +4368,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
        !(session = SSL_get1_session(ssl)) )
     return PL_existence_error("ssl_session", stream_t);
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3040000fL)
+#ifndef HAVE_SSL_SESSION_GET_PROTOCOL_VERSION
   version = session->ssl_version;
   master_key = session->master_key;
   master_key_length = session->master_key_length;
@@ -4411,7 +4404,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 		       master_key_length, master_key) )
     goto err;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3040000fL)
+#ifndef HAVE_SSL_GET_CLIENT_RANDOM
   if ( !add_key_string(list_t, FUNCTOR_session_id1,
 		       session->session_id_length, session->session_id) )
     goto err;

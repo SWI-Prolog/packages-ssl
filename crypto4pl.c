@@ -52,6 +52,7 @@
 #endif
 #include "crypt_blowfish.h"
 
+#include "common.h"
 #include "cryptolib.c"
 
 static atom_t ATOM_sslv23;
@@ -892,7 +893,7 @@ recover_rsa(term_t t, RSAKEY** keyp)
   RSAKEY *key = RSA_new();
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x3050000fL)
+#if SSL_API_0
   if ( get_bn_arg(1, t, &key->n) &&
        get_bn_arg(2, t, &key->e) &&
        get_bn_arg(3, t, &key->d) &&
@@ -1118,8 +1119,8 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
   EVP_PKEY_CTX *sign_ctx = EVP_PKEY_CTX_new(key, NULL);
   EVP_PKEY_sign_init(sign_ctx);
   rc = EVP_PKEY_sign(sign_ctx,
-		                 signature, &signature_len,
-		                 data, (unsigned int)data_len);
+				 signature, &signature_len,
+				 data, (unsigned int)data_len);
   EVP_PKEY_CTX_free(sign_ctx);
   if (!rc)
     return raise_ssl_error(ERR_get_error());
