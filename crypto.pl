@@ -460,6 +460,7 @@ bcrypt_bytes_base64(Bytes, Base64) :-
 %   This predicate requires OpenSSL 1.1.0 or greater.
 %
 %   @see crypto_n_random_bytes/2 to obtain a suitable salt.
+%   @see crypto_data_hash/3 to compute a HMAC signature.
 
 
 crypto_data_hkdf(Data, L, Bytes, Options0) :-
