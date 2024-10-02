@@ -283,6 +283,7 @@ test(server) :-
 
 report_join_status(true).
 report_join_status('$aborted').                 % we killed the server.
+report_join_status(unwind(abort)).              % we killed the server.
 report_join_status(false) :-
     print_message(error, goal_failed(server_loop(_))).
 report_join_status(exception(Term)) :-
