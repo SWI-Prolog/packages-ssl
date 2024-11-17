@@ -46,6 +46,10 @@
 :- use_module(library(error)).
 :- use_module(library(readutil)).
 :- use_module(library(socket)).
+:- use_module(library(apply)).
+:- use_module(library(filesex)).
+:- use_module(library(lists)).
+
 :- if(current_prolog_flag(threads, true)).
 :- use_module(https).
 :- endif.
@@ -153,7 +157,7 @@ test(certificate, true) :-
 		load_certificate(In, Cert)
 	      )),
     assertion(is_certificate(Cert)).
-test(trip_private_public, In == Out) :-
+test(trip_private_public, Out == In) :-
     In = "Hello World!",
     from_file('tests/test_certs/server-key.pem', S1,
 	      load_private_key(S1, "apenoot1", PrivateKey)),
@@ -164,7 +168,7 @@ test(trip_private_public, In == Out) :-
     certificate_field(Cert, public_key(PublicKey)),
     rsa_private_encrypt(PrivateKey, In, Encrypted, []),
     rsa_public_decrypt(PublicKey, Encrypted, Out, []).
-test(trip_private_public, In == Out) :-
+test(trip_private_public, Out == In) :-
     numlist(1040, 1060, L),
     string_codes(In, L),
     from_file('tests/test_certs/server-key.pem', S1,
@@ -176,7 +180,7 @@ test(trip_private_public, In == Out) :-
     certificate_field(Cert, public_key(PublicKey)),
     rsa_private_encrypt(PrivateKey, In, Encrypted, []),
     rsa_public_decrypt(PublicKey, Encrypted, Out, []).
-test(trip_public_private, In == Out) :-
+test(trip_public_private, Out == In) :-
     In = "Hello World!",
     from_file('tests/test_certs/server-key.pem', S1,
 	      load_private_key(S1, "apenoot1", PrivateKey)),
