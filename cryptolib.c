@@ -320,6 +320,15 @@ bio_control(BIO* bio, int cmd, long num, void* ptr)
       return 1;
     case BIO_CTRL_EOF:
       return !(stream->flags&SIO_TIMEOUT) && Sfeof(stream);
+    case BIO_C_FILE_TELL:
+      return Stell(stream);
+    case BIO_C_FILE_SEEK:
+      return Sseek(stream, num, SIO_SEEK_SET);
+    case BIO_CTRL_PUSH:
+    case BIO_CTRL_POP:
+      return 0;
+    default:
+      ssl_deb(1, "bio_control(): command %d not implemented\n", cmd);
   }
 
   return 0;
