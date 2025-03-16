@@ -499,18 +499,18 @@ process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, A
     % "SAML itself defines no such statements, and an assertion without a subject has no defined meaning in this specification."
     % Specifically, 2.7.2, 2.7.3, 2.7.4 enumerate all the SAML-defined statements, and all of them say that the assertion MUST
     % contain a subject
-    ( memberchk(element(SAML:'Subject', _, Subject), Assertion)->
-        memberchk(element(SAML:'NameID', _, [IdPName]), Subject),
-        debug(saml, 'Assertion is for subject ~w', [IdPName]),
+    (   memberchk(element(SAML:'Subject', _, Subject), Assertion)
+    ->  memberchk(element(SAML:'NameID', _, [_0IdPName]), Subject),
+        debug(saml, 'Assertion is for subject ~w', [_0IdPName]),
         % Note that it is not mandatory for there to be any SubjectConfirmation in the message, however, since we must verify at least one
         % confirmation in order to trust that the subject has really associated with the IdP, a subject with no confirmations is useless anyway
-        ( member(element(SAML:'SubjectConfirmation', SubjectConfirmationAttributes, SubjectConfirmation), Subject),
-              subject_confirmation_is_valid(SubjectConfirmationAttributes, SubjectConfirmation)->
-            debug(saml, 'Subject is confirmed', [])
-        ; debug(saml, 'No valid subject confirmation could be found', []),
-              throw(no_subject_confirmation)
+        (   member(element(SAML:'SubjectConfirmation', SubjectConfirmationAttributes, SubjectConfirmation), Subject),
+            subject_confirmation_is_valid(SubjectConfirmationAttributes, SubjectConfirmation)
+        ->  debug(saml, 'Subject is confirmed', [])
+        ;   debug(saml, 'No valid subject confirmation could be found', []),
+            throw(no_subject_confirmation)
         )
-    ; throw(not_supported(assertion_without_subject))
+    ;   throw(not_supported(assertion_without_subject))
     ),
     !,
     memberchk(element(SAML:'AttributeStatement', _, AttributeStatement), Assertion),
