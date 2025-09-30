@@ -2,7 +2,7 @@
 
     Author:        Matt Lilley and Markus Triska
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2024, SWI-Prolog Foundation
+    Copyright (c)  2004-2025, SWI-Prolog Foundation
                               VU University Amsterdam
 			      SWI-Prolog Solutions b.v.
     All rights reserved.
@@ -36,6 +36,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <config.h>
 #include <assert.h>
+#include <stdbool.h>
 #include <string.h>
 #include <SWI-Stream.h>
 #include <SWI-Prolog.h>
@@ -241,7 +242,7 @@ unify_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT *context)
 }
 
 
-static int
+static bool
 get_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT **context)
 { PL_blob_t *type;
   void *data;
@@ -253,10 +254,10 @@ get_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT **context)
     assert(c->magic == HASH_CONTEXT_MAGIC);
     *context = c;
 
-    return TRUE;
+    return true;
   }
 
-  return PL_type_error("crypto_hash_context", tcontext);
+  return PL_type_error("crypto_hash_context", tcontext),false;
 }
 
 typedef struct algorithm_pair {
@@ -292,7 +293,7 @@ get_hash_algorithm(atom_t a_algorithm, const EVP_MD **algorithm)
   return FALSE;
 }
 
-static int
+static bool
 get_text_representation(term_t t, int *rep)
 { atom_t a;
 
@@ -300,12 +301,12 @@ get_text_representation(term_t t, int *rep)
   { if      ( a == ATOM_octet ) *rep = REP_ISO_LATIN_1;
     else if ( a == ATOM_utf8  ) *rep = REP_UTF8;
     else if ( a == ATOM_text  ) *rep = REP_MB;
-    else return PL_domain_error("encoding", t);
+    else return PL_domain_error("encoding", t),false;
 
-    return TRUE;
+    return true;
   }
 
-  return FALSE;
+  return false;
 }
 
 

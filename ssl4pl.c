@@ -4,7 +4,7 @@
 		   Markus Triska and James Cash
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2004-2024, SWI-Prolog Foundation
+    Copyright (c)  2004-2025, SWI-Prolog Foundation
                               VU University Amsterdam
 			      CWI, Amsterdam
 			      SWI-Prolog Solutions b.v.
@@ -42,6 +42,7 @@
 #include <SWI-Prolog.h>
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
 #include <openssl/rand.h>
 #ifdef O_PLMT
 #include <pthread.h>
@@ -1688,7 +1689,7 @@ unify_conf(term_t config, PL_SSL *conf)
 }
 
 
-static int
+static bool
 get_conf(term_t config, PL_SSL **conf)
 { PL_blob_t *type;
   void *data;
@@ -1700,10 +1701,10 @@ get_conf(term_t config, PL_SSL **conf)
     assert(ssl->magic == SSL_CONFIG_MAGIC);
     *conf = ssl;
 
-    return TRUE;
+    return true;
   }
 
-  return PL_type_error("ssl_context", config);
+  return PL_type_error("ssl_context", config),false;
 }
 
 
@@ -3346,13 +3347,12 @@ ssl_write(void *handle, char *buf, size_t size)
   }
 }
 
-static int
+static bool
 protocol_version_to_integer(const term_t symbol, int *version)
-{
-  atom_t arg;
+{ atom_t arg;
 
   if ( !PL_get_atom_ex(symbol, &arg) )
-    return FALSE;
+    return false;
 
 #ifdef SSL_CTX_set_min_proto_version
   if ( arg == ATOM_sslv3 )
@@ -3368,12 +3368,12 @@ protocol_version_to_integer(const term_t symbol, int *version)
     *version = TLS1_3_VERSION;
 #endif
   else
-    return PL_domain_error("ssl_protocol_version", symbol);
+    return PL_domain_error("ssl_protocol_version", symbol),false;
 #else
   *version = 0;                 /* prevent compiler warning */
 #endif
 
-  return TRUE;
+  return true;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
