@@ -1872,7 +1872,7 @@ typedef enum
 static SSL_PL_STATUS
 ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
 { int code;
-  int error;
+  long unsigned int error;
 
   if ( ssl_ret > 0 )
     return SSL_PL_OK;
