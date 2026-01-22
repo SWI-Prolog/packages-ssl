@@ -384,7 +384,7 @@ static int BF_decode(BF_word *dst, const char *src, int size)
   unsigned char *dptr = (unsigned char *)dst;
   unsigned char *end = dptr + size;
   const unsigned char *sptr = (const unsigned char *)src;
-  unsigned int tmp, c1, c2, c3, c4;
+  unsigned char tmp, c1, c2, c3, c4;
 
   do {
     BF_safe_atoi64(c1, *sptr++);
@@ -886,7 +886,7 @@ char *_crypt_gensalt_blowfish_rn(const char *prefix, unsigned long count,
   output[2] = prefix[2];
   output[3] = '$';
   output[4] = (unsigned char)('0' + count / 10);
-  output[5] = '0' + count % 10;
+  output[5] = (unsigned char)('0' + count % 10); /* safe cast */
   output[6] = '$';
 
   BF_encode(&output[7], (const BF_word *)input, 16);
