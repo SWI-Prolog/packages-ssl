@@ -117,7 +117,7 @@ ssl_strdup(const char *s)
  *
  */
 static term_t
-ssl_error_term(long e)
+ssl_error_term(unsigned long e)
 { term_t ex;
   char buffer[256];
   char* colon;
@@ -163,14 +163,14 @@ ssl_error_term(long e)
 }
 
 
-static int
-raise_ssl_error(long e)
+static bool
+raise_ssl_error(unsigned long e)
 { term_t ex;
 
   if ( (ex = ssl_error_term(e)) )
     return PL_raise_exception(ex);
 
-  return FALSE;
+  return false;
 }
 
 
