@@ -4345,7 +4345,9 @@ err:
 
 install_t
 install_ssl4pl(void)
-{ MKATOM(server);
+{ PL_register_blob_type(&certificate_type);
+  PL_register_blob_type(&ssl_context_type);
+  MKATOM(server);
   MKATOM(client);
   MKATOM(host);
   MKATOM(peer_cert);

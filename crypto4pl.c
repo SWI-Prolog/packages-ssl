@@ -2432,7 +2432,8 @@ crypto_set_debug(term_t level)
 
 install_t
 install_crypto4pl(void)
-{
+{ PL_register_blob_type(&crypto_hash_context_type);
+  PL_register_blob_type(&crypto_curve_type);
   ATOM_minus                = PL_new_atom("-");
   MKATOM(sslv23);
   MKATOM(text);
