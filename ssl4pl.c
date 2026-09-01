@@ -1859,11 +1859,22 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
        a handshake. If it will, we should never get these return values.
        If it wont, then we presumably need to simply try again which is
        why I am returning SSL_PL_RETRY
+
+       If the wire stream hit its timeout we must not retry, but report
+       the timeout to Prolog.  S__wait() already flagged the stream with
+       SIO_TIMEOUT|SIO_FERR and Sseterr() propagated this to the SSL
+       stream on top of it, so Prolog raises a timeout_error/2.  As
+       bio_read()/bio_write() told OpenSSL the condition is retryable,
+       the SSL connection remains usable and Prolog may retry.
     */
     case SSL_ERROR_WANT_READ:
+      if ( instance->sread && (instance->sread->flags&SIO_TIMEOUT) )
+	return SSL_PL_ERROR;
       return SSL_PL_RETRY;
 
     case SSL_ERROR_WANT_WRITE:
+      if ( instance->swrite && (instance->swrite->flags&SIO_TIMEOUT) )
+	return SSL_PL_ERROR;
       return SSL_PL_RETRY;
 
 #ifdef SSL_ERROR_WANT_CONNECT

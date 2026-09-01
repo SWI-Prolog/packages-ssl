@@ -212,8 +212,14 @@ ssl_missing(const char *feature)
 static int
 bio_read(BIO* bio, char* buf, int len)
 { IOSTREAM *stream = BIO_get_ex_data(bio, 0);
+  int rc;
 
-  return (int)Sread_pending(stream, buf, len, SIO_RP_BLOCK);
+  BIO_clear_retry_flags(bio);
+  rc = (int)Sread_pending(stream, buf, len, SIO_RP_BLOCK);
+  if ( rc < 0 && (stream->flags&SIO_TIMEOUT) )
+    BIO_set_retry_read(bio);		/* recoverable: see bio_control() */
+
+  return rc;
 }
 
 /*
@@ -252,8 +258,11 @@ bio_write(BIO* bio, const char* buf, int len)
 { IOSTREAM* stream = BIO_get_ex_data(bio, 0);
   int r;
 
+  BIO_clear_retry_flags(bio);
   r = (int)Sfwrite(buf, sizeof(char), len, stream);
   Sflush(stream);
+  if ( r < len && (stream->flags&SIO_TIMEOUT) )
+    BIO_set_retry_write(bio);		/* recoverable: see bio_control() */
 
   return r;
 }
