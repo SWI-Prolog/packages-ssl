@@ -2549,7 +2549,7 @@ ssl_init(PL_SSL_ROLE role, const SSL_METHOD *ssl_method)
 }
 
 
-#if !defined(__WINDOWS__) && !defined(HAVE_SECURITY_SECURITY_H)
+#if !defined(__WINDOWS__)
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Extract   the   system   certificate   file   from   the   Prolog   flag
 system_cacert_filename
@@ -2583,6 +2583,30 @@ system_cacert_filename(void)
 
   return cacert_filename;
 }
+
+
+static int
+load_system_cacerts_file(const char *filename,
+                         STACK_OF(X509) *system_certs, int *ok)
+{ X509 *cert = NULL;
+  FILE *cafile;
+
+  if ( !filename || !*filename )
+    return FALSE;
+  if ( !(cafile = fopen(filename, "rb")) )
+    return FALSE;
+
+  ssl_deb(1, "cacert_filename = %s\n", filename);
+
+  while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
+  { if ( !sk_X509_push(system_certs, cert) )
+    { *ok = FALSE;
+      break;
+    }
+  }
+  fclose(cafile);
+  return TRUE;
+}
 #endif
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -2591,6 +2615,11 @@ dependent locations if cacert_file(system(root_certificates)) is passed.
 
 The code is written after this StackOverflow message
 http://stackoverflow.com/questions/10095676/openssl-reasonable-default-for-trusted-ca-certificates
+
+On macOS we use the same PEM file as other Unix systems (the
+system_cacert_filename flag, typically /etc/ssl/cert.pem).  We do
+not call SecTrustCopyAnchorCertificates(): that export can block
+forever in securityd when the login keychain is locked.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 static STACK_OF(X509) *
@@ -2620,53 +2649,9 @@ ssl_system_verify_locations(void)
 
     CertCloseStore(hSystemStore, 0);
   }
-#elif defined(HAVE_SECURITY_SECURITY_H) /* __APPLE__ */
-  CFArrayRef certs = NULL;
-  OSStatus status;
-
-  status = SecTrustCopyAnchorCertificates(&certs);
-  if (status == errSecSuccess)
-  { size_t i, count = CFArrayGetCount(certs);
-
-    for (i = 0; i < count; i++)
-    { const void *cert = CFArrayGetValueAtIndex(certs, i);
-      CFDataRef cert_data = NULL;
-      const unsigned char *der;
-      unsigned long cert_data_length;
-      X509 *x509 = NULL;
-
-      cert_data = SecCertificateCopyData((SecCertificateRef)cert);
-      der = CFDataGetBytePtr(cert_data);
-      cert_data_length = CFDataGetLength(cert_data);
-      x509 = d2i_X509(NULL, &der, cert_data_length);
-      CFRelease(cert_data);
-      if ( x509 )
-      { if ( !sk_X509_push(system_certs, x509) )
-	{ ok = FALSE;
-	  break;
-	}
-      }
-    }
-    CFRelease(certs);
-  }
 #else
-  const char *cacert_filename;
-  if ( (cacert_filename = system_cacert_filename()) )
-  { X509 *cert = NULL;
-    FILE *cafile = fopen(cacert_filename, "rb");
-
-    ssl_deb(1, "cacert_filename = %s\n", cacert_filename);
-
-    if ( cafile != NULL )
-    { while ((cert = PEM_read_X509(cafile, NULL, NULL, NULL)) != NULL)
-      { if ( !sk_X509_push(system_certs, cert) )
-        { ok = FALSE;
-          break;
-        }
-      }
-      fclose(cafile);
-    }
-  }
+  (void)load_system_cacerts_file(system_cacert_filename(),
+                                 system_certs, &ok);
 #endif
 
   if ( ok )

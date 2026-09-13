@@ -503,15 +503,12 @@ ssl_set_options(SSL0, SSL, Options) :-
 %
 %       - On Windows, CertOpenSystemStore() is used to import
 %         the `"ROOT"` certificates from the OS.
-%       - On MacOSX, the trusted keys are loaded from the
-%         _SystemRootCertificates_ key chain.  The Apple API
-%         for this requires the SSL interface to be compiled
-%         with an XCode compiler, i.e., *not* with native gcc.
-%       - Otherwise, certificates are loaded from a file defined
-%         by the Prolog flag `system_cacert_filename`.  The initial
-%         value of this flag is operating system dependent.  For
-%         security reasons, the flag can only be set prior to using
-%         the SSL library.  For example:
+%       - On Unix and macOS, certificates are loaded from a file
+%         defined by the Prolog flag `system_cacert_filename`.  The
+%         initial value of this flag is operating system dependent
+%         (on macOS typically `/etc/ssl/cert.pem`).  For security
+%         reasons, the flag can only be set prior to using the SSL
+%         library.  For example:
 %
 %           ==
 %           :- use_module(library(ssl)).
