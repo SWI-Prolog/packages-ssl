@@ -24,9 +24,6 @@
 % different locations of some of  the  files   in  the  source  tree and
 % examples tree.
 
-:- prolog_load_context(directory, D),
-   atom_concat(D, '/..', DD),
-   asserta(user:file_search_path(library, DD)).
 :- if(exists_source(library(http/examples/demo_body))).
 :- use_module(library(http/examples/demo_body)).    % location in source tree
 :- elif(exists_source(swi(doc/packages/examples/http/demo_body))).
@@ -35,11 +32,7 @@
 :- use_module(library(http/demo_body)).             % location in demo tree
 :- endif.
 :- use_module(library(http/thread_httpd)).
-:- if(exists_source(library(http/http_ssl_plugin))).
 :- use_module(library(http/http_ssl_plugin)).
-:- else.
-:- use_module(http_ssl_plugin).
-:- endif.
 :- use_module(library(debug)).
 
 /** <module> Demo HTTPS server
