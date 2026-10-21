@@ -56,8 +56,9 @@
 #include "common.h"
 #include "cryptolib.c"
 
+#ifdef RSA_SSLV23_PADDING		/* removed from OpenSSL 3.0 */
 static atom_t ATOM_sslv23;
-static atom_t ATOM_minus;                       /* "-" */
+#endif
 static atom_t ATOM_text;
 static atom_t ATOM_octet;
 static atom_t ATOM_utf8;
@@ -2434,8 +2435,9 @@ install_t
 install_crypto4pl(void)
 { PL_register_blob_type(&crypto_hash_context_type);
   PL_register_blob_type(&crypto_curve_type);
-  ATOM_minus                = PL_new_atom("-");
+#ifdef RSA_SSLV23_PADDING
   MKATOM(sslv23);
+#endif
   MKATOM(text);
   MKATOM(octet);
   MKATOM(utf8);

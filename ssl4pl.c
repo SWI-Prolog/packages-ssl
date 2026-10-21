@@ -91,7 +91,9 @@ typedef int BOOL;
 #define FALSE 0
 #endif
 
+#ifndef __WINDOWS__			/* see ssl_cacerts_warning() */
 static atom_t ATOM_warning;
+#endif
 static atom_t ATOM_server;
 static atom_t ATOM_client;
 static atom_t ATOM_host;
@@ -122,35 +124,22 @@ static functor_t FUNCTOR_unsupported_hash_algorithm1;
 static functor_t FUNCTOR_system1;
 static functor_t FUNCTOR_error2;
 static functor_t FUNCTOR_ssl_error4;
-static functor_t FUNCTOR_permission_error3;
 static functor_t FUNCTOR_version1;
-static functor_t FUNCTOR_notbefore1;
-static functor_t FUNCTOR_notafter1;
-static functor_t FUNCTOR_subject1;
 static functor_t FUNCTOR_issuername1;
-static functor_t FUNCTOR_serial1;
 static functor_t FUNCTOR_public_key1;
 static functor_t FUNCTOR_private_key1;
 static functor_t FUNCTOR_rsa8;
 static functor_t FUNCTOR_ec3;
 static functor_t FUNCTOR_ed255191;
 static functor_t FUNCTOR_x255191;
-static functor_t FUNCTOR_key1;
 static functor_t FUNCTOR_hash1;
 static functor_t FUNCTOR_next_update1;
 static functor_t FUNCTOR_signature1;
-static functor_t FUNCTOR_signature_algorithm1;
-static functor_t FUNCTOR_to_be_signed1;
 static functor_t FUNCTOR_equals2;
-static functor_t FUNCTOR_crl1;
 static functor_t FUNCTOR_revocations1;
 static functor_t FUNCTOR_revoked2;
-#ifndef OPENSSL_NO_SSL2
-static functor_t FUNCTOR_session_key1;
-#endif
 static functor_t FUNCTOR_cipher1;
 static functor_t FUNCTOR_master_key1;
-static functor_t FUNCTOR_session_id1;
 static functor_t FUNCTOR_client_random1;
 static functor_t FUNCTOR_server_random1;
 static functor_t FUNCTOR_system1;
@@ -4499,20 +4488,16 @@ install_ssl4pl(void)
   MKATOM(tlsv1_3);
   MKATOM(alpn_protocols);
   MKATOM(alpn_protocol_hook);
+#ifndef __WINDOWS__
   MKATOM(warning);
+#endif
 
   ATOM_minus                = PL_new_atom("-");
 
   FUNCTOR_error2            = PL_new_functor(PL_new_atom("error"), 2);
   FUNCTOR_ssl_error4        = PL_new_functor(PL_new_atom("ssl_error"), 4);
-  FUNCTOR_permission_error3 = PL_new_functor(PL_new_atom("permission_error"), 3);
   FUNCTOR_version1          = PL_new_functor(PL_new_atom("version"), 1);
-  FUNCTOR_notbefore1        = PL_new_functor(PL_new_atom("notbefore"), 1);
-  FUNCTOR_notafter1         = PL_new_functor(PL_new_atom("notafter"), 1);
-  FUNCTOR_subject1          = PL_new_functor(PL_new_atom("subject"), 1);
   FUNCTOR_issuername1       = PL_new_functor(PL_new_atom("issuer_name"), 1);
-  FUNCTOR_serial1           = PL_new_functor(PL_new_atom("serial"), 1);
-  FUNCTOR_key1              = PL_new_functor(PL_new_atom("key"), 1);
   FUNCTOR_public_key1       = PL_new_functor(PL_new_atom("public_key"), 1);
   FUNCTOR_private_key1      = PL_new_functor(PL_new_atom("private_key"), 1);
   FUNCTOR_rsa8              = PL_new_functor(PL_new_atom("rsa"), 8);
@@ -4522,18 +4507,11 @@ install_ssl4pl(void)
   FUNCTOR_hash1             = PL_new_functor(PL_new_atom("hash"), 1);
   FUNCTOR_next_update1      = PL_new_functor(PL_new_atom("next_update"), 1);
   FUNCTOR_signature1        = PL_new_functor(PL_new_atom("signature"), 1);
-  FUNCTOR_signature_algorithm1 = PL_new_functor(PL_new_atom("signature_algorithm"), 1);
-  FUNCTOR_to_be_signed1     = PL_new_functor(PL_new_atom("to_be_signed"), 1);
   FUNCTOR_equals2           = PL_new_functor(PL_new_atom("="), 2);
-  FUNCTOR_crl1              = PL_new_functor(PL_new_atom("crl"), 1);
   FUNCTOR_revoked2          = PL_new_functor(PL_new_atom("revoked"), 2);
   FUNCTOR_revocations1      = PL_new_functor(PL_new_atom("revocations"), 1);
-#ifndef OPENSSL_NO_SSL2
-  FUNCTOR_session_key1      = PL_new_functor(PL_new_atom("session_key"), 1);
-#endif
   FUNCTOR_cipher1           = PL_new_functor(PL_new_atom("cipher"), 1);
   FUNCTOR_master_key1       = PL_new_functor(PL_new_atom("master_key"), 1);
-  FUNCTOR_session_id1       = PL_new_functor(PL_new_atom("session_id"), 1);
   FUNCTOR_client_random1    = PL_new_functor(PL_new_atom("client_random"), 1);
   FUNCTOR_server_random1    = PL_new_functor(PL_new_atom("server_random"), 1);
   FUNCTOR_alpn_protocol1    = PL_new_functor(PL_new_atom("alpn_protocol"), 1);
