@@ -69,7 +69,8 @@ test_ssl :-
 		crypto_hash,
 		crypto_ecdsa,
 		crypto_ed25519,
-		crypto_curve25519
+		crypto_curve25519,
+		saml
 	      ]).
 :- dynamic
     option/1,                       % Options to test
@@ -1116,3 +1117,211 @@ is_hex_string(S) :-
 is_hex(C) :- between(0'0, 0'9, C), !.
 is_hex(C) :- between(0'A, 0'F, C), !.
 is_hex(C) :- between(0'a, 0'f, C), !.
+
+
+		 /*******************************
+		 *             SAML		*
+		 *******************************/
+
+:- dynamic saml_test_certificate/1.
+:- multifile saml:saml_idp_certificate/4.
+
+saml:saml_idp_certificate('https://sp.example/', 'https://idp.example/',
+                          signing, Cert) :-
+    saml_test_certificate(Cert).
+
+:- begin_tests(saml, [ setup(saml_setup),
+                       cleanup(saml_cleanup)
+                     ]).
+
+:- use_module(library(saml), []).
+:- use_module(library(xmldsig), []).
+:- use_module(library(c14n2)).
+:- use_module(library(base64)).
+
+:- meta_predicate saml_from_file(+, -, 0).
+
+saml_from_file(File, Stream, Goal) :-
+    setup_call_cleanup(open(File, read, Stream), Goal, close(Stream)).
+
+saml_sp('https://sp.example/').
+saml_idp('https://idp.example/').
+saml_acs('https://sp.example/saml/auth').
+
+saml_setup :-
+    ssl_test_file('tests/test_certs/server-cert.pem', CertFile),
+    saml_from_file(CertFile, In, load_certificate(In, Cert)),
+    retractall(test_ssl:saml_test_certificate(_)),
+    assertz(test_ssl:saml_test_certificate(Cert)).
+
+saml_cleanup :-
+    retractall(test_ssl:saml_test_certificate(_)),
+    retractall(saml:saml_seen_assertion(_, _)).
+
+saml_parse(Text, XML) :-
+    setup_call_cleanup(
+        open_string(Text, S),
+        load_structure(S, XML, [dialect(xmlns), keep_prefix(true)]),
+        close(S)).
+
+saml_process(Text, Attrs) :-
+    saml_parse(Text, XML),
+    saml_sp(SP), saml_idp(IdP), saml_acs(ACS),
+    context_module(M),
+    saml:process_saml_response(XML, SP,
+                               saml{idp:IdP, id:req1, acs:ACS},
+                               M:saml_attrs(Attrs), '/orig', []).
+
+saml_attrs(Attrs, _URL, Attrs).
+
+saml_find(Local, [E|_], El) :- E = element(_:Local,_,_), !, El = E.
+saml_find(Local, [element(_,_,C)|_], El) :- saml_find(Local, C, El), !.
+saml_find(Local, [_|T], El) :- saml_find(Local, T, El).
+
+saml_replace(S0, From, To, S) :-
+    atomic_list_concat(Parts, From, S0),
+    atomic_list_concat(Parts, To, A),
+    atom_string(A, S).
+
+saml_b64(Bytes, B64) :-
+    atom_codes(A, Bytes),
+    base64(A, B64).
+
+%   saml_sign(+Template, +RefId, -Signed)
+%   Fill DIGESTVAL and SIGVAL in Template signing the element RefId.
+
+saml_sign(T0, Id, Signed) :-
+    C14N = 'http://www.w3.org/2001/10/xml-exc-c14n#',
+    saml_parse(T0, X0),
+    xmldsig:resolve_reference(X0, Id, _, El),
+    xmldsig:apply_transforms(
+                [ ['Algorithm'='http://www.w3.org/2000/09/xmldsig#enveloped-signature']-[]
+                ], El, El2),
+    with_output_to(string(S1),
+                   xml_write_canonical(current_output, El2, [method(C14N)])),
+    crypto_data_hash(S1, H, [algorithm(sha256), encoding(octet)]),
+    hex_bytes(H, HB), saml_b64(HB, D64),
+    saml_replace(T0, "DIGESTVAL", D64, T1),
+    saml_parse(T1, X1),
+    saml_find('SignedInfo', X1, SI),
+    with_output_to(string(S2),
+                   xml_write_canonical(current_output, SI, [method(C14N)])),
+    crypto_data_hash(S2, H2, [algorithm(sha256)]),
+    ssl_test_file('tests/test_certs/server-key.pem', KeyFile),
+    saml_from_file(KeyFile, In, load_private_key(In, "apenoot1", Key)),
+    rsa_sign(Key, H2, SigHex, [type(sha256)]),
+    hex_bytes(SigHex, SB), saml_b64(SB, S64),
+    saml_replace(T1, "SIGVAL", S64, Signed).
+
+saml_sigblock(Ref, Block) :-
+    ssl_test_file('tests/test_certs/server-cert.pem', CertFile),
+    read_file_to_string(CertFile, S, []),
+    split_string(S, "\n", "", L),
+    exclude([X]>>sub_string(X,0,_,_,"-----"), L, L2),
+    atomics_to_string(L2, "", C),
+    format(string(Block),
+"<ds:Signature xmlns:ds=\"http://www.w3.org/2000/09/xmldsig#\"><ds:SignedInfo>\c
+<ds:CanonicalizationMethod Algorithm=\"http://www.w3.org/2001/10/xml-exc-c14n#\"/>\c
+<ds:SignatureMethod Algorithm=\"http://www.w3.org/2001/04/xmldsig-more#rsa-sha256\"/>\c
+<ds:Reference URI=\"#~w\"><ds:Transforms>\c
+<ds:Transform Algorithm=\"http://www.w3.org/2000/09/xmldsig#enveloped-signature\"/>\c
+<ds:Transform Algorithm=\"http://www.w3.org/2001/10/xml-exc-c14n#\"/></ds:Transforms>\c
+<ds:DigestMethod Algorithm=\"http://www.w3.org/2001/04/xmlenc#sha256\"/>\c
+<ds:DigestValue>DIGESTVAL</ds:DigestValue></ds:Reference></ds:SignedInfo>\c
+<ds:SignatureValue>SIGVAL</ds:SignatureValue><ds:KeyInfo><ds:X509Data>\c
+<ds:X509Certificate>~w</ds:X509Certificate></ds:X509Data></ds:KeyInfo>\c
+</ds:Signature>", [Ref, C]).
+
+saml_time(Offset, T) :-
+    get_time(Now),
+    F is Now+Offset,
+    stamp_date_time(F, DT, 'UTC'),
+    format_time(atom(T), '%FT%TZ', DT, posix).
+
+saml_assertion(Id, User, Sig, A) :-
+    saml_assertion(Id, User, Sig, 300, A).
+saml_assertion(Id, User, Sig, Validity, A) :-
+    saml_time(Validity, NotOnOrAfter),
+    saml_acs(ACS),
+    format(string(A),
+"<saml:Assertion ID=\"~w\" Version=\"2.0\">\c
+<saml:Issuer>https://idp.example/</saml:Issuer>~w<saml:Subject>\c
+<saml:NameID>~w</saml:NameID>\c
+<saml:SubjectConfirmation Method=\"urn:oasis:names:tc:SAML:2.0:cm:bearer\">\c
+<saml:SubjectConfirmationData NotOnOrAfter=\"~w\" Recipient=\"~w\" InResponseTo=\"req1\"/>\c
+</saml:SubjectConfirmation></saml:Subject><saml:Conditions><saml:AudienceRestriction>\c
+<saml:Audience>https://sp.example/</saml:Audience></saml:AudienceRestriction>\c
+</saml:Conditions><saml:AttributeStatement><saml:Attribute Name=\"uid\">\c
+<saml:AttributeValue>~w</saml:AttributeValue></saml:Attribute>\c
+</saml:AttributeStatement></saml:Assertion>",
+           [Id, Sig, User, NotOnOrAfter, ACS, User]).
+
+saml_response(Body, R) :-
+    saml_response('', Body, R).
+saml_response(Sig, Body, R) :-
+    saml_acs(ACS),
+    format(string(R),
+"<samlp:Response xmlns:samlp=\"urn:oasis:names:tc:SAML:2.0:protocol\" \c
+xmlns:saml=\"urn:oasis:names:tc:SAML:2.0:assertion\" ID=\"r1\" Version=\"2.0\" \c
+InResponseTo=\"req1\" Destination=\"~w\"><saml:Issuer>https://idp.example/</saml:Issuer>~w\c
+<samlp:Status><samlp:StatusCode Value=\"urn:oasis:names:tc:SAML:2.0:status:Success\"/>\c
+</samlp:Status>~w</samlp:Response>", [ACS, Sig, Body]).
+
+saml_signed(Id, User, R) :-
+    saml_sigblock(Id, SB),
+    saml_assertion(Id, User, SB, A),
+    saml_response(A, T),
+    saml_sign(T, Id, R).
+
+test(legit, Attrs == [attribute(uid, '', alice)]) :-
+    saml_signed(a1, alice, R),
+    saml_process(R, Attrs).
+test(response_signed, Attrs == [attribute(uid, '', bob)]) :-
+    saml_sigblock(r1, SB),
+    saml_assertion(a2, bob, '', A),
+    saml_response(SB, A, T),
+    saml_sign(T, r1, R),
+    saml_process(R, Attrs).
+test(tampered, error(xmldsig(invalid_digest), _)) :-
+    saml_signed(a3, alice, R0),
+    saml_replace(R0, ">alice<", ">admin<", R),
+    saml_process(R, _).
+test(unsigned, error(saml(unsigned_assertion(a4)), _)) :-
+    saml_assertion(a4, admin, '', A),
+    saml_response(A, R),
+    saml_process(R, _).
+test(wrapped, error(saml(unsigned_assertion(a5)), _)) :-
+    saml_signed(a5, alice, R0),
+    sub_string(R0, B, _, _, "<saml:Assertion"), !,
+    sub_string(R0, BE, LE, _, "</saml:Assertion>"), !,
+    Len is BE+LE-B,
+    sub_string(R0, B, Len, _, SignedA),
+    sub_string(R0, 0, B, _, Head),
+    saml_assertion(a5, admin, '', EvilA),
+    format(string(R), "~s<samlp:Extensions>~s</samlp:Extensions>~s</samlp:Response>",
+           [Head, SignedA, EvilA]),
+    saml_process(R, _).
+test(replay, error(saml(replayed_assertion(a6)), _)) :-
+    saml_signed(a6, alice, R),
+    saml_process(R, _),
+    saml_process(R, _).
+test(expired, error(saml(expired(_)), _)) :-
+    saml_sigblock(a7, SB),
+    saml_assertion(a7, alice, SB, -3600, A),
+    saml_response(A, T),
+    saml_sign(T, a7, R),
+    saml_process(R, _).
+test(in_response_to, error(saml(in_response_to), _)) :-
+    saml_signed(a8, alice, R0),
+    saml_replace(R0, "InResponseTo=\"req1\" Destination", "InResponseTo=\"req2\" Destination", R),
+    saml_process(R, _).
+test(relay_state, error(saml(invalid_relay_state), _)) :-
+    catch(saml:saml_acs_handler('https://sp.example/', [],
+                                [ method(post),
+                                  input(user_input),
+                                  content_type('application/x-www-form-urlencoded'),
+                                  content_length(0)
+                                ]),
+          http_reply(bad_request(E)), throw(E)).
+
+:- end_tests(saml).

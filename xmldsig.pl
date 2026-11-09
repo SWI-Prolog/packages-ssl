@@ -43,7 +43,8 @@
 :- use_module(library(debug),[debug/3]).
 :- autoload(library(error),
 	    [type_error/2,domain_error/2,existence_error/2]).
-:- autoload(library(lists),[member/2]).
+:- autoload(library(lists),[member/2,append/3,reverse/2]).
+:- autoload(library(apply),[maplist/3,foldl/4]).
 :- autoload(library(option),[option/3,option/2]).
 :- autoload(library(sha),[sha_hash/3]).
 :- autoload(library(ssl),[load_private_key/3,certificate_field/2]).
@@ -108,7 +109,7 @@ to_list(DOM, DOM) :- DOM = [_|_].
 to_list(DOM, [DOM]).
 
 hash(C14N, Hash, Options) :-
-    option(hash(Algo), Options, sha1),
+    option(hash(Algo), Options, sha256),
     sha_hash(C14N, HashCodes, [algorithm(Algo)]),
     phrase(base64(HashCodes), Base64Codes),
     string_codes(Hash, Base64Codes).
@@ -127,7 +128,7 @@ signed_info(Hash, Signature, SDOM, KeyDOM, Options) :-
 %   True when SDOM is the xmldsign:Signature  DOM for an object with
 %   the given Hash.
 
-signed_info_dom(Hash, SDOM, _Options) :-
+signed_info_dom(Hash, SDOM, Options) :-
     SDOM = element(NS:'SignedInfo', [xmlns=NS],
                    [ '\n  ',
                      element(NS:'CanonicalizationMethod',
@@ -148,14 +149,22 @@ signed_info_dom(Hash, SDOM, _Options) :-
                           '\n  '
                         ]),
     xmldsig_ns(NS),
-    DigestMethod='http://www.w3.org/2000/09/xmldsig#sha1',
-    C14NAlgo='http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
-    SignatureMethod='http://www.w3.org/2000/09/xmldsig#rsa-sha1'.
+    option(hash(DigestAlgo), Options, sha256),
+    option(algorithm(SignAlgo), Options, sha256),
+    (   digest_method(DigestMethod, DigestAlgo)
+    ->  true
+    ;   domain_error(digest_algorithm, DigestAlgo)
+    ),
+    (   ssl_algorithm(SignatureMethod, rsa(SignAlgo))
+    ->  true
+    ;   domain_error(signature_algorithm, SignAlgo)
+    ),
+    C14NAlgo='http://www.w3.org/TR/2001/REC-xml-c14n-20010315'.
 
 %!  rsa_signature(+SignedInfo:string, -Signature, -KeyDOM, +Options)
 
 rsa_signature(SignedInfo, Signature, KeyDOM, Options) :-
-    option(algorithm(Algorithm), Options, sha1),
+    option(algorithm(Algorithm), Options, sha256),
     crypto_data_hash(SignedInfo, Digest, [algorithm(Algorithm)]),
     string_upper(Digest, DIGEST),
     debug(xmldsig, 'SignedInfo ~w digest = ~p', [Algorithm, DIGEST]),
@@ -251,7 +260,22 @@ signed_xml_dom(ObjectDOM, SDOM, KeyDOM, Signature, SignedDOM, _Options) :-
 %   Confirm  that  an  `ds:Signature`  element    contains  a  valid
 %   signature. Certificate is bound to  the certificate that appears
 %   in the element if the signature is valid. It is up to the caller
-%   to determine if the certificate is trusted   or not.
+%   to determine if the certificate is trusted   or not.  Raises an
+%   exception if the signature is not valid.
+%
+%   DOM is the complete document.  Each `ds:Reference` must refer to
+%   exactly one element of DOM with an `ID`, `Id` or `id` attribute
+%   that has the referenced value.  Options:
+%
+%     - references(-Elements)
+%       Unify Elements with the list of elements (in DOM) whose content
+%       is protected by the signature.  It is the responsibility of the
+%       caller to verify that these are the elements it uses.  Notably
+%       when verifying a SAML message, the content used must be (part
+%       of) one of these elements to avoid _signature wrapping_ attacks.
+%     - weak_algorithms(+Boolean)
+%       If `true` (default `false`), accept the SHA1 and MD5 based
+%       signature and digest algorithms.
 %
 %   *Note*: The DOM and SignatureDOM must   have been obtained using
 %   the load_structure/3 option keep_prefix(true)   otherwise  it is
@@ -260,18 +284,30 @@ signed_xml_dom(ObjectDOM, SDOM, KeyDOM, Signature, SignedDOM, _Options) :-
 
 xmld_verify_signature(DOM, SignatureDOM, Certificate, Options) :-
     signature_info(DOM, SignatureDOM, SignedInfo, Algorithm, Signature,
-                   PublicKey, Certificate, CanonicalizationMethod),
+                   PublicKey, Certificate, CanonicalizationMethod,
+                   Elements, Options),
     base64(RawSignature, Signature),
     (   Algorithm = rsa(HashType)
     ->  with_output_to(string(C14N),
                        xml_write_canonical(current_output, SignedInfo,
-                                           [method(CanonicalizationMethod)|Options])),
+                                           [method(CanonicalizationMethod)])),
         crypto_data_hash(C14N, Digest, [algorithm(HashType)]),
         atom_codes(RawSignature, Codes),
         hex_bytes(HexSignature, Codes),
-        rsa_verify(PublicKey, Digest, HexSignature, [type(HashType)])
+        (   catch(rsa_verify(PublicKey, Digest, HexSignature,
+                             [type(HashType)]), _, fail)
+        ->  true
+        ;   signature_error(invalid_signature)
+        )
     ;   domain_error(supported_signature_algorithm, Algorithm)
+    ),
+    (   option(references(Refs), Options)
+    ->  Refs = Elements
+    ;   true
     ).
+
+signature_error(Error) :-
+    throw(error(xmldsig(Error), _)).
 
 ssl_algorithm('http://www.w3.org/2000/09/xmldsig#rsa-sha1', rsa(sha1)).
 ssl_algorithm('http://www.w3.org/2000/09/xmldsig#dsa-sha1', dsa(sha1)).
@@ -298,30 +334,70 @@ ssl_algorithm('http://www.w3.org/2001/04/xmldsig-more#esign-sha512', esign(sha51
 
 digest_method('http://www.w3.org/2000/09/xmldsig#sha1', sha1).
 digest_method('http://www.w3.org/2001/04/xmlenc#sha256', sha256).
+digest_method('http://www.w3.org/2001/04/xmldsig-more#sha384', sha384).
+digest_method('http://www.w3.org/2001/04/xmlenc#sha512', sha512).
+
+weak_hash(md5).
+weak_hash(sha1).
+
+%   allowed_hash(+Hash, +Options) is semidet.
+
+allowed_hash(Hash, Options) :-
+    (   weak_hash(Hash)
+    ->  option(weak_algorithms(true), Options)
+    ;   true
+    ).
 
 signature_info(DOM, Signature, SignedData, Algorithm, SignatureValue,
-               PublicKey, Certificate, CanonicalizationMethod) :-
+               PublicKey, Certificate, CanonicalizationMethod,
+               Elements, Options) :-
     xmldsig_ns(NSRef),
-    memberchk(element(ns(_, NSRef):'SignatureValue', _, [RawSignatureValue]), Signature),
+    (   memberchk(element(ns(_, NSRef):'SignatureValue', _, [RawSignatureValue]), Signature),
+        memberchk(element(ns(Prefix, NSRef):'SignedInfo', SignedInfoAttributes, SignedInfo), Signature),
+        memberchk(element(ns(_, NSRef):'CanonicalizationMethod', CanonicalizationMethodAttributes, _), SignedInfo),
+        memberchk('Algorithm'=CanonicalizationMethod, CanonicalizationMethodAttributes),
+        memberchk(element(ns(_, NSRef):'SignatureMethod', SignatureMethodAttributes, _), SignedInfo),
+        memberchk('Algorithm'=XMLAlgorithm, SignatureMethodAttributes)
+    ->  true
+    ;   signature_error(malformed_signature)
+    ),
     atom_codes(RawSignatureValue, RawSignatureCodes),
     delete_newlines(RawSignatureCodes, SignatureCodes),
     string_codes(SignatureValue, SignatureCodes),
-    memberchk(element(ns(Prefix, NSRef):'SignedInfo', SignedInfoAttributes, SignedInfo), Signature),
     SignedData = element(ns(Prefix, NSRef):'SignedInfo', SignedInfoAttributes, SignedInfo),
-    memberchk(element(ns(_, NSRef):'CanonicalizationMethod', CanonicalizationMethodAttributes, _), SignedInfo),
-    memberchk('Algorithm'=CanonicalizationMethod, CanonicalizationMethodAttributes),
-    forall(memberchk(element(ns(_, NSRef):'Reference', ReferenceAttributes, Reference), SignedInfo),
-           verify_digest(ReferenceAttributes, CanonicalizationMethod, Reference, DOM)),
-    memberchk(element(ns(_, NSRef):'SignatureMethod', SignatureMethodAttributes, []), SignedInfo),
-    memberchk('Algorithm'=XMLAlgorithm, SignatureMethodAttributes),
-    ssl_algorithm(XMLAlgorithm, Algorithm),
-    memberchk(element(ns(_, NSRef):'KeyInfo', _, KeyInfo), Signature),
-    ( memberchk(element(ns(_, NSRef):'X509Data', _, X509Data), KeyInfo),
-      memberchk(element(ns(_, NSRef):'X509Certificate', _, [X509Certificate]), X509Data)->
-        load_certificate_from_base64_string(X509Certificate, Certificate),
+    (   c14n_method(CanonicalizationMethod)
+    ->  true
+    ;   domain_error(canonicalization_method, CanonicalizationMethod)
+    ),
+    (   ssl_algorithm(XMLAlgorithm, Algorithm)
+    ->  true
+    ;   domain_error(signature_algorithm, XMLAlgorithm)
+    ),
+    (   Algorithm =.. [_,Hash],
+        allowed_hash(Hash, Options)
+    ->  true
+    ;   domain_error(signature_algorithm, XMLAlgorithm)
+    ),
+    findall(ReferenceAttributes-Reference,
+            member(element(ns(_, NSRef):'Reference', ReferenceAttributes, Reference),
+                   SignedInfo),
+            References),
+    (   References == []
+    ->  signature_error(no_reference)
+    ;   true
+    ),
+    maplist(verify_reference(DOM, Options), References, Elements),
+    (   memberchk(element(ns(_, NSRef):'KeyInfo', _, KeyInfo), Signature),
+        memberchk(element(ns(_, NSRef):'X509Data', _, X509Data), KeyInfo),
+        memberchk(element(ns(_, NSRef):'X509Certificate', _, [X509Certificate]), X509Data)
+    ->  load_certificate_from_base64_string(X509Certificate, Certificate),
         certificate_field(Certificate, public_key(PublicKey))
-    ; throw(not_implemented)
+    ;   existence_error(x509_certificate, Signature)
     ).
+
+c14n_method('http://www.w3.org/TR/2001/REC-xml-c14n-20010315').
+c14n_method('http://www.w3.org/2006/12/xml-c14n11').
+c14n_method('http://www.w3.org/2001/10/xml-exc-c14n#').
 
 
 delete_newlines([], []):- !.
@@ -330,12 +406,20 @@ delete_newlines([10|As], B):- !, delete_newlines(As, B).
 delete_newlines([A|As], [A|B]):- !, delete_newlines(As, B).
 
 
-verify_digest(ReferenceAttributes, CanonicalizationMethod, Reference, DOM):-
+%   verify_reference(+DOM, +Options, +Attributes-Reference, -Element)
+%
+%   Verify the digest of a ds:Reference.  Element is the referenced
+%   element in DOM.
+
+verify_reference(DOM, Options, ReferenceAttributes-Reference, Element):-
     xmldsig_ns(NSRef),
-    memberchk('URI'=URI, ReferenceAttributes),
-    atom_concat('#', Id, URI),
-    % Find the relevant bit of the DOM
-    resolve_reference(DOM, Id, Digestible, _NSMap),
+    (   memberchk('URI'=URI, ReferenceAttributes),
+        atom_concat('#', Id, URI),
+        Id \== ''
+    ->  true
+    ;   domain_error(supported_reference, ReferenceAttributes)
+    ),
+    resolve_reference(DOM, Id, Element, Digestible),
     (  memberchk(element(ns(_, NSRef):'Transforms', _, Transforms), Reference)
     -> findall(TransformAttributes-Transform,
                member(element(ns(_, NSRef):'Transform', TransformAttributes, Transform), Transforms),
@@ -343,32 +427,116 @@ verify_digest(ReferenceAttributes, CanonicalizationMethod, Reference, DOM):-
     ;  TransformList = []
     ),
     apply_transforms(TransformList, Digestible, TransformedDigestible),
-    memberchk(element(ns(_, NSRef):'DigestMethod', DigestMethodAttributes, _), Reference),
-    memberchk(element(ns(_, NSRef):'DigestValue', _, [DigestBase64]), Reference),
-    memberchk('Algorithm'=Algorithm, DigestMethodAttributes),
-    (  digest_method(Algorithm, DigestMethod)
-    -> true
-    ;  domain_error(supported_digest_method, DigestMethod)
+    c14n_transform(TransformList, CanonicalizationMethod),
+    (   memberchk(element(ns(_, NSRef):'DigestMethod', DigestMethodAttributes, _), Reference),
+        memberchk(element(ns(_, NSRef):'DigestValue', _, [DigestBase64]), Reference),
+        memberchk('Algorithm'=Algorithm, DigestMethodAttributes)
+    ->  true
+    ;   signature_error(malformed_reference)
     ),
-    with_output_to(string(XMLString), xml_write_canonical(current_output, TransformedDigestible, [method(CanonicalizationMethod)])),
+    (   digest_method(Algorithm, DigestMethod),
+        allowed_hash(DigestMethod, Options)
+    ->  true
+    ;   domain_error(supported_digest_method, Algorithm)
+    ),
+    with_output_to(string(XMLString),
+                   xml_write_canonical(current_output, TransformedDigestible,
+                                       [method(CanonicalizationMethod)])),
     sha_hash(XMLString, DigestBytes, [algorithm(DigestMethod)]),
     base64(ExpectedDigest, DigestBase64),
     atom_codes(ExpectedDigest, ExpectedDigestBytes),
     (  ExpectedDigestBytes == DigestBytes
     -> true
-    ;  throw(error(invalid_digest, _))
+    ;  signature_error(invalid_digest)
     ).
 
-resolve_reference([element(Tag, Attributes, Children)|_], ID, element(Tag, Attributes, Children), []):-
-    memberchk('ID'=ID, Attributes),
+%   c14n_transform(+Transforms, -Method)
+%
+%   The canonicalization used for computing the digest is the last
+%   canonicalization transform or inclusive canonicalization if there
+%   is none.
+
+c14n_transform(Transforms, Method) :-
+    reverse(Transforms, RevTransforms),
+    member(Attributes-_, RevTransforms),
+    memberchk('Algorithm'=Method, Attributes),
+    c14n_method(Method),
     !.
-resolve_reference([element(_, Attributes, Children)|Siblings], ID, Element, Map):-
-    ( findall(xmlns:Prefix=URI,
-              member(xmlns:Prefix=URI, Attributes),
-              Map,
-              Tail),
-          resolve_reference(Children, ID, Element, Tail)
-    ; resolve_reference(Siblings, ID, Element, Map)
+c14n_transform(_, 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315').
+
+
+%   resolve_reference(+DOM, +ID, -Element, -Digestible)
+%
+%   Element is the unique element in DOM with the identifier ID.
+%   Digestible is Element with the namespace declarations of its
+%   ancestors added such that inclusive canonicalization can be
+%   applied.
+
+resolve_reference(DOM, ID, Element, Digestible) :-
+    findall(E-NS, find_id(DOM, ID, [], E, NS), Found),
+    (   Found = [Element-Inherited]
+    ->  inherit_ns(Inherited, Element, Digestible)
+    ;   Found == []
+    ->  existence_error(signed_element, ID)
+    ;   signature_error(duplicate_id(ID))
+    ).
+
+find_id([element(Tag, Attributes, Children)|Siblings], ID, NS0, Element, NS) :-
+    (   id_attribute(Attributes, ID),
+        Element = element(Tag, Attributes, Children),
+        NS = NS0
+    ;   ns_decls(Attributes, Decls),
+        append(Decls, NS0, NS1),
+        find_id(Children, ID, NS1, Element, NS)
+    ;   find_id(Siblings, ID, NS0, Element, NS)
+    ).
+find_id([H|Siblings], ID, NS0, Element, NS) :-
+    H \= element(_,_,_),
+    find_id(Siblings, ID, NS0, Element, NS).
+
+id_attribute(Attributes, ID) :-
+    member(Name=ID, Attributes),
+    id_attribute_name(Name),
+    !.
+
+id_attribute_name('ID').
+id_attribute_name('Id').
+id_attribute_name(id).
+
+ns_decls(Attributes, Decls) :-
+    findall(Prefix-URI,
+            ( member(Attr, Attributes),
+              ns_decl(Attr, Prefix, URI)
+            ), Decls).
+
+ns_decl(ns('', xmlns):Prefix=URI, Prefix, URI) :- !.
+ns_decl(xmlns=URI, '', URI) :- !.
+ns_decl(xmlns:Prefix=URI, Prefix, URI) :- !.
+ns_decl(Name=URI, Prefix, URI) :-
+    atom(Name),
+    atom_concat('xmlns:', Prefix, Name).
+
+%   inherit_ns(+Inherited, +Element0, -Element)
+%
+%   Add the namespace declarations of the ancestors that are not
+%   overruled by the element itself.  Inherited is ordered innermost
+%   first.
+
+inherit_ns([], Element, Element) :- !.
+inherit_ns(Inherited, element(Tag, Attributes0, Children),
+           element(Tag, Attributes, Children)) :-
+    ns_decls(Attributes0, Own),
+    foldl(add_inherited, Inherited, Own-Attributes0, _-Attributes).
+
+add_inherited(Prefix-URI, Seen-Attributes0, Seen1-Attributes) :-
+    (   memberchk(Prefix-_, Seen)
+    ->  Seen1 = Seen,
+        Attributes = Attributes0
+    ;   Seen1 = [Prefix-URI|Seen],
+        (   Prefix == ''
+        ->  Attributes = [xmlns=URI|Attributes0]
+        ;   Attributes = [ns('', xmlns):Prefix=URI|Attributes0]
+        )
     ).
 
 
@@ -381,11 +549,37 @@ apply_transforms([Attributes-Children|Transforms], In, Out):-
     ),
     apply_transforms(Transforms, I1, Out).
 
-apply_transform('http://www.w3.org/2001/10/xml-exc-c14n#', [], X, X).
-
+apply_transform('http://www.w3.org/2001/10/xml-exc-c14n#', _, X, X).
+apply_transform('http://www.w3.org/TR/2001/REC-xml-c14n-20010315', [], X, X).
+apply_transform('http://www.w3.org/2006/12/xml-c14n11', [], X, X).
 apply_transform('http://www.w3.org/2000/09/xmldsig#enveloped-signature', [], element(Tag, Attributes, Children), element(Tag, Attributes, NewChildren)):-
     delete_signature_element(Children, NewChildren).
 
 delete_signature_element([element(ns(_, 'http://www.w3.org/2000/09/xmldsig#'):'Signature', _, _)|Siblings], Siblings):- !.
 delete_signature_element([A|Siblings], [A|NewSiblings]):-
     delete_signature_element(Siblings, NewSiblings).
+
+
+		 /*******************************
+		 *           MESSAGES		*
+		 *******************************/
+
+:- multifile
+    prolog:error_message//1.
+
+prolog:error_message(xmldsig(Error)) -->
+    [ 'XML signature: ' ],
+    xmldsig_message(Error).
+
+xmldsig_message(invalid_signature) -->
+    [ 'invalid signature' ].
+xmldsig_message(invalid_digest) -->
+    [ 'digest of referenced element does not match' ].
+xmldsig_message(no_reference) -->
+    [ 'signature has no references' ].
+xmldsig_message(duplicate_id(ID)) -->
+    [ 'multiple elements with identifier ~p'-[ID] ].
+xmldsig_message(malformed_signature) -->
+    [ 'malformed signature element' ].
+xmldsig_message(malformed_reference) -->
+    [ 'malformed reference element' ].

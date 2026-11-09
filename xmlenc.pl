@@ -45,8 +45,7 @@
 :- autoload(library(lists),[append/3]).
 :- autoload(library(sgml),[load_structure/3]).
 :- autoload(library(ssl),[load_certificate/2]).
-:- autoload(library(uri),[uri_components/2]).
-:- autoload(library(http/http_open),[http_open/3]).
+:- autoload(library(option),[option/2]).
 
 :- meta_predicate
     decrypt_xml(+, -, 3, +).
@@ -60,12 +59,20 @@ It implements the _decryption_ part, which is needed by SAML clients.
 @see https://en.wikipedia.org/wiki/Security_Assertion_Markup_Language
 */
 
-% These are the 4 mandatory block cipher algorithms
-% (actually aes-192-cbc is not mandatory, but it is easy to support)
-ssl_algorithm('http://www.w3.org/2001/04/xmlenc#tripledes-cbc', 'des3',         8).
-ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes128-cbc',    'aes-128-cbc', 16).
-ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes256-cbc',    'aes-256-cbc', 32).
-ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes192-cbc',    'aes-192-cbc', 24).
+%   ssl_algorithm(?URI, ?Algorithm, ?IVSize, ?Mode)
+%
+%   Block cipher algorithms.  Note that the CBC modes provide no
+%   integrity.  Using the GCM modes is advised.
+
+ssl_algorithm('http://www.w3.org/2001/04/xmlenc#tripledes-cbc', 'des3',         8, cbc).
+ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes128-cbc',    'aes-128-cbc', 16, cbc).
+ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes256-cbc',    'aes-256-cbc', 16, cbc).
+ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes192-cbc',    'aes-192-cbc', 16, cbc).
+ssl_algorithm('http://www.w3.org/2009/xmlenc11#aes128-gcm',     'aes-128-gcm', 12, gcm).
+ssl_algorithm('http://www.w3.org/2009/xmlenc11#aes192-gcm',     'aes-192-gcm', 12, gcm).
+ssl_algorithm('http://www.w3.org/2009/xmlenc11#aes256-gcm',     'aes-256-gcm', 12, gcm).
+
+gcm_tag_length(16).
 
 %!  decrypt_xml(+DOMIn, -DOMOut, :KeyCallback, +Options) is det.
 %
@@ -73,6 +80,17 @@ ssl_algorithm('http://www.w3.org/2001/04/xmlenc#aes192-cbc',    'aes-192-cbc', 2
 %           - call(KeyCallback, name,        KeyName,         Key)
 %           - call(KeyCallback, public_key,  public_key(RSA), Key)
 %           - call(KeyCallback, certificate, Certificate,     Key)
+%
+%   Options:
+%
+%     - weak_algorithms(+Boolean)
+%       If `true` (default `false`), accept RSA PKCS#1 v1.5 key
+%       transport, which is vulnerable to padding oracle attacks.
+%
+%   The `CipherReference` element is not supported.  Note that the
+%   CBC block cipher modes do not protect the integrity of the data.
+%   Decryption errors are reported using the same exception to avoid
+%   padding oracles.
 
 decrypt_xml([], [], _, _):- !.
 decrypt_xml([element(ns(_, 'http://www.w3.org/2001/04/xmlenc#'):'EncryptedData',
@@ -117,7 +135,7 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
     ),
 
     % First of all, determine the algorithm used to encrypt the data
-    determine_encryption_algorithm(EncryptedData, Algorithm, IVSize),
+    determine_encryption_algorithm(EncryptedData, Algorithm, IVSize, Mode),
 
     % There are now two tasks remaining, and they seem like they ought to be quite simple, but unfortunately they are not
     % First, we must determine the key used to encrypt the message
@@ -127,42 +145,44 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
     % If the message includes a CipherValue then this is straightfoward - the encrypted data is the base64-encoded child
     % of this element.
     (  memberchk(element(XENC:'CipherValue', _, CipherValueElement), CipherData)
-    -> base64_element(CipherValueElement, CipherValueWithIV),
-           string_codes(CipherValueWithIV, CipherValueWithIVCodes),
-           length(IVCodes, IVSize),
-           append(IVCodes, CipherCodes, CipherValueWithIVCodes),
-           string_codes(IV, IVCodes),
-           string_codes(CipherText, CipherCodes),
-           length(CipherValueWithIVCodes, _),
-           crypto_data_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
-    ;  memberchk(element(XENC:'CipherReference', CipherReferenceAttributes, CipherReference), CipherData)->
-           % However, it is allowed to include CipherReference instead. This is an arbitrary URI and a list of transforms to convert the
-           % data identified by that URI into the raw octets that represent the encrypted data
-           % The URI attribute of the CipherReference element is mandatory
-           memberchk('URI'=CipherURI, CipherReferenceAttributes),
-           % The transforms attribute is optional, though.
-           (  memberchk(element('Transforms', _, Transforms), CipherReference)
-           -> true
-           ;  Transforms = []
-           ),
-           uri_components(CipherURI, uri_components(Scheme, _, _, _, _)),
-           (  ( Scheme == 'http' ; Scheme == 'https')
-              % FIXME: URI may not be an *absolute* URL
-           ->  with_output_to(string(RawCipherValue),
-                          setup_call_cleanup(http_open(CipherURI, HTTPStream, []),
-                                             copy_stream_data(HTTPStream, current_output),
-                                             close(HTTPStream)))
-           ;  domain_error(resolvable_uri, CipherURI)
-           ),
-           apply_ciphertext_transforms(RawCipherValue, Transforms, CipherValue),
-           sub_string(CipherValue, 0, IVSize, _, IV),
-           sub_string(CipherValue, IVSize, _, 0, CipherText),
-           crypto_data_decrypt(CipherText, Algorithm, Key, IV, DecryptedStringWithPadding, [padding(none), encoding(octet)])
+    -> base64_element(CipherValueElement, CipherValueWithIV)
+    ;  domain_error(supported_cipher_data, CipherData)
     ),
-    % The XML-ENC padding scheme does not comply with RFC-1423. This has been noted a few times by people trying to write
-    % XML-ENC decryptors backed by OpenSSL, which insists on compliance. The only recourse we have is to disable padding entirely
-    % and do it in our application
-    xmlenc_padding(DecryptedStringWithPadding, DecryptedString),
+    string_codes(CipherValueWithIV, CipherValueWithIVCodes),
+    (   length(IVCodes, IVSize),
+        append(IVCodes, CipherCodes0, CipherValueWithIVCodes)
+    ->  true
+    ;   decryption_failed
+    ),
+    string_codes(IV, IVCodes),
+    (   Mode == gcm
+    ->  gcm_tag_length(TagLen),
+        length(Tag, TagLen),
+        (   append(CipherCodes, Tag, CipherCodes0)
+        ->  true
+        ;   decryption_failed
+        ),
+        string_codes(CipherText, CipherCodes),
+        catch(crypto_data_decrypt(CipherText, Algorithm, Key, IV, DecryptedString,
+                                  [ padding(none), encoding(octet),
+                                    tag(Tag)
+                                  ]),
+              error(_,_), decryption_failed)
+    ;   string_codes(CipherText, CipherCodes0),
+        catch(crypto_data_decrypt(CipherText, Algorithm, Key, IV,
+                                  DecryptedStringWithPadding,
+                                  [padding(none), encoding(octet)]),
+              error(_,_), decryption_failed),
+        % The XML-ENC padding scheme does not comply with RFC-1423.  This
+        % has been noted a few times by people trying to write XML-ENC
+        % decryptors backed by OpenSSL, which insists on compliance.  The
+        % only recourse we have is to disable padding entirely and do it
+        % in our application
+        (   xmlenc_padding(DecryptedStringWithPadding, IVSize, DecryptedString)
+        ->  true
+        ;   decryption_failed
+        )
+    ),
     % Now that we have the decrypted data, we can decide whether to turn it into an element or leave it as
     % content
     (  Type == 'http://www.w3.org/2001/04/xmlenc#Element'
@@ -172,19 +192,23 @@ decrypt_element(Attributes, EncryptedData, Decrypted, KeyCallback, Options):-
     ;  Decrypted = DecryptedString
     ).
 
-xmlenc_padding(DecryptedStringWithPadding, DecryptedString):-
-    string_length(DecryptedStringWithPadding, _),
-    string_codes(DecryptedStringWithPadding, Codes),
-    append(_, [LastCode], Codes),
-    length(Padding, LastCode),
-    append(DecryptedCodes, Padding, Codes),
-    !,
-    string_codes(DecryptedString, DecryptedCodes).
+%   xmlenc_padding(+Padded, +BlockSize, -Plain) is semidet.
+%
+%   Remove XML-ENC padding.  The last byte gives the number of padding
+%   bytes, which must be between 1 and BlockSize.
 
-apply_ciphertext_transforms(CipherValue, [], CipherValue):- !.
-apply_ciphertext_transforms(_, [_AnythingElse|_], _):-
-    % FIXME: Not implemented
-    throw(error(implementation_missing('CipherReference transforms are not implemented', _))).
+xmlenc_padding(DecryptedStringWithPadding, BlockSize, DecryptedString):-
+    string_length(DecryptedStringWithPadding, Len),
+    Len > 0,
+    Len mod BlockSize =:= 0,
+    string_code(Len, DecryptedStringWithPadding, PadLen),
+    PadLen >= 1,
+    PadLen =< BlockSize,
+    PlainLen is Len - PadLen,
+    sub_string(DecryptedStringWithPadding, 0, PlainLen, _, DecryptedString).
+
+decryption_failed :-
+    throw(error(xmlenc(decryption_failed), _)).
 
 :- meta_predicate determine_key(+,-,3,+).
 determine_key(EncryptedData, Key, KeyCallback, Options):-
@@ -218,15 +242,19 @@ resolve_key(Info, Key, KeyCallback, Options):-
     memberchk(element(ns(_, XENC):'CipherValue', _, CipherValueElement), CipherData),
     base64_element(CipherValueElement, CipherValue),
     (  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-oaep-mgf1p'
-    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs1_oaep)])
+    -> Padding = pkcs1_oaep
     ;  Algorithm == 'http://www.w3.org/2009/xmlenc11#rsa-oaep',
            memberchk(element(ns(_, 'http://www.w3.org/2009/xmlenc11#'):'MGF', MGFAttributes, _), EncryptionMethod),
            memberchk('Algorithm'='http://www.w3.org/2009/xmlenc11#mgf1sha1', MGFAttributes)   % This is just the same as rsa-oaep-mgf1p!
-    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs1_oaep)])
-    ;  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-1_5'
-    -> rsa_private_decrypt(PrivateKey, CipherValue, Key, [encoding(octet), padding(pkcs1)])
+    -> Padding = pkcs1_oaep
+    ;  Algorithm == 'http://www.w3.org/2001/04/xmlenc#rsa-1_5',
+       option(weak_algorithms(true), Options)
+    -> Padding = pkcs1
     ;  domain_error(key_transport, Algorithm)
-    ).
+    ),
+    catch(rsa_private_decrypt(PrivateKey, CipherValue, Key,
+                              [encoding(octet), padding(Padding)]),
+          error(_,_), decryption_failed).
 resolve_key(KeyInfo, _Key, _KeyCallback, _Options):-
     % AgreementMethod. FIXME: Not implemented
     XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
@@ -251,13 +279,13 @@ resolve_key(KeyInfo, Key, KeyCallback, _Options):-
     DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
     memberchk(element(DS:'KeyValue', _KeyAttributes, KeyValue), KeyInfo),
     !,
-    (  memberchk(element(DS:'RSAKeyValue', _, RSAKeyValue), KeyInfo)
+    (  memberchk(element(DS:'RSAKeyValue', _, RSAKeyValue), KeyValue)
     -> memberchk(element(DS:'Modulus', _, [ModulusBase64]), RSAKeyValue),
            memberchk(element(DS:'Exponent', _, [ExponentBase64]), RSAKeyValue),
            base64_to_hex(ModulusBase64, Modulus),
            base64_to_hex(ExponentBase64, Exponent),
            call(KeyCallback, public_key, public_key(rsa(Modulus, Exponent, -, -, -, -, -, -)), Key)
-    ;  memberchk(element(DS:'DSAKeyValue', _, _DSAKeyValue), KeyInfo)
+    ;  memberchk(element(DS:'DSAKeyValue', _, _DSAKeyValue), KeyValue)
     -> throw(error(not_implemented(dsa_key), _)) % FIXME: Not implemented
     ;  existence_error(usable_key_value, KeyValue)
     ).
@@ -301,12 +329,12 @@ base64_to_hex(Base64, Hex):-
     string_upper(Hex0, Hex).
 
 
-determine_encryption_algorithm(EncryptedData, Algorithm, IVSize):-
+determine_encryption_algorithm(EncryptedData, Algorithm, IVSize, Mode):-
     XENC = ns(_, 'http://www.w3.org/2001/04/xmlenc#'),
     (  memberchk(element(XENC:'EncryptionMethod', EncryptionMethodAttributes, _), EncryptedData)
     -> % This is a mandatory attribute
            memberchk('Algorithm'=XMLAlgorithm, EncryptionMethodAttributes),
-           (  ssl_algorithm(XMLAlgorithm, Algorithm, IVSize)
+           (  ssl_algorithm(XMLAlgorithm, Algorithm, IVSize, Mode)
            -> true
            ; domain_error(block_cipher, XMLAlgorithm)
            )
@@ -352,3 +380,14 @@ chunk_certificate(Codes, [Chunk|Chunks]):-
 chunk_certificate([], ["-----END CERTIFICATE-----\n"]):- !.
 chunk_certificate(LastCodes, [LastChunk, "-----END CERTIFICATE-----\n"]):-
     string_codes(LastChunk, LastCodes).
+
+
+		 /*******************************
+		 *           MESSAGES		*
+		 *******************************/
+
+:- multifile
+    prolog:error_message//1.
+
+prolog:error_message(xmlenc(decryption_failed)) -->
+    [ 'XML encryption: decryption failed' ].

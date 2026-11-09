@@ -37,18 +37,20 @@
          [saml_authenticate/4]).
 
 :- autoload(library(base64),[base64/2]).
-:- autoload(library(crypto),[rsa_sign/4,hex_bytes/2]).
+:- autoload(library(crypto),[rsa_sign/4,hex_bytes/2,crypto_n_random_bytes/2]).
+:- autoload(library(apply),[maplist/3,include/3]).
+:- autoload(library(date),[parse_time/3]).
+:- autoload(library(option),[option/3]).
 :- use_module(library(debug),[debug/3,debugging/1]).
 :- autoload(library(error),
 	    [domain_error/2,existence_error/2,permission_error/3]).
-:- autoload(library(lists),[member/2,subtract/3,select/3]).
+:- autoload(library(lists),[member/2,subtract/3,append/2]).
 :- autoload(library(memfile),
 	    [ new_memory_file/1,
 	      open_memory_file/4,
 	      memory_file_to_atom/2,
 	      free_memory_file/1
 	    ]).
-:- autoload(library(quintus),[otherwise/0]).
 :- autoload(library(sgml),[load_structure/3]).
 :- autoload(library(sgml_write),[xml_write/3]).
 :- autoload(library(sha),[sha_hash/3]).
@@ -104,7 +106,20 @@ There are four primary integration points for applications to use this code:
       can be supplied as it will be ignored
    The CertificateSpec is a file specifier that resolves to a certificate holding the public key
       corresponding to PrivateKeySPec
-   There are currently no implemented options (the list is ignored).
+   Options:
+      * clock_skew(+Seconds)
+        Allowed difference between our clock and the clock of the IdP
+        when checking validity periods.  Default is 180.
+      * weak_algorithms(+Boolean)
+        If `true` (default `false`), accept SHA1 based signatures and
+        RSA PKCS#1 v1.5 key transport from the IdP.
+
+   Responses must be signed by the IdP, either as a whole or each
+   assertion.  The response must refer to our request and the
+   assertions must have a bearer subject confirmation that names our
+   ACS URL as recipient and has a validity period.  Each assertion is
+   accepted only once.  A response that does not satisfy these
+   requirements is rejected with an exception.
 
    Configuring an IdP:
    To declare an IdP, use the declaration
@@ -230,10 +245,13 @@ process_saml_binding(SingleSignOnServiceAttributes, _, 'urn:oasis:names:tc:SAML:
 
 
 
-form_authn_request(Request, ID, Destination, Date, ServiceProvider, ExtraElements, XML):-
+acs_url(Request, ServiceProvider, ACSURL) :-
     saml_acs_path(ServiceProvider, Path),
     subtract(Request, [path(_), search(_)], Request1),
-    parse_url(ACSURL, [path(Path)|Request1]),
+    parse_url(ACSURL, [path(Path)|Request1]).
+
+form_authn_request(Request, ID, Destination, Date, ServiceProvider, ExtraElements, XML):-
+    acs_url(Request, ServiceProvider, ACSURL),
     SAMLP = 'urn:oasis:names:tc:SAML:2.0:protocol',
     SAML = 'urn:oasis:names:tc:SAML:2.0:assertion',
     XML = element(SAMLP:'AuthnRequest', ['ID'=ID,
@@ -251,12 +269,14 @@ form_authn_request(Request, ID, Destination, Date, ServiceProvider, ExtraElement
 :-meta_predicate(saml_authenticate(+, +, 2, +)).
 saml_authenticate(ServiceProvider, IdentityProvider, Callback, Request):-
     memberchk(request_uri(RequestingURI), Request),
-    format(atom(RelayState), '~q', [saml(RequestingURI, Callback)]),
     get_xml_timestamp(Date),
     uuid(UUID),
     % the ID must start with a letter but the UUID may start with a number. Resolve this by prepending an 'a'
     atom_concat(a, UUID, ID),
     saml_idp(ServiceProvider, IdentityProvider, _MustSign),
+    acs_url(Request, ServiceProvider, ACSURL),
+    store_request(ServiceProvider, IdentityProvider, RequestingURI,
+                  Callback, ID, ACSURL, RelayState),
     % Always sign the request
     MustSign = true,
     XMLOptions = [header(false), layout(false)],
@@ -301,13 +321,13 @@ saml_simple_sign(PrivateKey, XMLString, _SAMLRequest, RelayState, ['SigAlg'=SigA
     debug(saml, 'Signature:~n~w~n', [Signature]).
 
 saml_sign(PrivateKey, _XMLString, SAMLRequest, RelayState, ['SigAlg'=SigAlg,'Signature'=Base64Signature]):-
-    SigAlg = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1',
+    SigAlg = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
     parse_url_search(CodesToSign, ['SAMLRequest'=SAMLRequest, 'RelayState'=RelayState, 'SigAlg'=SigAlg]),
     string_codes(DataToSign, CodesToSign),
     debug(saml, 'Data to sign with HTTP-Redirect binding:~n~s~n', [DataToSign]),
-    sha_hash(DataToSign, Digest, [algorithm(sha1)]),
+    sha_hash(DataToSign, Digest, [algorithm(sha256)]),
     rsa_sign(PrivateKey, Digest, HexSignature,
-             [ type(sha1),
+             [ type(sha256),
                encoding(octet)
              ]),
     hex_bytes(HexSignature, SignatureBytes),
@@ -319,11 +339,12 @@ saml_acs_handler(ServiceProvider, Options, Request):-
     debug(saml, 'Got a message back from IdP!~n', []),
     http_read_data(Request, PostedData, []),
     debug(saml, '~w~n', [PostedData]),
-    memberchk('SAMLResponse'=Atom, PostedData),
-    memberchk('RelayState'=Relay, PostedData),
-    (  atom_to_term(Relay, saml(OriginalURI, Callback), _)
-    -> true
-    ;  throw(error(invalid_request, _))
+    (   memberchk('SAMLResponse'=Atom, PostedData),
+        memberchk('RelayState'=Relay, PostedData),
+        retrieve_request(Relay, ServiceProvider, IdP, OriginalURI,
+                         Callback, ID, ACSURL)
+    ->  true
+    ;   throw(http_reply(bad_request(error(saml(invalid_relay_state), _))))
     ),
     base64(RawData, Atom),
     atom_string(RawData, RawString),
@@ -334,76 +355,124 @@ saml_acs_handler(ServiceProvider, Options, Request):-
     -> xml_write(user_error, XML, [])
     ;  true
     ),
-    process_saml_response(XML, ServiceProvider, Callback, OriginalURI, Options),
+    process_saml_response(XML, ServiceProvider,
+                          saml{idp:IdP, id:ID, acs:ACSURL},
+                          Callback, OriginalURI, Options),
     debug(saml, 'Redirecting successfully authenticated user to ~w~n', [OriginalURI]),
     http_redirect(moved_temporary, OriginalURI, Request).
 
 
-propagate_ns([], _, []):- !.
-propagate_ns([element(Tag, Attributes, Children)|Siblings],
-             NS,
-             [element(Tag, NewAttributes, NewChildren)|NewSiblings]):-
+		 /*******************************
+		 *        REQUEST STATE		*
+		 *******************************/
+
+%   The RelayState we send to the IdP is a random token that refers to
+%   the state of the request that we keep in the server.  It is used
+%   only once and expires after `request_timeout` seconds.
+
+:- dynamic
+    saml_request/8.			% Token, SP, IdP, URI, Callback,
+					% ID, ACSURL, Expires
+
+request_timeout(600).
+
+store_request(SP, IdP, RequestURI, Callback, ID, ACSURL, Token) :-
+    crypto_n_random_bytes(16, Bytes),
+    hex_bytes(Token, Bytes),
+    get_time(Now),
+    request_timeout(TMO),
+    Expires is Now + TMO,
+    expire_requests(Now),
+    assertz(saml_request(Token, SP, IdP, RequestURI, Callback,
+                         ID, ACSURL, Expires)).
+
+retrieve_request(Token, SP, IdP, RequestURI, Callback, ID, ACSURL) :-
+    atom(Token),
+    retract(saml_request(Token, SP0, IdP, RequestURI, Callback,
+                         ID, ACSURL, Expires)),
     !,
-    merge_ns(NS, Attributes, NewAttributes, NewNS),
-    propagate_ns(Children, NewNS, NewChildren),
-    propagate_ns(Siblings, NS, NewSiblings).
-propagate_ns([X|Siblings], NS, [X|NewSiblings]):-
-    propagate_ns(Siblings, NS, NewSiblings).
+    SP0 == SP,
+    get_time(Now),
+    Now < Expires.
 
-merge_ns([xmlns:Prefix=Value|NS], Attributes, NewAttributes, NewNS):-
-    (  select(xmlns:Prefix=NewValue, Attributes, A1)
-    -> NewNS = [xmlns:Prefix=NewValue|T],
-           NewAttributes = [xmlns:Prefix=NewValue|N]
-    ;  A1 = Attributes,
-           NewNS = [xmlns:Prefix=Value|T],
-           NewAttributes = [xmlns:Prefix=Value|N]
-    ),
-    merge_ns(NS, A1, N, T).
+expire_requests(Now) :-
+    forall(( saml_request(Token, SP, IdP, URI, CB, ID, ACS, Expires),
+             Expires < Now
+           ),
+           retractall(saml_request(Token, SP, IdP, URI, CB, ID, ACS, Expires))).
 
-merge_ns([], A, A, NS):-
-    findall(xmlns:Prefix=Value, member(xmlns:Prefix=Value, A), NS).
+%   Assertion IDs that we have accepted.  These are kept until the
+%   assertion expires to avoid replay.
+
+:- dynamic
+    saml_seen_assertion/2.		% ID, Expires
+
+check_replay(ID, Expires) :-
+    get_time(Now),
+    forall(( saml_seen_assertion(Old, Exp), Exp < Now ),
+           retractall(saml_seen_assertion(Old, Exp))),
+    (   saml_seen_assertion(ID, _)
+    ->  saml_error(replayed_assertion(ID))
+    ;   assertz(saml_seen_assertion(ID, Expires))
+    ).
 
 
-:-meta_predicate(process_saml_response(+, +, 2, +, +)).
-process_saml_response(XML0, ServiceProvider, Callback, RequestURL, Options):-
+		 /*******************************
+		 *       PROCESS RESPONSE	*
+		 *******************************/
+
+%!  process_saml_response(+XML, +ServiceProvider, +Expect, :Callback,
+%!                        +RequestURL, +Options)
+%
+%   Process the SAML Response XML. Expect is a dict holding the IdP
+%   the request was sent to, the ID of our AuthnRequest and our ACS
+%   URL.  Raises an exception if the response is not valid.  Calls
+%   Callback with the RequestURL and a list of attributes asserted by
+%   the IdP.
+
+:-meta_predicate(process_saml_response(+, +, +, 2, +, +)).
+process_saml_response(XML, ServiceProvider, Expect, Callback, RequestURL, Options):-
     SAMLP = 'urn:oasis:names:tc:SAML:2.0:protocol',
     SAML = 'urn:oasis:names:tc:SAML:2.0:assertion',
     DS = 'http://www.w3.org/2000/09/xmldsig#',
-    propagate_ns(XML0, [], XML),
-    XML = [element(ns(_, SAMLP):'Response', _, Response)],
+    (   XML = [element(ns(_, SAMLP):'Response', ResponseAttributes, Response)]
+    ->  true
+    ;   saml_error(not_a_response)
+    ),
     % Response MAY  contain the following elements  : Issuer, Signature, Extensions
     % Response MAY  contain the following attributes: InResponseTo, Destination, Consent
     % Response MUST contain the following elements  : Status
     % Response MUST contain the following attributes: ID, IssueInstant, Version
-    ( memberchk(element(ns(_, SAMLP):'Status', _StatusAttributes, Status), Response)->
+    (   memberchk('ID'=ResponseID, ResponseAttributes),
+        memberchk(element(ns(_, SAMLP):'Status', _StatusAttributes, Status), Response),
         % Status MUST contain a StatusCode element, and MAY contain a StatusMessage and or StatusDetail element
-        ( memberchk(element(ns(_, SAMLP):'StatusCode', StatusCodeAttributes, _StatusCode), Status)->
-            % StatusCode MUST contain a Value attribute
-            ( memberchk('Value'=StatusCodeValue, StatusCodeAttributes)->
-                true
-            ; domain_error(legal_saml_response, XML0)
-            )
-        ; domain_error(legal_saml_response, XML0)
-        )
-    ; domain_error(legal_saml_response, XML0)
+        memberchk(element(ns(_, SAMLP):'StatusCode', StatusCodeAttributes, _StatusCode), Status),
+        % StatusCode MUST contain a Value attribute
+        memberchk('Value'=StatusCodeValue, StatusCodeAttributes)
+    ->  true
+    ;   domain_error(legal_saml_response, XML)
     ),
-    (  memberchk(element(ns(_, SAML):'Issuer', _, [IssuerName]), Response)
-    -> true
-    ;  IssuerName = {null}
+    (   memberchk('InResponseTo'=InResponseTo, ResponseAttributes),
+        InResponseTo == Expect.id
+    ->  true
+    ;   saml_error(in_response_to)
     ),
-
-    ( member(element(ns(_, DS):'Signature', _, Signature), Response)->
-        xmld_verify_signature(XML, Signature, Certificate, []),
-        % Check that the certificate used to sign was one in the metadata
-        (  saml_idp_certificate(ServiceProvider, IssuerName, signing, IDPCertificate),
-           same_certificate(Certificate, IDPCertificate)
-        -> true
-        ;  domain_error(trusted_certificate, Certificate)
+    (   memberchk('Destination'=Destination, ResponseAttributes)
+    ->  (   Destination == Expect.acs
+        ->  true
+        ;   saml_error(destination(Destination))
         )
-    ; otherwise->
-        % Warning: Message is not signed. Assertions may be though
-        % FIXME: Determine a policy for handling this - if the SP wants them signed, we must make sure they are
-        true
+    ;   true
+    ),
+    (   memberchk(element(ns(_, SAML):'Issuer', _, [ResponseIssuer]), Response)
+    ->  check_issuer(ResponseIssuer, Expect)
+    ;   true
+    ),
+    (   member(element(ns(_, DS):'Signature', _, Signature), Response)
+    ->  verify_signed_element(XML, Signature, ResponseID, ServiceProvider,
+                              Expect, Options),
+        ResponseSigned = true
+    ;   ResponseSigned = false
     ),
 
     ( StatusCodeValue == 'urn:oasis:names:tc:SAML:2.0:status:Success'->
@@ -419,23 +488,87 @@ process_saml_response(XML0, ServiceProvider, Callback, RequestURL, Options):-
     ; throw(saml_rejected(illegal_response))
     ),
 
-    % Response MAY also contain 0..N of the following elements: Assertion, EncryptedAssertion.
-    findall(Attribute,
-            ( ( member(element(ns(SAMLPrefix, SAML):'Assertion', AssertionAttributes, Assertion), Response),
-                process_assertion(ServiceProvider, IssuerName, XML, AssertionAttributes, Assertion, Attribute))
-            ; member(element(ns(SAMLPrefix, SAML):'EncryptedAssertion', _, EncryptedAssertion), Response),
-              decrypt_xml(EncryptedAssertion, DecryptedAssertion, saml:saml_key_callback(ServiceProvider), Options),
-              member(element(ns(_, SAML):'Assertion', AssertionAttributes, Assertion), DecryptedAssertion),
-              process_assertion(ServiceProvider, IssuerName, XML, AssertionAttributes, Assertion, Attribute)
-            ),
-            AcceptedAttributes),
+    % Response MAY also contain 0..N of the following elements:
+    % Assertion, EncryptedAssertion.  Each of them must be valid.
+    findall(Doc-Assertion,
+            response_assertion(Response, ServiceProvider, Options,
+                               Doc, Assertion),
+            Assertions),
+    (   Assertions == []
+    ->  saml_error(no_assertion)
+    ;   true
+    ),
+    Expect1 = Expect.put(response, XML),
+    maplist(process_assertion(ServiceProvider, Expect1, ResponseSigned, Options),
+            Assertions, AttrLists),
+    append(AttrLists, AcceptedAttributes),
     debug(saml, 'Calling SAML callback with these attributes: ~w', [AcceptedAttributes]),
     call(Callback, RequestURL, AcceptedAttributes).
 
-process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, AssertedAttribute):-
+%   response_assertion(+Response, +SP, +Options, -Doc, -Assertion)
+%
+%   Enumerate the assertions of the response.  Doc is the document in
+%   which the assertion appears (for verifying its signature), i.e.,
+%   the response itself or the decrypted EncryptedAssertion.
+
+response_assertion(Response, _SP, _Options, response, Assertion) :-
+    SAML = 'urn:oasis:names:tc:SAML:2.0:assertion',
+    member(Assertion, Response),
+    Assertion = element(ns(_, SAML):'Assertion', _, _).
+response_assertion(Response, SP, Options, decrypted(Decrypted), Assertion) :-
+    SAML = 'urn:oasis:names:tc:SAML:2.0:assertion',
+    member(element(ns(_, SAML):'EncryptedAssertion', _, EncryptedAssertion), Response),
+    decrypt_xml(EncryptedAssertion, Decrypted0,
+                saml:saml_key_callback(SP), Options),
+    include(is_element, Decrypted0, Decrypted),
+    (   Decrypted = [Assertion],
+        Assertion = element(ns(_, SAML):'Assertion', _, _)
+    ->  true
+    ;   saml_error(invalid_encrypted_assertion)
+    ).
+
+is_element(element(_,_,_)).
+
+%   verify_signed_element(+DOM, +Signature, +ID, +SP, +Expect, +Options)
+%
+%   Verify that Signature is a valid signature by the IdP for the
+%   element with identifier ID.
+
+verify_signed_element(DOM, Signature, ID, ServiceProvider, Expect, Options) :-
+    xmld_verify_signature(DOM, Signature, Certificate,
+                          [references(Elements)|Options]),
+    (   saml_idp_certificate(ServiceProvider, Expect.idp, signing, IDPCertificate),
+        same_certificate(Certificate, IDPCertificate)
+    ->  true
+    ;   domain_error(trusted_certificate, Certificate)
+    ),
+    (   member(element(_, Attrs, _), Elements),
+        memberchk('ID'=ID, Attrs)
+    ->  true
+    ;   saml_error(signature_does_not_cover(ID))
+    ).
+
+check_issuer(Issuer, Expect) :-
+    (   Issuer == Expect.idp
+    ->  true
+    ;   saml_error(issuer(Issuer))
+    ).
+
+saml_error(Error) :-
+    throw(error(saml(Error), _)).
+
+%   process_assertion(+SP, +Expect, +ResponseSigned, +Options,
+%                     +Doc-Assertion, -Attributes)
+%
+%   Validate Assertion and extract its attributes.  Raises an exception
+%   if the assertion is not valid.
+
+process_assertion(ServiceProvider, Expect, ResponseSigned, Options,
+                  Doc-element(_, Attributes, Assertion),
+                  AssertedAttributes):-
     SAML = ns(_, 'urn:oasis:names:tc:SAML:2.0:assertion'),
     DS = ns(_, 'http://www.w3.org/2000/09/xmldsig#'),
-    ( memberchk('ID'=_AssertionID, Attributes)->
+    ( memberchk('ID'=AssertionID, Attributes)->
         true
     ; throw(missing_assertion_id)
     ),
@@ -445,34 +578,26 @@ process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, A
     %   AuthzDecisionStatement
     %   AttributeStatement
     % It must also have all the following attributes, Version, ID, IssueInstant
-    memberchk(element(SAML:'Issuer', _, [IssuerName]), Assertion),
-    debug(saml, 'Received assertion from IdP ~w', [IssuerName]),
-    ( member(element(DS:'Signature', _, Signature), Assertion)->
-        xmld_verify_signature(Document, Signature, Certificate, []),
-        % Check that the certificate used to sign was one in the metadata
-        (  saml_idp_certificate(ServiceProvider, IssuerName, signing, IDPCertificate),
-           same_certificate(Certificate, IDPCertificate)
-        -> true
-        ;  domain_error(trusted_certificate, Certificate)
-        )
-    ; otherwise->
-        % Technically the standard allows this, but it seems like practically it would be useless?
-        % Which part of the response SHOULD be signed? The entire thing or the assertions?
-        true
-        %throw(unsigned_response)
+    (   memberchk(element(SAML:'Issuer', _, [IssuerName]), Assertion)
+    ->  check_issuer(IssuerName, Expect)
+    ;   saml_error(no_issuer)
     ),
-    ( memberchk(element(SAML:'Conditions', ConditionsAttributes, Conditions), Assertion)->
-        % If conditions are present, we MUST check them. These can include arbitrary, user-defined conditions
+    debug(saml, 'Received assertion from IdP ~w', [IssuerName]),
+    (   member(element(DS:'Signature', _, Signature), Assertion)
+    ->  assertion_dom(Doc, Expect, AssertionDOM),
+        verify_signed_element(AssertionDOM, Signature, AssertionID,
+                              ServiceProvider, Expect, Options)
+    ;   ResponseSigned == true,
+        Doc == response
+    ->  true
+    ;   saml_error(unsigned_assertion(AssertionID))
+    ),
+    clock_skew(Options, Skew),
+    get_time(Now),
+    (   memberchk(element(SAML:'Conditions', ConditionsAttributes, Conditions), Assertion)
+    ->  % If conditions are present, we MUST check them. These can include arbitrary, user-defined conditions
         % and things like ProxyRestriction and OneTimeUse
-        get_xml_timestamp(Date),
-        ( memberchk('NotOnOrAfter'=Expiry, ConditionsAttributes)->
-            Date @< Expiry
-        ; true
-        ),
-        ( memberchk('NotBefore'=Expiry, ConditionsAttributes)->
-            Date @> Expiry
-        ; true
-        ),
+        check_validity(ConditionsAttributes, Now, Skew, _),
         forall(member(element(SAML:'Condition', ConditionAttributes, Condition), Conditions),
                condition_holds(ConditionAttributes, Condition)),
         forall(member(element(SAML:'AudienceRestriction', _AudienceRestrictionAttributes, AudienceRestriction), Conditions),
@@ -489,7 +614,7 @@ process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, A
             throw(proxy_restriction_not_supported)
         ; true
         )
-    ; true
+    ;   true
     ),
     % The Subject element is not mandatory. In the introduction to section 2, the specification states
     % "the <Subject> element is optional, and other specifications and profiles may utilize the SAML assertion
@@ -500,34 +625,77 @@ process_assertion(ServiceProvider, _EntityID, Document, Attributes, Assertion, A
     % Specifically, 2.7.2, 2.7.3, 2.7.4 enumerate all the SAML-defined statements, and all of them say that the assertion MUST
     % contain a subject
     (   memberchk(element(SAML:'Subject', _, Subject), Assertion)
-    ->  memberchk(element(SAML:'NameID', _, [_0IdPName]), Subject),
-        debug(saml, 'Assertion is for subject ~w', [_0IdPName]),
+    ->  (   memberchk(element(SAML:'NameID', _, [_0IdPName]), Subject)
+        ->  debug(saml, 'Assertion is for subject ~w', [_0IdPName])
+        ;   saml_error(no_name_id)
+        ),
         % Note that it is not mandatory for there to be any SubjectConfirmation in the message, however, since we must verify at least one
         % confirmation in order to trust that the subject has really associated with the IdP, a subject with no confirmations is useless anyway
         (   member(element(SAML:'SubjectConfirmation', SubjectConfirmationAttributes, SubjectConfirmation), Subject),
-            subject_confirmation_is_valid(SubjectConfirmationAttributes, SubjectConfirmation)
+            subject_confirmation_is_valid(SubjectConfirmationAttributes, SubjectConfirmation,
+                                          Expect, Now, Skew, Expires)
         ->  debug(saml, 'Subject is confirmed', [])
         ;   debug(saml, 'No valid subject confirmation could be found', []),
             throw(no_subject_confirmation)
         )
     ;   throw(not_supported(assertion_without_subject))
     ),
-    !,
-    memberchk(element(SAML:'AttributeStatement', _, AttributeStatement), Assertion),
+    check_replay(AssertionID, Expires),
+    findall(attribute(AttributeName, FriendlyName, AttributeValue),
+            assertion_attribute(Assertion, AttributeName, FriendlyName,
+                                AttributeValue),
+            AssertedAttributes).
+
+assertion_dom(response, Expect, DOM) :-
+    DOM = Expect.response.
+assertion_dom(decrypted(DOM), _, DOM).
+
+assertion_attribute(Assertion, AttributeName, FriendlyName, AttributeValue) :-
+    SAML = ns(_, 'urn:oasis:names:tc:SAML:2.0:assertion'),
+    member(element(SAML:'AttributeStatement', _, AttributeStatement), Assertion),
     member(element(SAML:'Attribute', AttributeAttributes, Attribute), AttributeStatement),
     memberchk('Name'=AttributeName, AttributeAttributes),
     (  memberchk('FriendlyName'=FriendlyName, AttributeAttributes)
     -> true
     ;  FriendlyName = ''
     ),
-    memberchk(element(SAML:'AttributeValue', _, [AttributeValue]), Attribute),
-    AssertedAttribute = attribute(AttributeName, FriendlyName, AttributeValue).
-
-process_assertion(_Attributes, _Assertion, _, _, _, _):-
-    debug(saml, 'Warning: Assertion was not valid', []).
+    member(element(SAML:'AttributeValue', _, [AttributeValue]), Attribute),
+    atomic(AttributeValue).
 
 condition_holds(_ConditionAttributes, _Condition):-
     throw(conditions_not_implemented).
+
+%   check_validity(+Attributes, +Now, +Skew, -NotOnOrAfter)
+%
+%   Check the NotBefore and NotOnOrAfter attributes.  NotOnOrAfter is
+%   unified with the time stamp of NotOnOrAfter or left unbound.
+
+check_validity(Attributes, Now, Skew, NotOnOrAfter) :-
+    (   memberchk('NotOnOrAfter'=Expiry, Attributes)
+    ->  xml_time(Expiry, NotOnOrAfter),
+        (   Now < NotOnOrAfter + Skew
+        ->  true
+        ;   saml_error(expired(Expiry))
+        )
+    ;   true
+    ),
+    (   memberchk('NotBefore'=Start, Attributes)
+    ->  xml_time(Start, NotBefore),
+        (   Now >= NotBefore - Skew
+        ->  true
+        ;   saml_error(not_yet_valid(Start))
+        )
+    ;   true
+    ).
+
+xml_time(Text, Stamp) :-
+    (   parse_time(Text, iso_8601, Stamp)
+    ->  true
+    ;   saml_error(invalid_time(Text))
+    ).
+
+clock_skew(Options, Skew) :-
+    option(clock_skew(Skew), Options, 180).
 
 get_xml_timestamp(Date):-
     get_time(Time),
@@ -536,34 +704,34 @@ get_xml_timestamp(Date):-
     format(atom(Date), '~w-~|~`0t~w~2+-~|~`0t~w~2+T~|~`0t~w~2+:~|~`0t~w~2+:~|~`0t~w~2+Z', [Y,M,D,HH,MM,SS]).
 
 
-subject_confirmation_is_valid(SubjectConfirmationAttributes, SubjectConfirmation):-
+%   subject_confirmation_is_valid(+Attributes, +Confirmation, +Expect,
+%                                 +Now, +Skew, -Expires) is semidet.
+%
+%   A bearer confirmation is valid if its SubjectConfirmationData has a
+%   valid NotOnOrAfter, a Recipient that is our ACS URL and, if present,
+%   an InResponseTo that refers to our request.
+
+subject_confirmation_is_valid(SubjectConfirmationAttributes, SubjectConfirmation,
+                              Expect, Now, Skew, Expires):-
     SAML = ns(_, 'urn:oasis:names:tc:SAML:2.0:assertion'),
     memberchk('Method'='urn:oasis:names:tc:SAML:2.0:cm:bearer', SubjectConfirmationAttributes), % this is the only method we support
     memberchk(element(SAML:'SubjectConfirmationData', Attributes, _SubjectConfirmationData), SubjectConfirmation),
-    get_xml_timestamp(Date),
-    ( memberchk('NotOnOrAfter'=Expiry, Attributes)->
-        Date @< Expiry
-    ; true
-    ),
-    ( memberchk('NotBefore'=Expiry, Attributes)->
-        Date @> Expiry
-    ; true
-    ),
-    ( memberchk('InResponseTo'=_InResponseTo, Attributes)->
-        % FIXME: Check that we sent the message, somehow?
-        true
-    ; true
-    ),
-    ( memberchk('Recipient'=_Recipient, Attributes)->
-        % FIXME: Check that this is us, somehow?
-        true
-    ; true
-    ),
-    % FIXME: We can also have other arbitrary elements and attributes in here for user-defined extensions. These are ignored.
-    true.
+    memberchk('NotOnOrAfter'=_, Attributes),
+    check_validity(Attributes, Now, Skew, Expires),
+    memberchk('Recipient'=Recipient, Attributes),
+    Recipient == Expect.acs,
+    (   memberchk('InResponseTo'=InResponseTo, Attributes)
+    ->  InResponseTo == Expect.id
+    ;   true
+    ).
+    % Other user-defined extensions are ignored.
 
-saml_key_callback(ServiceProvider, certificate, KeyHint, Key):-
-    saml_sp_certificate(ServiceProvider, KeyHint, _, Key),
+saml_key_callback(ServiceProvider, certificate, Certificate, Key):-
+    saml_sp_certificate(ServiceProvider, SPCertificate, _, Key),
+    same_certificate(Certificate, SPCertificate),
+    !.
+saml_key_callback(ServiceProvider, name, _KeyName, Key):-
+    saml_sp_certificate(ServiceProvider, _, _, Key),
     !.
 
 
@@ -607,3 +775,45 @@ saml_metadata(ServiceProvider, _Options, Request):-
     AssertionConsumerService = element(MD:'AssertionConsumerService', [index='0', isDefault=true, 'Binding'=ACSBinding, 'Location'=ACSLocation], []),
     xml_write(current_output, XML, []).
 
+
+		 /*******************************
+		 *           MESSAGES		*
+		 *******************************/
+
+:- multifile
+    prolog:error_message//1.
+
+prolog:error_message(saml(Error)) -->
+    [ 'SAML: ' ],
+    saml_message(Error).
+
+saml_message(invalid_relay_state) -->
+    [ 'invalid or expired RelayState' ].
+saml_message(not_a_response) -->
+    [ 'message is not a SAML Response' ].
+saml_message(in_response_to) -->
+    [ 'response does not refer to our request' ].
+saml_message(destination(Dest)) -->
+    [ 'response is for another destination (~p)'-[Dest] ].
+saml_message(issuer(Issuer)) -->
+    [ 'unexpected issuer ~p'-[Issuer] ].
+saml_message(no_issuer) -->
+    [ 'assertion has no issuer' ].
+saml_message(no_name_id) -->
+    [ 'subject has no NameID' ].
+saml_message(no_assertion) -->
+    [ 'response contains no assertions' ].
+saml_message(invalid_encrypted_assertion) -->
+    [ 'invalid encrypted assertion' ].
+saml_message(unsigned_assertion(ID)) -->
+    [ 'assertion ~p is not signed'-[ID] ].
+saml_message(signature_does_not_cover(ID)) -->
+    [ 'signature does not refer to ~p'-[ID] ].
+saml_message(replayed_assertion(ID)) -->
+    [ 'assertion ~p was already used'-[ID] ].
+saml_message(expired(Time)) -->
+    [ 'assertion expired at ~w'-[Time] ].
+saml_message(not_yet_valid(Time)) -->
+    [ 'assertion is not valid before ~w'-[Time] ].
+saml_message(invalid_time(Time)) -->
+    [ 'invalid time stamp: ~p'-[Time] ].
