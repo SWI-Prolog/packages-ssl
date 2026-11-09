@@ -792,6 +792,35 @@ test(roundtrip, RecoveredText == Text) :-
     crypto_data_encrypt(Text, 'aes-128-cbc', Key, IV, CipherText, []),
     crypto_data_decrypt(CipherText, 'aes-128-cbc', Key, IV, RecoveredText, []).
 
+test(key_length, error(domain_error(cipher_key_length, _))) :-
+    crypto_data_encrypt("text", 'aes-128-cbc', "short", "sixteenbytesofiv",
+                        _, []).
+test(key_length, error(domain_error(cipher_key_length, _))) :-
+    crypto_data_encrypt("text", 'aes-128-cbc', "thirtytwobytesofkeythirtytwobyte",
+                        "sixteenbytesofiv", _, []).
+test(iv_length, error(domain_error(cipher_iv_length, _))) :-
+    crypto_data_encrypt("text", 'aes-128-cbc', "sixteenbyteofkey", "short",
+                        _, []).
+test(aead_no_tag, error(existence_error(option, tag))) :-
+    crypto_data_encrypt("text", 'chacha20-poly1305',
+                        "thirtytwobytesofkeythirtytwobyte", "twelvebytesn",
+                        CipherText, [tag(_)]),
+    crypto_data_decrypt(CipherText, 'chacha20-poly1305',
+                        "thirtytwobytesofkeythirtytwobyte", "twelvebytesn",
+                        _, []).
+test(aead_bad_tag, error(ssl_error(decrypt, _, _, _))) :-
+    Key = "thirtytwobytesofkeythirtytwobyte",
+    crypto_data_encrypt("text", 'chacha20-poly1305', Key, "twelvebytesn",
+                        CipherText, [tag([T0|Tag])]),
+    T1 is T0 xor 1,
+    crypto_data_decrypt(CipherText, 'chacha20-poly1305', Key, "twelvebytesn",
+                        _, [tag([T1|Tag])]).
+test(stream_hash, error(type_error(hash_stream, _))) :-
+    setup_call_cleanup(
+        open_string("abc", S),
+        crypto_stream_hash(S, _),
+        close(S)).
+
 :- end_tests(crypto_data_encrypt).
 
 :- begin_tests(crypto_hash).
@@ -806,6 +835,13 @@ test(validate_password) :-
 test(validate_password_bcrypt) :-
     crypto_password_hash("foobar",
                          '$2a$11$pqt9BvPb4wOjkj5c9F14ge5R8HuI2i07hMXXk.IWciB370d2EXwX2').
+
+test(pbkdf2_zero_iterations, error(domain_error(pbkdf2_iterations, 0))) :-
+    crypto_password_hash(x, '$pbkdf2-sha512$t=0$c2FsdA$aGFzaA').
+test(bcrypt_cost, error(domain_error(bcrypt_cost, _))) :-
+    crypto_password_hash(x, _, [algorithm(bcrypt), cost(25)]).
+test(bcrypt_nul, error(domain_error(bcrypt_password, _))) :-
+    crypto_password_hash('a\u0000b', _, [algorithm(bcrypt)]).
 
 test(validate_password_bcrypt_roundtrip) :-
     crypto_password_hash("hello", Hash, [algorithm(bcrypt)]),

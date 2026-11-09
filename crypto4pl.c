@@ -36,6 +36,7 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <config.h>
 #include <assert.h>
+#include <ctype.h>
 #include <stdbool.h>
 #include <string.h>
 #include <SWI-Stream.h>
@@ -114,10 +115,12 @@ pl_crypto_n_random_bytes(term_t tn, term_t tout)
   if ( !PL_get_size_ex(tn, &len) )
     return FALSE;
 
-  if ( !(buffer = malloc(len)) )
+  if ( len > INT_MAX )
+    return PL_domain_error("random_bytes_length", tn);
+  if ( !(buffer = malloc(len ? len : 1)) )
     return PL_resource_error("memory");
 
-  if ( RAND_bytes(buffer, (int)len) == 0 )
+  if ( RAND_bytes(buffer, (int)len) != 1 )
   { free(buffer);
     return raise_ssl_error(ERR_get_error());
   }
@@ -559,14 +562,9 @@ hash_write(void *handle, char *buf, size_t size)
 
   hash_append(ctx, buf, size);
 
-  while ( written < size )
-  { ssize_t wr = Sfwrite(buf+written, sizeof(char), size, ctx->parent_stream);
-
-    if ( wr >= 0 )
-    { written += wr;
-    } else
-      return wr;
-  }
+  written = Sfwrite(buf, sizeof(char), size, ctx->parent_stream);
+  if ( written != size )
+    return -1;				/* error on parent stream */
 
   return size;
 }
@@ -599,7 +597,9 @@ hash_close(void *handle)
   if ( ctx->close_parent )
     rc = Sclose(ctx->parent_stream);
 
-  free_crypto_hash_context(ctx);
+  ctx->parent_stream = NULL;		/* context is owned by its blob */
+  ctx->hash_stream = NULL;
+  PL_unregister_atom(ctx->atom);	/* see pl_crypto_open_hash_stream() */
 
   return rc;
 }
@@ -665,8 +665,12 @@ pl_crypto_stream_hash_context(term_t stream, term_t tcontext)
   int rc;
 
   if ( PL_get_stream_handle(stream, &s) )
-  { PL_CRYPTO_HASH_CONTEXT *ctx = s->handle;
-    rc = unify_hash_context(tcontext, ctx);
+  { if ( s->functions == &hash_functions )
+    { PL_CRYPTO_HASH_CONTEXT *ctx = s->handle;
+      rc = PL_unify_atom(tcontext, ctx->atom);
+    } else
+    { rc = PL_type_error("hash_stream", stream);
+    }
     PL_release_stream(s);
     return rc;
   }
@@ -679,6 +683,8 @@ pl_crypto_stream_hash_context(term_t stream, term_t tcontext)
                  ****************************/
 
 #define PBKDF2_DIGEST_LEN 64
+#define PBKDF2_MAX_ITERATIONS (1<<24)	/* about 4 sec on a 2025 machine */
+#define BCRYPT_MAX_COST 18		/* about 15 sec on a 2025 machine */
 
 static foreign_t
 pl_crypto_password_hash_pbkdf2(term_t tpw, term_t tsalt, term_t titer, term_t tdigest)
@@ -692,10 +698,15 @@ pl_crypto_password_hash_pbkdf2(term_t tpw, term_t tsalt, term_t titer, term_t td
        !PL_get_nchars(tsalt, &saltlen, &salt, CVT_LIST) ||
        !PL_get_integer_ex(titer, &iter) )
     return FALSE;
+  if ( iter < 1 || iter > PBKDF2_MAX_ITERATIONS )
+    return PL_domain_error("pbkdf2_iterations", titer);
+  if ( pwlen > INT_MAX || saltlen > INT_MAX )
+    return PL_representation_error("length");
 
-  PKCS5_PBKDF2_HMAC((const char *) pw, (int)pwlen,
-                    (const unsigned char *) salt, (int)saltlen,
-                    iter, EVP_sha512(), PBKDF2_DIGEST_LEN, digest);
+  if ( PKCS5_PBKDF2_HMAC((const char *) pw, (int)pwlen,
+			 (const unsigned char *) salt, (int)saltlen,
+			 iter, EVP_sha512(), PBKDF2_DIGEST_LEN, digest) != 1 )
+    return raise_ssl_error(ERR_get_error());
 
   return PL_unify_list_ncodes(tdigest, PBKDF2_DIGEST_LEN, (char *) digest);
 }
@@ -713,6 +724,14 @@ pl_crypto_password_hash_bcrypt(term_t tpw, term_t tsetting, term_t tdigest)
        !PL_get_nchars(tsetting, &settinglen, &setting,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) )
     return FALSE;
+  if ( strlen(pw) != pwlen )		/* bcrypt stops at the first NUL */
+    return PL_domain_error("bcrypt_password", tpw);
+  if ( settinglen >= 7 && setting[0] == '$' && setting[1] == '2' &&
+       setting[3] == '$' &&
+       isdigit((unsigned char)setting[4]) &&
+       isdigit((unsigned char)setting[5]) &&
+       (setting[4]-'0')*10+(setting[5]-'0') > BCRYPT_MAX_COST )
+    return PL_domain_error("bcrypt_cost", tsetting);
 
   char* ret = _crypt_blowfish_rn(pw, setting, (char *) digest, BCRYPT_DIGEST_LEN);
   if ( ret == NULL )
@@ -903,15 +922,57 @@ cleanup:
 
 static int
 recover_rsa(term_t t, RSAKEY** keyp)
-{
+{ BIGNUM *n = NULL, *e = NULL, *d = NULL, *p = NULL,
+    *q = NULL, *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
 #ifdef USE_EVP_API
-  RSAKEY* key = EVP_PKEY_new();
+  RSAKEY *key = NULL;
+  OSSL_PARAM_BLD *param_builder = NULL;
+  OSSL_PARAM *params = NULL;
+  EVP_PKEY_CTX* ctx = NULL;
+  int rc = FALSE;
+
+  if ( !(get_bn_arg(1, t, &n) &&
+	 get_bn_arg(2, t, &e) &&
+	 get_bn_arg(3, t, &d) &&
+	 get_bn_arg(4, t, &p) &&
+	 get_bn_arg(5, t, &q) &&
+	 get_bn_arg(6, t, &dmp1) &&
+	 get_bn_arg(7, t, &dmq1) &&
+	 get_bn_arg(8, t, &iqmp)) )
+    goto out;
+
+  if ( !(ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL)) ||
+       !(param_builder = OSSL_PARAM_BLD_new()) )
+  { rc = raise_ssl_error(ERR_get_error());
+    goto out;
+  }
+  if ( ! ( OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_N, n) &&
+           OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_E, e) &&
+           OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_D, d) ) ||
+        ( ( p || q ) && ! ( OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_FACTOR1, p) &&
+                            OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_FACTOR2, q) ) ) ||
+        ( ( dmp1 || dmq1 || iqmp ) && ! ( OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_EXPONENT1, dmp1) &&
+                                          OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_EXPONENT2, dmq1) &&
+                                          OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_COEFFICIENT1, iqmp) ) ) ||
+       !(params = OSSL_PARAM_BLD_to_param(param_builder)) ||
+       EVP_PKEY_fromdata_init(ctx) <= 0 ||
+       EVP_PKEY_fromdata(ctx, &key, EVP_PKEY_KEYPAIR, params) <= 0 )
+  { rc = raise_ssl_error(ERR_get_error());
+    goto out;
+  }
+
+  *keyp = key;
+  rc = TRUE;
+
+out:
+  OSSL_PARAM_free(params);
+  OSSL_PARAM_BLD_free(param_builder);
+  EVP_PKEY_CTX_free(ctx);
+  BN_free(n); BN_free(e); BN_free(d); BN_free(p);
+  BN_free(q); BN_free(dmp1); BN_free(dmq1); BN_free(iqmp);
+  return rc;
 #else
   RSAKEY *key = RSA_new();
-#endif
-
-  BIGNUM *n = NULL, *e = NULL, *d = NULL, *p = NULL,
-    *q = NULL, *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
 
   if ( get_bn_arg(1, t, &n) &&
        get_bn_arg(2, t, &e) &&
@@ -921,66 +982,19 @@ recover_rsa(term_t t, RSAKEY** keyp)
        get_bn_arg(6, t, &dmp1) &&
        get_bn_arg(7, t, &dmq1) &&
        get_bn_arg(8, t, &iqmp) )
-  {
-#ifdef USE_EVP_API
-  OSSL_PARAM_BLD *param_builder;
-  OSSL_PARAM *params = NULL;
-  EVP_PKEY_CTX* ctx;
-  ctx = EVP_PKEY_CTX_new_from_name(NULL, "RSA", NULL);
-  if (!ctx)
-  { return FALSE;
-  }
-  param_builder = OSSL_PARAM_BLD_new();
-  if ( ! ( OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_N, n) &&
-           OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_E, e) &&
-           OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_D, d) ) ||
-        ( ( p || q ) && ! ( OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_FACTOR1, p) &&
-                            OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_FACTOR2, q) ) ) ||
-        ( ( dmp1 || dmq1 || iqmp ) && ! ( OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_EXPONENT1, dmp1) &&
-                                          OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_EXPONENT2, dmq1) &&
-                                          OSSL_PARAM_BLD_push_BN(param_builder, OSSL_PKEY_PARAM_RSA_COEFFICIENT1, iqmp) ) ) )
-  { EVP_PKEY_free(key);
-    OSSL_PARAM_BLD_free(param_builder);
-    return raise_ssl_error(ERR_get_error());
-  }
-  params = OSSL_PARAM_BLD_to_param(param_builder);
-  if (!params)
-  { EVP_PKEY_CTX_free(ctx);
-    return FALSE;
-  }
-	OSSL_PARAM_BLD_free(param_builder);
-  if (EVP_PKEY_fromdata_init(ctx) <= 0)
-  { EVP_PKEY_CTX_free(ctx);
-    OSSL_PARAM_free(params);
-    return raise_ssl_error(ERR_get_error());
-  }
-  if (EVP_PKEY_fromdata(ctx, &key, EVP_PKEY_KEYPAIR, params) <= 0)
-  { EVP_PKEY_CTX_free(ctx);
-    OSSL_PARAM_free(params);
-    return raise_ssl_error(ERR_get_error());
-  }
-  EVP_PKEY_CTX_free(ctx);
-  OSSL_PARAM_free(params);
-  *keyp = key;
-  return TRUE;
-#else
-    if ( !RSA_set0_key(key, n, e, d) ||
+  { if ( !RSA_set0_key(key, n, e, d) ||
          ( (p || q) && !RSA_set0_factors(key, p, q) ) ||
          ( (dmp1 || dmq1 || iqmp) &&
            !RSA_set0_crt_params(key, dmp1, dmq1, iqmp)) )
     { RSA_free(key);
       return FALSE;
     }
-#endif
     *keyp = key;
     return TRUE;
   }
-#ifdef USE_EVP_API
-  EVP_PKEY_free(key);
-#else
   RSA_free(key);
-#endif
   return FALSE;
+#endif
 }
 
 
@@ -1616,13 +1630,13 @@ pl_rsa_public_encrypt(term_t public_t,
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
   if ( !ctx )
   { EVP_PKEY_free(key);
-    PL_free(plain);
+    PL_free(cipher);
     return raise_ssl_error(ERR_get_error());
   }
   if ( EVP_PKEY_encrypt_init(ctx) <= 0 || EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0)
   { EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(key);
-    PL_free(plain);
+    PL_free(cipher);
     return raise_ssl_error(ERR_get_error());
   }
   if ( EVP_PKEY_encrypt(ctx, cipher, &outsize, plain, plain_length) <= 0 )
@@ -1698,14 +1712,14 @@ pl_rsa_private_encrypt(term_t private_t,
   EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
   if ( !ctx )
   { EVP_PKEY_free(key);
-    PL_free(plain);
+    PL_free(cipher);
     return raise_ssl_error(ERR_get_error());
   }
   // EVP_PKEY_ENCRYPT is only for public encryption.
   if ( (EVP_PKEY_sign_init(ctx) <= 0) || (EVP_PKEY_CTX_set_rsa_padding(ctx, padding) <= 0))
   { EVP_PKEY_CTX_free(ctx);
     EVP_PKEY_free(key);
-    PL_free(plain);
+    PL_free(cipher);
     return raise_ssl_error(ERR_get_error());
   }
   if ( EVP_PKEY_sign(ctx, cipher, &outsize, plain, plain_length) <= 0 )
@@ -1866,6 +1880,84 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
 
 
 
+/* init_cipher() initialises ctx for cipher, using the key and IV from
+   key_t and iv_t.  The key must have the key length of the cipher unless
+   the cipher supports variable key lengths.  The IV must have the IV
+   length of the cipher, except for AEAD ciphers, where we set the IV
+   length.  The IV is ignored for ciphers that do not use an IV.
+*/
+
+static int
+init_cipher(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
+	    term_t key_t, term_t iv_t, int enc)
+{ char *key, *iv;
+  size_t keylen, ivlen;
+  int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
+  int civlen;
+
+  if ( !PL_get_nchars(key_t, &keylen, &key, cvt_flags) ||
+       !PL_get_nchars(iv_t, &ivlen, &iv, cvt_flags) )
+    return FALSE;
+
+  if ( EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL, enc) != 1 )
+    return raise_ssl_error(ERR_get_error());
+
+  if ( keylen != (size_t)EVP_CIPHER_CTX_key_length(ctx) )
+  { if ( !(EVP_CIPHER_flags(cipher) & EVP_CIPH_VARIABLE_LENGTH) ||
+	 keylen > INT_MAX ||
+	 EVP_CIPHER_CTX_set_key_length(ctx, (int)keylen) != 1 )
+      return PL_domain_error("cipher_key_length", key_t);
+  }
+
+  civlen = EVP_CIPHER_CTX_iv_length(ctx);
+  if ( civlen == 0 )
+  { iv = NULL;
+  } else if ( ivlen != (size_t)civlen )
+  { if ( !(EVP_CIPHER_flags(cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) ||
+	 ivlen == 0 || ivlen > INT_MAX ||
+	 EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN,
+			     (int)ivlen, NULL) != 1 )
+      return PL_domain_error("cipher_iv_length", iv_t);
+  }
+
+  if ( EVP_CipherInit_ex(ctx, NULL, NULL,
+			 (const unsigned char*)key,
+			 (const unsigned char*)iv, enc) != 1 )
+    return raise_ssl_error(ERR_get_error());
+
+  return TRUE;
+}
+
+
+/* raise_decrypt_failed() raises the same error for all failures to
+   finalize decryption (bad padding, bad authentication tag) such that
+   the error does not reveal the reason.
+*/
+
+static int
+raise_decrypt_failed(void)
+{ term_t ex;
+
+  ERR_clear_error();
+  return ( (ex = PL_new_term_ref()) &&
+	   PL_unify_term(ex,
+			 PL_FUNCTOR_CHARS, "error", 2,
+			   PL_FUNCTOR_CHARS, "ssl_error", 4,
+			     PL_CHARS, "decrypt",
+			     PL_CHARS, "crypto",
+			     PL_CHARS, "crypto_data_decrypt",
+			     PL_CHARS, "decryption failed",
+			   PL_VARIABLE) &&
+	   PL_raise_exception(ex) );
+}
+
+
+static int
+is_aead_cipher(const EVP_CIPHER *cipher)
+{ return (EVP_CIPHER_flags(cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) != 0;
+}
+
+
 static foreign_t
 pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
                        term_t key_t, term_t iv_t,
@@ -1874,74 +1966,74 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
                        term_t options_t)
 { EVP_CIPHER_CTX* ctx = NULL;
   const EVP_CIPHER *cipher;
-  char* key;
-  char* iv;
   char* ciphertext;
   size_t cipher_length;
   int plain_length;
   char* algorithm;
-  char* plaintext;
+  char* plaintext = NULL;
   int cvt_flags = CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION;
   int rep = REP_UTF8;
   int padding = 1;
-#ifdef EVP_CTRL_AEAD_SET_TAG
   char *authtag;
   size_t authlen;
-#endif
+  int rc = FALSE;
 
   if ( !parse_options(options_t, EVP_MODE, &rep, &padding) )
     return FALSE;
 
-  if ( !PL_get_chars(key_t, &key, cvt_flags) ||
-       !PL_get_chars(iv_t, &iv, cvt_flags) ||
-       !PL_get_nchars(ciphertext_t, &cipher_length, &ciphertext, cvt_flags) ||
+  if ( !PL_get_nchars(ciphertext_t, &cipher_length, &ciphertext, cvt_flags) ||
        !PL_get_chars(algorithm_t, &algorithm, cvt_flags) )
     return FALSE;
+  if ( cipher_length > INT_MAX )
+    return PL_representation_error("cipher_length");
 
   if ( (cipher = EVP_get_cipherbyname(algorithm)) == NULL )
     return PL_domain_error("cipher", algorithm_t);
-  if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
+  if ( !PL_get_nchars(authtag_t, &authlen, &authtag, CVT_LIST|CVT_EXCEPTION) )
     return FALSE;
+  if ( is_aead_cipher(cipher) && authlen == 0 )
+  { term_t ex;
+    return ( (ex=PL_new_term_ref()) &&
+	     PL_put_atom_chars(ex, "tag") &&
+	     PL_existence_error("option", ex) );
+  }
+  if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
+    return PL_resource_error("memory");
 
-  EVP_CIPHER_CTX_reset(ctx);
-  EVP_DecryptInit_ex(ctx, cipher, NULL,
-		     (const unsigned char*)key, (const unsigned char*)iv);
+  if ( !init_cipher(ctx, cipher, key_t, iv_t, 0) )
+    goto out;
 
-#ifdef EVP_CTRL_AEAD_SET_TAG
-  if ( PL_get_nchars(authtag_t, &authlen, &authtag, CVT_LIST) &&
-       ( authlen > 0 ) )
-  { if ( !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, (int)authlen, authtag) )
-    { EVP_CIPHER_CTX_free(ctx);
-      return raise_ssl_error(ERR_get_error());
+  if ( authlen > 0 )
+  { if ( authlen > INT_MAX ||
+	 !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, (int)authlen, authtag) )
+    { rc = raise_ssl_error(ERR_get_error());
+      goto out;
     }
   }
-#endif
 
   EVP_CIPHER_CTX_set_padding(ctx, padding);
   plaintext = PL_malloc(cipher_length + EVP_CIPHER_block_size(cipher));
   if ( EVP_DecryptUpdate(ctx, (unsigned char*)plaintext, &plain_length,
 			 (unsigned char*)ciphertext, (int)cipher_length) == 1 )
-  { int last_chunk = plain_length;
-    int rc;
-    rc = EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
-                              &last_chunk);
+  { int last_chunk = 0;
 
-    EVP_CIPHER_CTX_free(ctx);
+    if ( EVP_DecryptFinal_ex(ctx, (unsigned char*)(plaintext + plain_length),
+			     &last_chunk) != 1 )
+    { rc = raise_decrypt_failed();
+      goto out;
+    }
 
-    if ( !rc )
-      return raise_ssl_error(ERR_get_error());
-
-    ERR_print_errors_fp(stderr);
-    rc &= PL_unify_chars(plaintext_t, rep | PL_STRING, plain_length + last_chunk,
-                         plaintext);
-    PL_free(plaintext);
-    return rc;
+    rc = PL_unify_chars(plaintext_t, rep | PL_STRING,
+			plain_length + last_chunk, plaintext);
+  } else
+  { rc = raise_ssl_error(ERR_get_error());
   }
 
-  PL_free(plaintext);
+out:
+  if ( plaintext )
+    PL_free(plaintext);
   EVP_CIPHER_CTX_free(ctx);
-
-  return raise_ssl_error(ERR_get_error());
+  return rc;
 }
 
 #define MAX_AUTHLEN 256
@@ -1954,9 +2046,7 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
                        term_t options_t)
 { EVP_CIPHER_CTX* ctx = NULL;
   const EVP_CIPHER *cipher;
-  char* key;
-  char* iv;
-  char* ciphertext;
+  char* ciphertext = NULL;
   int cipher_length;
   char* algorithm;
   char* plaintext;
@@ -1965,61 +2055,67 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
   int rep = REP_UTF8;
   int padding = 1;
   int authlen;
-#ifdef EVP_CTRL_AEAD_SET_TAG
   char authtag[MAX_AUTHLEN];
-#endif
+  int rc = FALSE;
 
   if ( !parse_options(options_t, EVP_MODE, &rep, &padding) ||
-       !PL_get_integer_ex(authlen_t, &authlen) ||
-       ( authlen > MAX_AUTHLEN ) )
+       !PL_get_integer_ex(authlen_t, &authlen) )
     return FALSE;
+  if ( authlen > MAX_AUTHLEN )
+    return PL_domain_error("tag_length", authlen_t);
 
-  if ( !PL_get_chars(key_t, &key, cvt_flags) ||
-       !PL_get_chars(iv_t, &iv, cvt_flags) ||
-       !PL_get_nchars(plaintext_t, &plain_length, &plaintext, cvt_flags | rep) ||
+  if ( !PL_get_nchars(plaintext_t, &plain_length, &plaintext, cvt_flags | rep) ||
        !PL_get_chars(algorithm_t, &algorithm, cvt_flags) )
     return FALSE;
+  if ( plain_length > INT_MAX - EVP_MAX_BLOCK_LENGTH )
+    return PL_representation_error("plain_length");
 
   if ( (cipher = EVP_get_cipherbyname(algorithm)) == NULL )
     return PL_domain_error("cipher", algorithm_t);
+  if ( is_aead_cipher(cipher) && authlen < 0 )
+  { term_t ex;
+    return ( (ex=PL_new_term_ref()) &&
+	     PL_put_atom_chars(ex, "tag") &&
+	     PL_existence_error("option", ex) );
+  }
   if ((ctx = EVP_CIPHER_CTX_new()) == NULL)
-    return FALSE;
+    return PL_resource_error("memory");
 
-  EVP_CIPHER_CTX_reset(ctx);
-  EVP_EncryptInit_ex(ctx, cipher, NULL,
-		     (const unsigned char*)key, (const unsigned char*)iv);
+  if ( !init_cipher(ctx, cipher, key_t, iv_t, 1) )
+    goto out;
   EVP_CIPHER_CTX_set_padding(ctx, padding);
   ciphertext = PL_malloc(plain_length + EVP_CIPHER_block_size(cipher));
   if ( EVP_EncryptUpdate(ctx, (unsigned char*)ciphertext, &cipher_length,
                          (unsigned char*)plaintext, (int)plain_length) == 1 )
   { int last_chunk;
-    int rc;
 
     if ( !EVP_EncryptFinal_ex(ctx, (unsigned char*)(ciphertext + cipher_length),
                               &last_chunk) )
-      return raise_ssl_error(ERR_get_error());
+    { rc = raise_ssl_error(ERR_get_error());
+      goto out;
+    }
 
-#ifdef EVP_CTRL_AEAD_SET_TAG
     if ( authlen >= 0 )
     { if ( !EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, authlen, authtag) )
-        return raise_ssl_error(ERR_get_error());
+      { rc = raise_ssl_error(ERR_get_error());
+	goto out;
+      }
 
       if ( !PL_unify_list_ncodes(authtag_t, authlen, authtag) )
-        return FALSE;
+	goto out;
     }
-#endif
 
-    EVP_CIPHER_CTX_free(ctx);
     rc = PL_unify_chars(ciphertext_t,  PL_STRING|REP_ISO_LATIN_1,
 			cipher_length + last_chunk, ciphertext);
-    PL_free(ciphertext);
-    return rc;
+  } else
+  { rc = raise_ssl_error(ERR_get_error());
   }
 
-  PL_free(ciphertext);
+out:
+  if ( ciphertext )
+    PL_free(ciphertext);
   EVP_CIPHER_CTX_free(ctx);
-
-  return raise_ssl_error(ERR_get_error());
+  return rc;
 }
 
 
@@ -2061,13 +2157,23 @@ pl_crypto_modular_inverse(term_t tx, term_t tm, term_t tout)
                  *      PRIMES      *
                  ********************/
 
+/* bn_gencb() allows interrupting prime generation and testing, e.g.,
+   by call_with_time_limit/2.
+*/
+
+static int
+bn_gencb(int p, int n, BN_GENCB *cb)
+{ return PL_handle_signals() < 0 ? 0 : 1;
+}
+
 static foreign_t
 pl_crypto_generate_prime(term_t tbits, term_t tprime, term_t tsafe,
                          term_t toptions)
 { BIGNUM *prime = NULL;
+  BN_GENCB *gcb = NULL;
   int bits, safe;
   char *hex = NULL;
-  int rc, ssl_err = FALSE;
+  int rc = FALSE, ssl_err = FALSE;
 
   if ( !PL_get_integer_ex(tbits, &bits) )
     return FALSE;
@@ -2076,15 +2182,18 @@ pl_crypto_generate_prime(term_t tbits, term_t tprime, term_t tsafe,
     return FALSE;
 
   if ( ( prime = BN_new() ) &&
-       ( BN_generate_prime_ex(prime, bits, safe, NULL, NULL, NULL ) ) &&
+       ( gcb = BN_GENCB_new() ) &&
+       ( BN_GENCB_set(gcb, bn_gencb, NULL), TRUE ) &&
+       ( BN_generate_prime_ex(prime, bits, safe, NULL, NULL, gcb ) ) &&
        ( hex = BN_bn2hex(prime) ) )
   { rc = PL_unify_chars(tprime, PL_STRING|REP_ISO_LATIN_1, strlen(hex), hex);
-  } else
+  } else if ( !PL_exception(0) )
   { ssl_err = TRUE;
   }
 
   OPENSSL_free(hex);
   BN_free(prime);
+  BN_GENCB_free(gcb);
 
   if ( ssl_err )
   { return raise_ssl_error(ERR_get_error());
@@ -2105,7 +2214,12 @@ pl_crypto_is_prime(term_t tprime, term_t tnchecks)
 
   nchecks = ( nchecks < 0 ) ? BN_prime_checks : nchecks;
 
-  if ( ( ctx = BN_CTX_new() ) &&
+  BN_GENCB *gcb = BN_GENCB_new();
+  if ( gcb )
+    BN_GENCB_set(gcb, bn_gencb, NULL);
+
+  if ( gcb &&
+       ( ctx = BN_CTX_new() ) &&
        get_bn_arg(1, tprime, &prime) )
   {
 #ifdef HAVE_BN_CHECK_PRIME
@@ -2113,17 +2227,20 @@ pl_crypto_is_prime(term_t tprime, term_t tnchecks)
   // but I could not find any information *anywhere* about how to pass in nchecks. Looking at the code in openssl
   // it appears that they take some steps to correctly determine the value of nchecks. See
   //     hhttps://github.com/openssl/openssl/blob/26b3e44a661899f0d0cb709482170cc411a94233/crypto/bn/bn_prime.c#L247
-  ret = BN_check_prime(prime, ctx, NULL);
+  ret = BN_check_prime(prime, ctx, gcb);
 #else
-  ret = BN_is_prime_ex(prime, nchecks, ctx, NULL);
+  ret = BN_is_prime_ex(prime, nchecks, ctx, gcb);
 #endif
   }
 
   BN_free(prime);
   BN_CTX_free(ctx);
+  BN_GENCB_free(gcb);
 
   if ( ret == -1 )
-  { return raise_ssl_error(ERR_get_error());
+  { if ( PL_exception(0) )
+      return FALSE;
+    return raise_ssl_error(ERR_get_error());
   }
 
   return ret;
