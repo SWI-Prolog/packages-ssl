@@ -206,7 +206,8 @@ https_server_with_client_cert(Port) :-
 client_cert_verify(_SSL, _Problem, _AllCerts, First, Error) :-
     debug(cert_verify_hook,
           'Handling client certificate verification~n\c
-              Certificate: ~p, error: ~w~n', [First, Error]).
+              Certificate: ~p, error: ~w~n', [First, Error]),
+    Error == verified.
 
 
                  /*******************************

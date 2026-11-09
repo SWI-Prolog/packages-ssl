@@ -255,6 +255,24 @@ test(missing_key, Msg == 'no private key assigned') :-
     options_errmsg([certificate_file(CertFile),
 		    sni_hook(sni)], Msg).
 
+% copying a context used to corrupt the ALPN list and free CRLs twice
+
+test(copy_context) :-
+    ssl_test_file('tests/test_certs/rootCA-crl.pem', CrlFile),
+    ssl_context(client, SSL0, [ alpn_protocols(['http/1.1']),
+                                crl([CrlFile]),
+                                host(localhost)
+                              ]),
+    ssl_set_options(SSL0, SSL1, []),
+    ssl_set_options(SSL1, SSL2, []),
+    garbage_collect_atoms,
+    ssl_set_options(SSL2, _, []).
+test(alpn_too_long, error(domain_error(alpn_protocol, _))) :-
+    length(L, 300),
+    maplist(=(0'a), L),
+    atom_codes(P, L),
+    ssl_context(client, _, [alpn_protocols([P]), host(localhost)]).
+
 :- end_tests(ssl_options).
 
 :- begin_tests(ssl_server, [condition(current_prolog_flag(threads, true))]).

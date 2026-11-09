@@ -63,6 +63,10 @@
 #include "common.h"
 #include "ssl_applink.h"
 
+#ifndef HAVE_X509_CHECK_HOST
+#error "Requires OpenSSL >= 1.0.2 or LibreSSL providing X509_check_host()"
+#endif
+
 #if defined(__WINDOWS__) || defined (__CYGWIN__)
 #define timezone _timezone
 #endif
@@ -182,6 +186,7 @@ static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
  * Index of our config data in the SSL data
  */
 static int ssl_idx;
+static int ssl_orig_idx;
 static int ctx_idx;
 
 typedef struct pl_cert_key_pair
@@ -221,7 +226,6 @@ typedef struct pl_ssl
    */
   SSL_CTX             *ctx;
   int                  idx;
-  X509                *peer_cert;
 
   /*
    * In case of the client the host we're connecting to.
@@ -255,9 +259,6 @@ typedef struct pl_ssl
   PL_SSL_CALLBACK      cb_pem_passwd;
   PL_SSL_CALLBACK      cb_sni;
   PL_SSL_CALLBACK      cb_alpn_proto;
-#ifndef HAVE_X509_CHECK_HOST
-  int                  hostname_check_status;
-#endif
   unsigned char       *alpn_protos;
   size_t               alpn_protos_len;
 } PL_SSL;
@@ -439,108 +440,22 @@ unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
 */
 static int
 unify_asn1_time(term_t term, const ASN1_TIME *time)
-{ time_t result = 0;
-  char buffer[24];
-  char* pbuffer = buffer;
-  size_t length = ASN1_STRING_length(time);
-  const char * source = (const char *)ASN1_STRING_get0_data(time);
-  struct tm time_tm;
-  time_t lSecondsFromUTC;
+{ ASN1_TIME *epoch;
+  int day, sec;
+  int rc;
 
-  if (ASN1_STRING_type(time) == V_ASN1_UTCTIME)
-  {  if ((length < 11) || (length > 17))
-     {  ssl_deb(2, "Unable to parse time - expected either 11 or 17 chars,"
-		   " not %d", length);
-        return FALSE;
-     }
-     /* Otherwise just get the first 10 chars - ignore seconds */
-     memcpy(pbuffer, source, 10);
-     pbuffer += 10;
-     source += 10;
-     length -= 10;
-  } else
-  { if (length < 13)
-     {  ssl_deb(2, "Unable to parse time - expected at least 13 chars,"
-		   " not %d", length);
-        return FALSE;
-     }
-     /* Otherwise just get the first 12 chars - ignore seconds */
-     memcpy(pbuffer, source, 12);
-     pbuffer += 12;
-     source += 12;
-     length -= 12;
-  }
-  /* Next find end of string */
-  if ((*source == 'Z') || (*source == '-') || (*source == '+'))
-  { *(pbuffer++) = '0';
-    *(pbuffer++) = '0';
-  } else
-  { *(pbuffer++) = *(source++);
-    *(pbuffer++) = *(source++);
-    if (*source == '.')
-    { source++;
-      while ((*source >= '0') && (*source <= '9'))
-         source++;
-    }
-  }
-  *(pbuffer++) = 'Z';
-  *(pbuffer++) = '\0';
-
-  /* If not UTC, calculate offset */
-  if (*source == 'Z')
-  { lSecondsFromUTC = 0;
-  } else
-  { if ( length < 6 || (*source != '+' && source[5] != '-') )
-     {  ssl_deb(2, "Unable to parse time. Missing UTC offset");
-        return FALSE;
-     }
-     lSecondsFromUTC = ((source[1]-'0') * 10 + (source[2]-'0')) * 60;
-     lSecondsFromUTC += (source[3]-'0') * 10 + (source[4]-'0');
-     if (*source == '-')
-        lSecondsFromUTC = -lSecondsFromUTC;
-  }
-  /* Parse date */
-  time_tm.tm_sec  = ((buffer[10] - '0') * 10) + (buffer[11] - '0');
-  time_tm.tm_min  = ((buffer[8] - '0') * 10) + (buffer[9] - '0');
-  time_tm.tm_hour = ((buffer[6] - '0') * 10) + (buffer[7] - '0');
-  time_tm.tm_mday = ((buffer[4] - '0') * 10) + (buffer[5] - '0');
-  time_tm.tm_mon  = (((buffer[2] - '0') * 10) + (buffer[3] - '0')) - 1;
-  time_tm.tm_year = ((buffer[0] - '0') * 10) + (buffer[1] - '0');
-  if (time_tm.tm_year < 50)
-     time_tm.tm_year += 100; /* according to RFC 2459 */
-  time_tm.tm_wday = 0;
-  time_tm.tm_yday = 0;
-  time_tm.tm_isdst = 0;  /* No DST adjustment requested, though */
-			 /* mktime might do it anyway */
-
-#ifdef HAVE_TIMEGM
-  result = timegm(&time_tm);
-  if ((time_t)-1 != result)
-  { result += lSecondsFromUTC;
-  } else
-  { ssl_deb(2, "timegm() failed");
+  if ( !time )
+    return FALSE;
+  if ( !(epoch = ASN1_TIME_set(NULL, 0)) )
+    return PL_resource_error("memory");
+  rc = ASN1_TIME_diff(&day, &sec, epoch, time);
+  ASN1_TIME_free(epoch);
+  if ( !rc )
+  { ssl_deb(2, "Unable to parse time");
     return FALSE;
   }
-#else
-  result = mktime(&time_tm);
-  /* mktime assumes that the time_tm contains information for localtime. */
-  /* Convert back to UTC: */
-  if ((time_t)-1 != result)
-  { long tz;
-#ifdef _MSC_VER
-    _get_timezone(&tz);
-#else
-    tz = timezone;
-#endif
-    result += lSecondsFromUTC; /* Add in the UTC offset of the original value */
-    result -= tz;	       /* Adjust for localtime */
-  } else
-  { ssl_deb(2, "mktime() failed");
-    return FALSE;
-  }
-#endif
 
-  return PL_unify_int64(term, result);
+  return PL_unify_int64(term, (int64_t)day*86400 + sec);
 }
 
 static const EVP_MD *
@@ -612,9 +527,9 @@ unify_name(term_t term, const X509_NAME* name)
   { const X509_NAME_ENTRY* e = X509_NAME_get_entry(name, ni);
     const ASN1_STRING* entry_data = X509_NAME_ENTRY_get_data(e);
     unsigned char *utf8_data;
-    int rc;
+    int rc, len;
 
-    if ( ASN1_STRING_to_UTF8(&utf8_data, entry_data) < 0 )
+    if ( (len=ASN1_STRING_to_UTF8(&utf8_data, entry_data)) < 0 )
       return PL_resource_error("memory");
 
     rc = ( PL_unify_list(list, item, list) &&
@@ -622,7 +537,7 @@ unify_name(term_t term, const X509_NAME* name)
 	       item,
 	       PL_FUNCTOR, FUNCTOR_equals2,
 	       PL_CHARS, OBJ_nid2sn(OBJ_obj2nid(X509_NAME_ENTRY_get_object(e))),
-	       PL_UTF8_CHARS, utf8_data)
+	       PL_NUTF8_CHARS, (size_t)len, utf8_data)
 	 );
     OPENSSL_free(utf8_data);
     if ( !rc )
@@ -661,7 +576,8 @@ unify_crl(term_t term, X509_CRL* crl)
   i2a_ASN1_INTEGER(mem, (ASN1_BIT_STRING *) psig);
   if (!(unify_name(issuer, X509_CRL_get_issuer(crl)) &&
 	unify_hash(hash, palg->algorithm, hash_X509_crl_digest_wrapper, crl) &&
-        unify_asn1_time(next_update, X509_CRL_get0_nextUpdate(crl)) &&
+        ( !X509_CRL_get0_nextUpdate(crl) ||	/* optional */
+	  unify_asn1_time(next_update, X509_CRL_get0_nextUpdate(crl)) ) &&
         unify_bytes_hex(signature, ASN1_STRING_length(psig), ASN1_STRING_get0_data(psig)) &&
         PL_unify_term(term,
                       PL_LIST, 5,
@@ -675,7 +591,8 @@ unify_crl(term_t term, X509_CRL* crl)
                       PL_TERM, next_update,
                       PL_FUNCTOR, FUNCTOR_revocations1,
                       PL_TERM, revocations)))
-  { return FALSE;
+  { BIO_free(mem);
+    return FALSE;
   }
 
   for (i = 0; i < sk_X509_REVOKED_num(revoked); i++)
@@ -1287,7 +1204,8 @@ fetch_public_key(term_t Field, X509* cert)
 { EVP_PKEY *key;
   int rc;
   term_t arg = PL_new_term_ref();
-  key = X509_get_pubkey(cert);
+  if ( !(key = X509_get_pubkey(cert)) )
+    return FALSE;			/* e.g., unsupported algorithm */
   rc = unify_key(key, 0, arg);
   EVP_PKEY_free(key);
   /* Most existing code expects to be able to call memberchk(key(Key), Cert)
@@ -1325,13 +1243,15 @@ fetch_crls(term_t Field, X509* cert)
     { DIST_POINT *point;
       GENERAL_NAME *name;
       point = sk_DIST_POINT_value(distpoints, i);
-      if (point->distpoint != NULL)
+      if (point->distpoint != NULL && point->distpoint->type == 0)
       { /* Each point may have several names? May as well put them all in */
         for (j = 0; j < sk_GENERAL_NAME_num(point->distpoint->name.fullname); j++)
         { name = sk_GENERAL_NAME_value(point->distpoint->name.fullname, j);
           if (name != NULL && name->type == GEN_URI)
           { if (!(PL_unify_list(crl_list, crl_item, crl_list) &&
-                  PL_unify_atom_chars(crl_item, (const char *)ASN1_STRING_get0_data(name->d.ia5))))
+                  PL_unify_chars(crl_item, PL_ATOM,
+				 ASN1_STRING_length(name->d.ia5),
+				 (const char *)ASN1_STRING_get0_data(name->d.ia5))))
             {
               CRL_DIST_POINTS_free(distpoints);
               return FALSE;
@@ -1372,7 +1292,9 @@ fetch_sans(term_t Field, X509* cert)
     { name = sk_GENERAL_NAME_value(san_names, i);
       if (name != NULL && name->type == GEN_DNS)
       { if (!(PL_unify_list(san_list, san_item, san_list) &&
-              PL_unify_atom_chars(san_item, (char*)ASN1_STRING_get0_data(name->d.dNSName))))
+              PL_unify_chars(san_item, PL_ATOM,
+			     ASN1_STRING_length(name->d.dNSName),
+			     (char*)ASN1_STRING_get0_data(name->d.dNSName))))
 	{ sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
 	  return FALSE;
 	}
@@ -1714,8 +1636,31 @@ pl_pem_passwd_hook(PL_SSL *config, char *buf, int size)
   return passwd;
 }
 
+/* print_hook_exception() prints and clears a pending exception raised
+   by a hook that is called from an OpenSSL callback.  We cannot pass
+   the exception to Prolog from there.
+*/
+
+static void
+print_hook_exception(void)
+{ term_t ex;
+
+  if ( (ex = PL_exception(0)) )
+  { term_t av = PL_new_term_refs(2);
+
+    if ( PL_put_atom_chars(av+0, "error") &&
+	 PL_put_term(av+1, ex) )
+    { PL_clear_exception();
+      (void)PL_call_predicate(NULL, PL_Q_NODEBUG|PL_Q_CATCH_EXCEPTION,
+			      PL_predicate("print_message", 2, "system"), av);
+    } else
+      PL_clear_exception();
+  }
+}
+
+
 static PL_SSL *
-pl_sni_hook(PL_SSL *config, const char *host)
+pl_sni_hook(PL_SSL *config, const char *host, int *error)
 { fid_t fid = PL_open_foreign_frame();
   term_t av = PL_new_term_refs(4);
 
@@ -1730,8 +1675,12 @@ pl_sni_hook(PL_SSL *config, const char *host)
   if ( PL_unify_chars(av+2, PL_ATOM|REP_UTF8, strlen(host), host)
        && PL_call_predicate(config->cb_sni.module,
                             PL_Q_PASS_EXCEPTION, call4, av) )
-    if ( !get_conf(av+3, &new_config) )
+  { if ( !get_conf(av+3, &new_config) )
       PL_warning("sni_hook returned wrong type");
+  } else if ( PL_exception(0) )
+  { print_hook_exception();
+    *error = TRUE;
+  }
 
   PL_close_foreign_frame(fid);
   return new_config;
@@ -2008,7 +1957,6 @@ ssl_new(void)
         new->atom                = 0;
         new->close_notify        = FALSE;
 
-        new->peer_cert           = NULL;
         new->ctx                 = NULL;
         new->idx                 = -1;
         new->password            = NULL;
@@ -2037,9 +1985,6 @@ ssl_new(void)
         new->cb_cert_verify.goal = NULL;
         new->cb_pem_passwd.goal  = NULL;
         new->cb_alpn_proto.goal  = NULL;
-#ifndef HAVE_X509_CHECK_HOST
-        new->hostname_check_status = 0;
-#endif
         new->alpn_protos         = NULL;
         new->alpn_protos_len     = 0;
         new->magic                 = SSL_CONFIG_MAGIC;
@@ -2072,7 +2017,6 @@ ssl_free(PL_SSL *config)
       free(config->cert_key_pairs[i].key);
     }
     free(config->password);
-    X509_free(config->peer_cert);
 
     if (config->cb_sni.goal) PL_erase(config->cb_sni.goal);
     if (config->cb_pem_passwd.goal) PL_erase(config->cb_pem_passwd.goal);
@@ -2175,99 +2119,7 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
 
   ssl_deb(1, " ---- INIT Handling certificate verification\n");
   ssl_deb(1, "      Certificate preverified %sok\n", preverify_ok ? "" : "NOT ");
-#ifndef HAVE_X509_CHECK_HOST
-    /* If OpenSSL does not have X509_check_host() then the hostname has not yet been verified.
-       Note that we only want to check the hostname of the FIRST certificate. There appears to be no easy way of
-       telling which certificate we are up to. To try and manage this, state about hostname verification is stored
-       in the PL_SSL object if X509_check_host() is not available.
 
-       We want to call the hook (if present - if not, we want to reject the whole certificate chain!) with this error
-       and then proceed to the next error (if there is one). This means that behaviour will be consistent after
-       upgrading to OpenSSL 1.0.2
-    */
-    if ( config->hostname_check_status == 0 && config->role == PL_SSL_CLIENT ) /* Not yet checked, and is a client - do not check for server */
-    {
-      /* This is a vastly simplified version. All we do is:
-         1) For each alt subject name: If it is the same length as the hostname and strcmp() matches, then PASS
-         2)                          : If it begins "*." and the hostname contains at least one ., and strcmp()
-                                       matches from the first . in both expressions, AND the SAN contains no embedded
-                                       NULLs, then PASS.
-         3) Get the subject name. If it is the same length as the hostname and strcmp() matches, then PASS
-         4) Otherwise, FAIL.
-      */
-      int i;
-      X509 *cert = X509_STORE_CTX_get0_cert(ctx);
-
-      STACK_OF(GENERAL_NAME) *alt_names = X509_get_ext_d2i((X509 *)cert, NID_subject_alt_name, NULL, NULL);
-      int alt_names_count = 0;
-
-      /* First, set status to 1 (invalid) */
-      config->hostname_check_status = 1;
-      if ( config->host != NULL)
-      { if (alt_names != NULL)
-        { alt_names_count = sk_GENERAL_NAME_num(alt_names);
-          for (i = 0; i < alt_names_count && config->hostname_check_status != 2; i++)
-          { const GENERAL_NAME *name = sk_GENERAL_NAME_value(alt_names, i);
-            /* We are only interested in DNS names. We may also want to do IP addresses in future, by extending
-               the type of config->host
-            */
-            if (name->type == GEN_DNS)
-            { const char* hostname = (const char*)ASN1_STRING_get0_data(name->d.dNSName);
-              size_t hostlen = ASN1_STRING_length(name->d.dNSName);
-              if (hostlen == strlen(config->host) &&
-                  strcmp(config->host, hostname) == 0)
-              { config->hostname_check_status = 2;
-                ssl_deb(3, "Host that matches found in SAN %d: %s\n", i, ASN1_STRING_get0_data(name->d.dNSName));
-              } else if (hostlen > 2 && hostname[0] == '*' && hostname[1] == '.' && strlen(hostname) == hostlen)
-              { char* subdomain = strchr(config->host, '.');
-                if (subdomain != NULL && strcmp(&hostname[1], subdomain) == 0)
-                { config->hostname_check_status = 2;
-                  ssl_deb(3, "Host that matches with wildcard found in SAN %d: %s\n", i, hostname);
-                }
-              }
-              else
-                ssl_deb(3, "Host does not match SAN %d: %s\n", i, ASN1_STRING_get0_data(name->d.dNSName));
-            }
-          }
-        }
-        else
-          ssl_deb(3, "Certificate has no SANs\n");
-
-
-        /* If that didnt work, try the subject name itself. Naturally this has a completely different API */
-        if ( config->hostname_check_status == 1 )
-        { X509_NAME_ENTRY *common_name_entry;
-          X509_NAME* subject_name = X509_get_subject_name((X509 *)cert);
-          int common_name_index = X509_NAME_get_index_by_NID(subject_name, NID_commonName, -1);
-          if (common_name_index != -1)
-          { common_name_entry = X509_NAME_get_entry(subject_name, common_name_index);
-            if (common_name_entry != NULL)
-            { ASN1_STRING *common_name_asn1 = X509_NAME_ENTRY_get_data(common_name_entry);
-              if (common_name_asn1 != NULL)
-              { if (ASN1_STRING_length(common_name_asn1) == strlen(config->host) &&
-                    strcmp(config->host, (const char*)ASN1_STRING_get0_data(common_name_asn1)) == 0)
-                { config->hostname_check_status = 2;
-                  ssl_deb(3, "Hostname in SN matches: %s\n", ASN1_STRING_get0_data(common_name_asn1));
-                }
-                else
-                  ssl_deb(3, "Hostname in SN does not match: %s vs %s\n", ASN1_STRING_get0_data(common_name_asn1), config->host);
-              }
-            }
-          }
-        }
-      }
-      if ( config->hostname_check_status == 1 )
-      { ssl_deb(3, "Hostname could not be verified!\n");
-        if ( config->cb_cert_verify.goal != NULL )
-        { X509 *cert = X509_STORE_CTX_get_current_cert(ctx);
-          preverify_ok = (pl_cert_verify_hook(config, cert, ctx, "hostname_mismatch", 0) != 0);
-        }
-        else
-          /* Reject the whole chain if the hostname verification fails and there is no hook to override it */
-          preverify_ok = 0;
-      }
-    }
-#endif
 
     if ( !preverify_ok || config->cb_cert_verify.goal != NULL ) {
         X509 *cert = NULL;
@@ -2404,21 +2256,53 @@ ssl_cb_pem_passwd(char *buf, int size, int rwflag, void *userdata)
 
 
 #ifndef OPENSSL_NO_TLSEXT
+/* ssl_switch_config() makes the connection use the context of config
+   after selecting it from the sni_hook or alpn_protocol_hook.  As
+   SSL_set_SSL_CTX() does not copy the verification settings, we copy
+   these and make the verification callback use the new config.  The
+   new config is kept alive until the connection is closed (see
+   ssl_close()).
+*/
+
+static void
+ssl_switch_config(SSL *s, PL_SSL *new_config)
+{ PL_SSL *old = SSL_get_ex_data(s, ssl_idx);
+
+  if ( new_config == old )
+    return;
+
+  SSL_set_SSL_CTX(s, new_config->ctx);
+  SSL_set_verify(s, SSL_CTX_get_verify_mode(new_config->ctx),
+		 SSL_CTX_get_verify_callback(new_config->ctx));
+  PL_register_atom(new_config->atom);
+  SSL_set_ex_data(s, ssl_idx, new_config);
+  if ( old && old != SSL_get_ex_data(s, ssl_orig_idx) )
+    PL_unregister_atom(old->atom);	/* switched twice */
+}
+
+
 static int
 ssl_cb_sni(SSL *s, int *ad, void *arg)
 { PL_SSL *config     = arg;
   PL_SSL *new_config = NULL;
   const char *servername;
+  int error = FALSE;
 
   if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) )
-    new_config = pl_sni_hook(config, servername);
+    new_config = pl_sni_hook(config, servername, &error);
+
+  if ( error )
+  { *ad = SSL_AD_INTERNAL_ERROR;
+    return SSL_TLSEXT_ERR_ALERT_FATAL;
+  }
 
   if ( new_config == NULL &&
        config->certificate_file == NULL &&
        config->num_cert_key_pairs == 0 )
     return SSL_TLSEXT_ERR_NOACK;
 
-  SSL_set_SSL_CTX(s, new_config ? new_config->ctx : config->ctx );
+  if ( new_config )
+    ssl_switch_config(s, new_config);
 
   return SSL_TLSEXT_ERR_OK;
 }
@@ -2444,7 +2328,12 @@ ssl_close(PL_SSL_INSTANCE *instance)
     }
 
       if ( instance->ssl )
+      { PL_SSL *used = SSL_get_ex_data(instance->ssl, ssl_idx);
+
+	if ( used && used != instance->config )
+	  PL_unregister_atom(used->atom); /* see ssl_switch_config() */
         SSL_free(instance->ssl);
+      }
 
     if ( instance->swrite )
       Sset_filter(instance->swrite, NULL);
@@ -2473,12 +2362,14 @@ ssl_close(PL_SSL_INSTANCE *instance)
 
 
 
+/* ssl_peer_certificate() returns a new reference to the peer certificate
+   of this connection.  Must be freed using X509_free().  Note that we
+   cannot cache it in the config as this is shared by connections.
+*/
+
 static X509 *
 ssl_peer_certificate(PL_SSL_INSTANCE *instance)
-{ if ( !instance->config->peer_cert )
-    instance->config->peer_cert = SSL_get_peer_certificate(instance->ssl);
-
-  return instance->config->peer_cert;
+{ return SSL_get_peer_certificate(instance->ssl);
 }
 
 
@@ -3074,7 +2965,8 @@ ssl_server_alpn_select_cb(SSL *ssl,
       { PL_warning("alpn_protocol_hook return wrong type");
 	goto out;
       }
-      SSL_set_SSL_CTX(ssl, new_config ? new_config->ctx : config->ctx);
+      if ( new_config )
+	ssl_switch_config(ssl, new_config);
 
       char *str;
       size_t olen;
@@ -3098,6 +2990,7 @@ ssl_server_alpn_select_cb(SSL *ssl,
       }
 
     out:
+      print_hook_exception();		/* cannot pass to Prolog */
       PL_close_foreign_frame(fid);
     }
 
@@ -3249,6 +3142,7 @@ ssl_lib_init(void)
      * Index used to store our config data in the SSL data structure
      */
     ssl_idx = SSL_get_ex_new_index(0, "config", NULL, NULL, NULL);
+    ssl_orig_idx = SSL_get_ex_new_index(0, "orig_config", NULL, NULL, NULL);
 
 #ifdef __SWI_PROLOG__
     FUNCTOR_error2     = PL_new_functor(PL_new_atom("error"),     2);
@@ -3301,12 +3195,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   }
 
   if ( config->role == PL_SSL_CLIENT )
-  {
-#ifndef OPENSSL_NO_TLSEXT
-    if ( config->host )
-      SSL_set_tlsext_host_name(instance->ssl, config->host);
-#endif
-#ifdef HAVE_X509_CHECK_HOST
+  { int is_ip = FALSE;
     X509_VERIFY_PARAM *param = SSL_get0_param(instance->ssl);
     /* This could in theory be user-configurable. The documentation at
        https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
@@ -3316,7 +3205,17 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
                                     X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
  */
     X509_VERIFY_PARAM_set_hostflags(param, 0);
-    X509_VERIFY_PARAM_set1_host(param, config->host, 0);
+    if ( config->host &&
+	 X509_VERIFY_PARAM_set1_ip_asc(param, config->host) )
+    { is_ip = TRUE;			/* IP address: check IP SAN */
+    } else if ( !X509_VERIFY_PARAM_set1_host(param, config->host, 0) )
+    { SSL_free(instance->ssl);
+      free(instance);
+      return raise_ssl_error(ERR_get_error());
+    }
+#ifndef OPENSSL_NO_TLSEXT
+    if ( config->host && !is_ip )	/* RFC 6066: no SNI for IP addresses */
+      SSL_set_tlsext_host_name(instance->ssl, config->host);
 #endif
   }
 
@@ -3324,6 +3223,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   ssl_deb(1, "allocated ssl layer\n");
 
   SSL_set_ex_data(instance->ssl, ssl_idx, config);
+  SSL_set_ex_data(instance->ssl, ssl_orig_idx, config);
   SSL_set_bio(instance->ssl, rbio, wbio); /* No return value */
   ssl_deb(1, "allocated ssl fd\n");
 
@@ -3605,7 +3505,13 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 
         if ( !PL_get_nchars(protos_head, &proto_len, &proto,
 			    CVT_ATOM|CVT_STRING|CVT_EXCEPTION|REP_UTF8|BUF_RING) )
+	{ free(protos_vec);
           return FALSE;
+	}
+	if ( proto_len == 0 || proto_len > 255 )
+	{ free(protos_vec);
+	  return PL_domain_error("alpn_protocol", protos_head);
+	}
         total_length += proto_len + 1;
         if ( total_length > current_size ) {
           unsigned char* new_protos_vec = realloc(protos_vec, total_length);
@@ -3620,6 +3526,8 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
         memcpy(protos_vec + current_size + 1, proto, proto_len);
         current_size = total_length;
       }
+      if ( conf->alpn_protos )
+	free(conf->alpn_protos);
       conf->alpn_protos = protos_vec;
       conf->alpn_protos_len = current_size;
     } else if ( name == ATOM_alpn_protocol_hook &&
@@ -3821,10 +3729,21 @@ get_crls(term_t list, STACK_OF(X509_CRL) **crlp)
     { FILE *file = fopen(PL_atom_chars(crl_name), "rb");
       if ( file )
       { crl = PEM_read_X509_CRL(file, NULL, NULL, NULL);
+	fclose(file);
+	if ( !crl )
+	{ sk_X509_CRL_pop_free(crls, X509_CRL_free);
+	  return PL_syntax_error("crl", NULL);
+	}
         sk_X509_CRL_push(crls, crl);
       } else
+      { sk_X509_CRL_pop_free(crls, X509_CRL_free);
         return PL_existence_error("file", list_head);
+      }
     }
+  }
+  if ( !PL_get_nil_ex(list_tail) )
+  { sk_X509_CRL_pop_free(crls, X509_CRL_free);
+    return FALSE;
   }
 
   *crlp = crls;
@@ -4055,36 +3974,45 @@ pl_ssl_negotiate(term_t config,
   { rc = raise_ssl_error(ERR_get_error());
     goto out;
   }
-
-  if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
-  { rc = PL_resource_error("memory");
-    goto out;
-  }
-  instance->close_needed++;
-  if ( !PL_unify_stream(in, i) )
-  { Sclose(i);
-    goto out;
-  }
-  Sset_filter(sorg_in, i);
-  instance->dread = i;
-
-  if ( !(o=Snew(instance, SIO_OUTPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
-  { rc = PL_resource_error("memory");
-    goto out;
-  }
-  instance->close_needed++;
-  if ( !PL_unify_stream(out, o) )
-  { Sclose(i);
-    Sclose(o);
-    goto out;
-  }
-  Sset_filter(sorg_out, o);
-  instance->dwrite = o;
+  rc = FALSE;
 
   /* Increase atom reference count so that the context is not
-     GCd until this session is complete */
+     GCd until this session is complete.  Released by ssl_close() */
   ssl_deb(4, "Increasing count on %d\n", conf->atom);
   PL_register_atom(conf->atom);
+
+  i = o = NULL;
+  if ( !(i=Snew(instance, SIO_INPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
+  { PL_resource_error("memory");
+    goto error;
+  }
+  instance->close_needed++;
+  instance->dread = i;
+  if ( !(o=Snew(instance, SIO_OUTPUT|SIO_RECORDPOS|SIO_FBUF, &ssl_funcs)) )
+  { PL_resource_error("memory");
+    goto error;
+  }
+  instance->close_needed++;
+  instance->dwrite = o;
+  if ( !PL_unify_stream(in, i) ||
+       !PL_unify_stream(out, o) )
+    goto error;
+  Sset_filter(sorg_in, i);
+  Sset_filter(sorg_out, o);
+  rc = TRUE;
+  goto out;
+
+error:				/* release the wire streams before closing */
+  PL_release_stream(sorg_in);
+  PL_release_stream(sorg_out);
+  sorg_in = sorg_out = NULL;
+  if ( i || o )
+  { if ( i ) Sclose(i);
+    if ( o ) Sclose(o);
+  } else
+  { ssl_close(instance);
+  }
+  return FALSE;
 
 out:
   if ( sorg_in  )
@@ -4145,12 +4073,11 @@ pl_ssl_copy_context(term_t term_old, term_t term_new)
 
   new->cacerts = dup_cacert_stack(old->cacerts);
 
-#ifndef HAVE_X509_CHECK_HOST
-  new->hostname_check_status = old->hostname_check_status;
-#endif
 
   if ( old->crl_list )
-    new->crl_list          = sk_X509_CRL_dup(old->crl_list);
+    new->crl_list          = sk_X509_CRL_deep_copy(old->crl_list,
+						   X509_CRL_dup,
+						   X509_CRL_free);
   new->crl_required        = old->crl_required;
 
   ssl_copy_callback(old->cb_cert_verify, &new->cb_cert_verify);
@@ -4169,8 +4096,9 @@ pl_ssl_copy_context(term_t term_old, term_t term_new)
 					sizeof(unsigned char));
     if ( protos_copy == NULL )
       return PL_resource_error("memory");
-    memcpy(old->alpn_protos, protos_copy, old->alpn_protos_len);
+    memcpy(protos_copy, old->alpn_protos, old->alpn_protos_len);
     new->alpn_protos = protos_copy;
+    new->alpn_protos_len = old->alpn_protos_len;
   }
 
   return ssl_config(new);
@@ -4291,15 +4219,14 @@ pl_verify_certificate(term_t Cert, term_t Chain, term_t Roots)
   if (rc)
   { for ( index = 0; index < sk_X509_num(roots); index++ )
       X509_STORE_add_cert(store, sk_X509_value(roots, index));
-    Sdprintf("Added %d certificates to the store\n", index);
+    ssl_deb(1, "Added %d certificates to the store\n", index);
 
-    rc &= X509_STORE_CTX_init(ctx, store, cert, chain);
-    rc &= X509_verify_cert(ctx);
-    if (rc <= 0)
-      { char msg[1024];
-	ERR_error_string(X509_STORE_CTX_get_error(ctx), &msg[0]);
-	Sdprintf("Failed to verify certificate: %s (%d)\n", msg, rc);
-      }
+    rc = ( X509_STORE_CTX_init(ctx, store, cert, chain) == 1 &&
+	   X509_verify_cert(ctx) == 1 );
+    if ( !rc )
+    { ssl_deb(1, "Failed to verify certificate: %s\n",
+	      X509_verify_cert_error_string(X509_STORE_CTX_get_error(ctx)));
+    }
   }
   if (store != NULL)
     X509_STORE_free(store);
@@ -4351,7 +4278,9 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 
   instance = ssl_stream->handle;
   if ( (cert = ssl_peer_certificate(instance)) )
-    rc = unify_certificate_blob_copy(Cert, cert);
+  { rc = unify_certificate_blob_copy(Cert, cert);
+    X509_free(cert);
+  }
   PL_release_stream(stream);
 
   return rc;
