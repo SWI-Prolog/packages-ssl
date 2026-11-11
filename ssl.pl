@@ -134,10 +134,12 @@ easily be used.
 %   predicate processes the options below.
 %
 %     * host(+HostName)
-%     For the client, the host to which it connects. This option
-%     _should_ be specified when Role is `client`. Otherwise,
-%     certificate verification may fail when negotiating a
-%     secure connection.
+%     For the client, the host to which it connects.  The server
+%     certificate must be valid for this host.  This option _must_
+%     be specified when Role is `client`.  Otherwise, certificate
+%     verification fails with the error `hostname_mismatch` unless
+%     the cert_verify_hook/5 accepts the certificate.  The option
+%     peer_cert(false) disables certificate verification.
 %     * certificate_file(+FileName)
 %     Specify where the certificate file can be found. This can be the
 %     same as the key_file(+FileName) option.  A server _must_ have at

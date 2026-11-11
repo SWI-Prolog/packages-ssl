@@ -2120,6 +2120,22 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
   ssl_deb(1, " ---- INIT Handling certificate verification\n");
   ssl_deb(1, "      Certificate preverified %sok\n", preverify_ok ? "" : "NOT ");
 
+  /* A client that did not specify host(Host) cannot verify that the
+     certificate belongs to the server it wants to talk to.  OpenSSL
+     then skips the hostname check.  Fail as for a hostname mismatch,
+     so the connection is rejected unless the cert_verify_hook accepts
+     it.  Use peer_cert(false) to disable verification.
+  */
+  if ( preverify_ok && config->role == PL_SSL_CLIENT && !config->host &&
+       X509_STORE_CTX_get_error_depth(ctx) == 0 )
+  { preverify_ok = 0;
+#ifdef X509_V_ERR_HOSTNAME_MISMATCH
+    X509_STORE_CTX_set_error(ctx, X509_V_ERR_HOSTNAME_MISMATCH);
+#else
+    X509_STORE_CTX_set_error(ctx, X509_V_ERR_APPLICATION_VERIFICATION);
+#endif
+  }
+
 
     if ( !preverify_ok || config->cb_cert_verify.goal != NULL ) {
         X509 *cert = NULL;

@@ -588,6 +588,23 @@ try_ssl_client(Hostname, Hook, Options):-
     % Always connect to localhost
     verify_client(localhost:Port, SSL).
 
+%   A client context without host(_) cannot check the host name of the
+%   certificate.  This must fail verification.
+
+try_ssl_client_nohost(Hook):-
+    test_port(Port),
+    ssl_test_file('tests/test_certs/rootCA/cacert.pem', CaCerts),
+    (   Hook == none
+    ->  HookOptions = []
+    ;   HookOptions = [cert_verify_hook(Hook)]
+    ),
+    ssl_context(client, SSL,
+		[ port(Port),
+		  cacerts([file(CaCerts)])
+		| HookOptions
+		]),
+    verify_client(localhost:Port, SSL).
+
 verify_client(Address, SSL) :-
     tcp_socket(S),
     setup_call_cleanup(tcp_connect(S, Address, PlainIn, PlainOut),
@@ -650,6 +667,10 @@ test_crl_hook(_SSL, Cert, _Chain, _Tail, revoked):-
 
 test('Valid certificate, correct hostname in CN, signed by trusted CA', VerificationResults:Status == [verified]:true):-
     do_verification_test(1, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
+test('Valid certificate, no host given, hook accepts', VerificationResults:Status == [hostname_mismatch, verified]:true):-
+    do_verification_test(1, try_ssl_client_nohost(test_verify_hook), VerificationResults, Status).
+test('Valid certificate, no host given, no hook', Status = error(_)):-
+    do_verification_test(1, try_ssl_client_nohost(none), _, Status).
 
 test('Valid certificate, correct hostname in SAN, signed by trusted CA', VerificationResults:Status == [verified]:true):-
     do_verification_test(2, try_ssl_client('www.example.com', test_verify_hook), VerificationResults, Status).
