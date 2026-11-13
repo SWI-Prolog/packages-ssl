@@ -877,6 +877,19 @@ test(null_hmac) :-
     crypto_data_hash(`foo`, Hash1, [algorithm(sha256),hmac([1])]),
     crypto_data_hash(`foo`, Hash2, [algorithm(sha256),hmac([1,0,1])]),
     assertion(Hash1 \== Hash2).
+test(hash_stream_bound_output,
+     [E, Enc, N, Open] == [uninstantiation_error(x), Enc0, N0, true]) :-
+    setup_call_cleanup(
+        open_string("abc", In),
+        ( stream_property(In, encoding(Enc0)),
+          aggregate_all(count, stream_property(_, mode(_)), N0),
+          catch(crypto_open_hash_stream(In, x, [algorithm(sha256)]),
+                error(E, _), true),
+          stream_property(In, encoding(Enc)),
+          aggregate_all(count, stream_property(_, mode(_)), N),
+          ( is_stream(In) -> Open = true ; Open = false )
+        ),
+        close(In)).
 
 :- end_tests(crypto_hash).
 

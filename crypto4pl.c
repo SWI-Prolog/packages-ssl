@@ -653,8 +653,14 @@ pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
 
     return TRUE;
   } else
-  { PL_release_stream(s);
-    return FALSE;
+  { int close_parent = context->close_parent;
+
+    context->close_parent = false;	/* hash_close() restores s and */
+    PL_register_atom(context->atom);	/* unregisters the context atom */
+    Sclose(s2);
+    context->close_parent = close_parent;
+    PL_release_stream(s);
+    return PL_uninstantiation_error(new);
   }
 }
 
