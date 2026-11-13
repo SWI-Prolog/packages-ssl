@@ -88,12 +88,7 @@
 #endif
 
 typedef int BOOL;
-#ifndef TRUE
-#define TRUE 1
-#endif
-#ifndef FALSE
-#define FALSE 0
-#endif
+#include <stdbool.h>
 
 #ifndef __WINDOWS__			/* see ssl_cacerts_warning() */
 static atom_t ATOM_warning;
@@ -177,7 +172,7 @@ typedef enum
 #define SSL_CERT_VERIFY_MORE 0
 
 static STACK_OF(X509) *system_root_store = NULL;
-static int system_root_store_fetched = FALSE;
+static int system_root_store_fetched = false;
 #ifdef O_PLMT
 static pthread_mutex_t root_store_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
@@ -302,7 +297,7 @@ typedef enum
 #define ATOMIC_INC(ptr)		ATOMIC_ADD(ptr, 1) /* ++(*ptr) */
 #define ATOMIC_DEC(ptr)		ATOMIC_SUB(ptr, 1) /* --(*ptr) */
 #define __COMPARE_AND_SWAP(at, from, to) \
-	__atomic_compare_exchange_n(at, &(from), to, FALSE, \
+	__atomic_compare_exchange_n(at, &(from), to, false, \
 				    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #endif
 
@@ -428,7 +423,7 @@ unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
     return rc;
   }
 
-  return FALSE;
+  return false;
 }
 
 
@@ -445,14 +440,14 @@ unify_asn1_time(term_t term, const ASN1_TIME *time)
   int rc;
 
   if ( !time )
-    return FALSE;
+    return false;
   if ( !(epoch = ASN1_TIME_set(NULL, 0)) )
     return PL_resource_error("memory");
   rc = ASN1_TIME_diff(&day, &sec, epoch, time);
   ASN1_TIME_free(epoch);
   if ( !rc )
   { ssl_deb(2, "Unable to parse time");
-    return FALSE;
+    return false;
   }
 
   return PL_unify_int64(term, (int64_t)day*86400 + sec);
@@ -508,7 +503,7 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
                          PL_INT, nid);
 
   if ( !data_to_digest(data, type, digest, &digest_length) )
-    return FALSE;
+    return false;
 
   return unify_bytes_hex(hash, digest_length, digest);
 }
@@ -541,7 +536,7 @@ unify_name(term_t term, const X509_NAME* name)
 	 );
     OPENSSL_free(utf8_data);
     if ( !rc )
-      return FALSE;
+      return false;
   }
 
   return PL_unify_nil(list);
@@ -592,7 +587,7 @@ unify_crl(term_t term, X509_CRL* crl)
                       PL_FUNCTOR, FUNCTOR_revocations1,
                       PL_TERM, revocations)))
   { BIO_free(mem);
-    return FALSE;
+    return false;
   }
 
   for (i = 0; i < sk_X509_REVOKED_num(revoked); i++)
@@ -815,7 +810,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
     if ( !(arg=PL_new_term_ref()) ||
 	 !PL_unify_functor(item, type) ||
 	 !PL_get_arg(1, item, arg) )
-      return FALSE;
+      return false;
     item = arg;
   }
  /* EVP_PKEY_get1_* returns a copy of the existing key */
@@ -887,7 +882,7 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
     /* Unknown key type */
     return PL_representation_error("ssl_key");
   }
-  return TRUE;
+  return true;
 }
 
 
@@ -907,14 +902,14 @@ static int
 release_cert(atom_t atom)
 { X509 *cert = PL_blob_data(atom, NULL, NULL);
   X509_free(cert);
-  return TRUE;
+  return true;
 }
 
 static int
 write_cert(IOSTREAM *s, atom_t symbol, int flags)
 { X509 *cert = PL_blob_data(symbol, NULL, NULL);
   Sfprintf(s, "<ssl_certificate>(%p)", cert);
-  return TRUE;
+  return true;
 }
 
 static PL_blob_t certificate_type =
@@ -946,7 +941,7 @@ static int
 get_certificate_blob(term_t Cert, X509** cert)
 { PL_blob_t* type;
   if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
-    return TRUE;
+    return true;
   return PL_type_error("ssl_certificate", Cert);
 }
 
@@ -1019,7 +1014,7 @@ pl_load_public_key(term_t source, term_t key_t)
   int c;
 
   if ( !PL_get_stream_handle(source, &stream) )
-    return FALSE;
+    return false;
   bio = BIO_new(bio_read_method());
   BIO_set_ex_data(bio, 0, stream);
 
@@ -1052,9 +1047,9 @@ pl_load_private_key(term_t source, term_t password, term_t key_t)
 
   if ( !PL_get_chars(password, &password_chars,
 		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
   if ( !PL_get_stream_handle(source, &stream) )
-    return FALSE;
+    return false;
   bio = BIO_new(bio_read_method());
   BIO_set_ex_data(bio, 0, stream);
 
@@ -1085,7 +1080,7 @@ pl_load_crl(term_t source, term_t list)
   int c;
 
   if ( !PL_get_stream_handle(source, &stream) )
-    return FALSE;
+    return false;
 
   bio = BIO_new(bio_read_method());
   BIO_set_ex_data(bio, 0, stream);
@@ -1114,7 +1109,7 @@ pl_load_certificate(term_t source, term_t cert)
   int c = 0;
 
   if ( !PL_get_stream_handle(source, &stream) )
-    return FALSE;
+    return false;
   bio = BIO_new(bio_read_method());
   BIO_set_ex_data(bio, 0, stream);
   /* Determine format */
@@ -1184,7 +1179,7 @@ fetch_serial(term_t Field, X509* cert)
     BIO_vfree(mem);
     return rc;
   }
-  return FALSE;
+  return false;
 }
 
 
@@ -1205,7 +1200,7 @@ fetch_public_key(term_t Field, X509* cert)
   int rc;
   term_t arg = PL_new_term_ref();
   if ( !(key = X509_get_pubkey(cert)) )
-    return FALSE;			/* e.g., unsupported algorithm */
+    return false;			/* e.g., unsupported algorithm */
   rc = unify_key(key, 0, arg);
   EVP_PKEY_free(key);
   /* Most existing code expects to be able to call memberchk(key(Key), Cert)
@@ -1254,7 +1249,7 @@ fetch_crls(term_t Field, X509* cert)
 				 (const char *)ASN1_STRING_get0_data(name->d.ia5))))
             {
               CRL_DIST_POINTS_free(distpoints);
-              return FALSE;
+              return false;
             }
           }
         }
@@ -1296,7 +1291,7 @@ fetch_sans(term_t Field, X509* cert)
 			     ASN1_STRING_length(name->d.dNSName),
 			     (char*)ASN1_STRING_get0_data(name->d.dNSName))))
 	{ sk_GENERAL_NAME_pop_free(san_names, GENERAL_NAME_free);
-	  return FALSE;
+	  return false;
 	}
       }
     }
@@ -1328,7 +1323,7 @@ fetch_signature_algorithm(term_t Field, X509* cert)
   if ((salgorithm = OBJ_nid2sn(OBJ_obj2nid(palg->algorithm))) != NULL)
   { return PL_unify_chars(Field, PL_ATOM|REP_UTF8, strlen(salgorithm), salgorithm);
   }
-  return FALSE;
+  return false;
 }
 
 static foreign_t
@@ -1399,7 +1394,7 @@ foreign_t pl_certificate_field(term_t Certificate, term_t Field, control_t handl
     memset(state, 0, sizeof(field_enum));
     if ( !get_certificate_blob(Certificate, &state->cert) )
     { PL_free(state);
-      return FALSE;
+      return false;
     }
     if (!PL_is_variable(Field)) /* deterministic case */
     { atom_t name;
@@ -1440,7 +1435,7 @@ foreign_t pl_certificate_field(term_t Certificate, term_t Field, control_t handl
     PL_succeed;
     break;
   default:
-    return FALSE;
+    return false;
   }
   if (PL_unify(Field, state->current_field))
   { if (state->deterministic)
@@ -1463,9 +1458,9 @@ static foreign_t
 pl_verify_certificate_issuer(term_t Certificate, term_t IssuerCertificate)
 { X509* cert, *issuer_cert;
   if ( !get_certificate_blob(Certificate, &cert) )
-    return FALSE;
+    return false;
   if ( !get_certificate_blob(IssuerCertificate, &issuer_cert) )
-    return FALSE;
+    return false;
   return X509_check_issued(issuer_cert, cert) == X509_V_OK;
 }
 
@@ -1473,9 +1468,9 @@ static foreign_t
 pl_same_certificate(term_t A, term_t B)
 { X509* a, *b;
   if ( !get_certificate_blob(A, &a) )
-    return FALSE;
+    return false;
   if ( !get_certificate_blob(B, &b) )
-    return FALSE;
+    return false;
   return X509_cmp(a, b) == 0;
 }
 
@@ -1487,9 +1482,9 @@ pl_write_certificate(term_t Sink, term_t Cert, term_t Options)
   int rc;
 
   if ( !get_certificate_blob(Cert, &x509) )
-    return FALSE;
+    return false;
   if ( !PL_get_stream_handle(Sink, &stream) )
-    return FALSE;
+    return false;
 
   bio = BIO_new(bio_write_text_method());
   BIO_set_ex_data(bio, 0, stream);
@@ -1535,7 +1530,7 @@ release_ssl(atom_t atom)
 { PL_SSL *conf = symbol_ssl(atom);
   ssl_exit(conf);	/* conf is freed by an internal call from OpenSSL
 			   via ssl_config_free() */
-  return TRUE;
+  return true;
 }
 
 static int
@@ -1554,7 +1549,7 @@ write_ssl(IOSTREAM *s, atom_t symbol, int flags)
 
   Sfprintf(s, "<ssl_context>(%p)", ssl);
 
-  return TRUE;
+  return true;
 }
 
 static PL_blob_t ssl_context_type =
@@ -1571,13 +1566,13 @@ static PL_blob_t ssl_context_type =
 static int
 unify_conf(term_t config, PL_SSL *conf)
 { if ( PL_unify_blob(config, &conf, sizeof(conf), &ssl_context_type) )
-    return TRUE;
+    return true;
 
   ssl_exit(conf);
   if ( !PL_exception(0) )
     return PL_uninstantiation_error(config);
 
-  return FALSE;
+  return false;
 }
 
 
@@ -1679,7 +1674,7 @@ pl_sni_hook(PL_SSL *config, const char *host, int *error)
       PL_warning("sni_hook returned wrong type");
   } else if ( PL_exception(0) )
   { print_hook_exception();
-    *error = TRUE;
+    *error = true;
   }
 
   PL_close_foreign_frame(fid);
@@ -1833,7 +1828,7 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
       return SSL_PL_OK;
 
     case SSL_ERROR_SSL:
-      instance->fatal_alert = TRUE;
+      instance->fatal_alert = true;
       break;
 
     default:
@@ -1906,7 +1901,7 @@ ssl_inspect_status(PL_SSL_INSTANCE *instance, int ssl_ret, status_role role)
   error = ERR_get_error();
 
   if ( code == SSL_ERROR_SYSCALL )
-  { instance->fatal_alert = TRUE;
+  { instance->fatal_alert = true;
 
     if ( (role == STAT_READ  && Sferror(instance->dread)) ||
 	 (role == STAT_WRITE && Sferror(instance->dwrite)) )
@@ -1953,16 +1948,16 @@ ssl_new(void)
     if ((new = malloc(sizeof(*new))) != NULL) {
         new->role                = PL_SSL_NONE;
 
-        new->close_parent        = FALSE;
+        new->close_parent        = false;
         new->atom                = 0;
-        new->close_notify        = FALSE;
+        new->close_notify        = false;
 
         new->ctx                 = NULL;
         new->idx                 = -1;
         new->password            = NULL;
 
-        new->min_protocol.is_set = FALSE;
-        new->max_protocol.is_set = FALSE;
+        new->min_protocol.is_set = false;
+        new->max_protocol.is_set = false;
 
         new->host                = NULL;
 
@@ -1979,8 +1974,8 @@ ssl_new(void)
         new->cipher_list         = NULL;
         new->ecdh_curve          = NULL;
         new->crl_list            = NULL;
-        new->peer_cert_required  = FALSE;
-        new->crl_required        = FALSE;
+        new->peer_cert_required  = false;
+        new->crl_required        = false;
         new->cb_sni.goal         = NULL;
         new->cb_cert_verify.goal = NULL;
         new->cb_pem_passwd.goal  = NULL;
@@ -2302,7 +2297,7 @@ ssl_cb_sni(SSL *s, int *ad, void *arg)
 { PL_SSL *config     = arg;
   PL_SSL *new_config = NULL;
   const char *servername;
-  int error = FALSE;
+  int error = false;
 
   if ( (servername = SSL_get_servername(s, TLSEXT_NAMETYPE_host_name)) )
     new_config = pl_sni_hook(config, servername, &error);
@@ -2505,7 +2500,7 @@ ssl_cacerts_warning(const char *id, const char *culprit)
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Load PEM encoded certificates from filename  and  add  these  to  the
 system_certs stack.  Returns the number of certificates added or -1 if
-the file cannot be opened.  *ok is set to FALSE on resource errors.
+the file cannot be opened.  *ok is set to false on resource errors.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 static int
@@ -2604,7 +2599,7 @@ the keychain if we have one and complain otherwise.
 static bool
 load_system_cacerts(STACK_OF(X509) *system_certs)
 { const char *filename = system_cacert_filename();
-  bool ok = TRUE;
+  bool ok = true;
 
   if ( !filename )
     filename = SYSTEM_CACERT_FILENAME;
@@ -2625,7 +2620,7 @@ load_system_cacerts(STACK_OF(X509) *system_certs)
 
 #ifdef HAVE_SECURITY_SECURITY_H
   if ( !ssl_cacerts_warning("keychain_fallback", filename) )
-    return FALSE;
+    return false;
   if ( load_system_cacerts_keychain(system_certs, &ok) < 0 && ok )
     return ssl_cacerts_warning("no_anchors", CACERT_KEYCHAIN);
   return ok;
@@ -2651,7 +2646,7 @@ load_system_cacerts_keychain().
 static STACK_OF(X509) *
 ssl_system_verify_locations(void)
 { STACK_OF(X509) *system_certs = sk_X509_new_null();
-  bool ok = TRUE;
+  bool ok = true;
 
   if (!system_certs) return NULL;
 
@@ -2696,7 +2691,7 @@ system_root_certificates(void)
 #endif
   if ( !system_root_store_fetched )
   { if ( (system_root_store=ssl_system_verify_locations()) )
-      system_root_store_fetched = TRUE;	/* else retry; exception pending */
+      system_root_store_fetched = true;	/* else retry; exception pending */
   }
 #ifdef O_PLMT
   pthread_mutex_unlock(&root_store_lock);
@@ -2836,7 +2831,7 @@ ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
 
   BIO_free(bio);
 
-  return TRUE;
+  return true;
 }
 
 static int
@@ -2860,7 +2855,7 @@ ssl_use_key(PL_SSL *config, char *key)
 
   if ( r <= 0 )
     return raise_ssl_error(ERR_get_error());
-  return TRUE;
+  return true;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -2895,10 +2890,10 @@ ssl_use_certificates(PL_SSL *config)
   { X509 *cert_x509;
     if ( !ssl_use_certificate(config, config->cert_key_pairs[cert_idx].certificate, &cert_x509) ||
          !ssl_use_key(config, config->cert_key_pairs[cert_idx].key) )
-      return FALSE;
+      return false;
     config->cert_key_pairs[cert_idx].certificate_X509 = cert_x509;
   }
-  return TRUE;
+  return true;
 }
 
 static void
@@ -3090,7 +3085,7 @@ set_malleable_options(PL_SSL *config)
   ssl_init_min_max_protocol(config);
   ssl_init_alpn_protos(config);
 
-  return TRUE;
+  return true;
 }
 
 
@@ -3112,7 +3107,7 @@ ssl_config(PL_SSL *config)
        config->key_file ||
        ( config->num_cert_key_pairs > 0 ) )
   { if ( !ssl_use_certificates(config) )
-      return FALSE;
+      return false;
     ssl_deb(1, "certificates installed successfully\n");
   }
 
@@ -3132,7 +3127,7 @@ ssl_instance_new(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite)
     new->config = config;
     new->sread  = sread;
     new->swrite = swrite;
-    new->fatal_alert = FALSE;
+    new->fatal_alert = false;
   }
 
   return new;
@@ -3211,7 +3206,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
   }
 
   if ( config->role == PL_SSL_CLIENT )
-  { int is_ip = FALSE;
+  { int is_ip = false;
     X509_VERIFY_PARAM *param = SSL_get0_param(instance->ssl);
     /* This could in theory be user-configurable. The documentation at
        https://wiki.openssl.org/index.php/Manual:X509_check_host(3)
@@ -3223,7 +3218,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
     X509_VERIFY_PARAM_set_hostflags(param, 0);
     if ( config->host &&
 	 X509_VERIFY_PARAM_set1_ip_asc(param, config->host) )
-    { is_ip = TRUE;			/* IP address: check IP SAN */
+    { is_ip = true;			/* IP address: check IP SAN */
     } else if ( !X509_VERIFY_PARAM_set1_host(param, config->host, 0) )
     { SSL_free(instance->ssl);
       free(instance);
@@ -3264,7 +3259,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
 	{ Sclearerr(swrite); PL_clear_exception();
 	}
 #endif
-        return TRUE;
+        return true;
       case SSL_PL_RETRY:
         ssl_deb(1, "retry ssl connection\n");
         continue;
@@ -3272,7 +3267,7 @@ ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
         ssl_deb(1, "failed ssl connection\n");
         SSL_free(instance->ssl);
         free(instance);
-        return FALSE;
+        return false;
     }
   }
 }
@@ -3395,28 +3390,28 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
-	return FALSE;
+	return false;
 
       set_string(conf, cipher_list, s);
     } else if ( name == ATOM_ecdh_curve )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
-	return FALSE;
+	return false;
 
       set_string(conf, ecdh_curve, s);
     } else if ( name == ATOM_host )
     { char *s;
 
       if ( !get_char_arg(1, head, &s) )
-	return FALSE;
+	return false;
 
       set_string(conf, host, s);
     } else if ( name == ATOM_peer_cert )
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
+	return false;
 
       conf->peer_cert_required = val;
     } else if ( name == ATOM_cert_verify_hook )
@@ -3432,7 +3427,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
+	return false;
 
       conf->close_parent = val;
     } else if ( name == ATOM_disable_ssl_methods )
@@ -3445,7 +3440,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       while( PL_get_list_ex(opt_tail, opt_head, opt_tail) )
       {  atom_t option_name;
          if ( !PL_get_atom_ex(opt_head, &option_name) )
-            return FALSE;
+            return false;
          if (option_name == ATOM_sslv2)
             options |= SSL_OP_NO_SSLv2;
          else if (option_name == ATOM_sslv23)
@@ -3466,7 +3461,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 #endif
       }
       if ( !PL_get_nil_ex(opt_tail) )
-	return FALSE;
+	return false;
 
       if ( (isset=(SSL_CTX_set_options(conf->ctx, options)&options)) != options )
 	ssl_deb(1, "SSL_CTX_set_options 0x%lx only set 0x%lx\n", options, isset);
@@ -3477,8 +3472,8 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       _PL_get_arg(1, head, val);
 
       if ( !protocol_version_to_integer(val, &version) )
-        return FALSE;
-      conf->min_protocol.is_set  = TRUE;
+        return false;
+      conf->min_protocol.is_set  = true;
       conf->min_protocol.version = version;
     } else if ( name == ATOM_max_protocol_version )
     { term_t val = PL_new_term_ref();
@@ -3487,8 +3482,8 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
       _PL_get_arg(1, head, val);
 
       if ( !protocol_version_to_integer(val, &version) )
-        return FALSE;
-      conf->max_protocol.is_set  = TRUE;
+        return false;
+      conf->max_protocol.is_set  = true;
       conf->max_protocol.version = version;
     } else if ( name == ATOM_sni_hook && arity == 1 &&
                 conf->role == PL_SSL_SERVER )
@@ -3504,7 +3499,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
     { int val;
 
       if ( !get_bool_arg(1, head, &val) )
-	return FALSE;
+	return false;
 
       conf->close_notify = val;
     } else if ( name == ATOM_alpn_protocols )
@@ -3522,7 +3517,7 @@ parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
         if ( !PL_get_nchars(protos_head, &proto_len, &proto,
 			    CVT_ATOM|CVT_STRING|CVT_EXCEPTION|REP_UTF8|BUF_RING) )
 	{ free(protos_vec);
-          return FALSE;
+          return false;
 	}
 	if ( proto_len == 0 || proto_len > 255 )
 	{ free(protos_vec);
@@ -3567,10 +3562,10 @@ pl_ssl_set_options(term_t config, term_t options)
   module_t module = NULL;
 
   if ( !get_conf(config, &conf) )
-    return FALSE;
+    return false;
 
   if ( !PL_strip_module(options, &module, options) )
-    return FALSE;
+    return false;
 
   return
     parse_malleable_options(conf, module, options) &&
@@ -3585,7 +3580,7 @@ pl_ssl_property(term_t config, term_t prop)
   size_t arity;
 
   if ( !get_conf(config, &conf) )
-    return FALSE;
+    return false;
 
   if ( PL_get_name_arity(prop, &name, &arity) && arity == 1 )
   { term_t arg = PL_new_term_ref();
@@ -3594,7 +3589,7 @@ pl_ssl_property(term_t config, term_t prop)
     if ( name == ATOM_close_parent )
       return PL_unify_bool(arg, conf->close_parent);
 
-    return FALSE;
+    return false;
   }
 
   return PL_type_error("ssl_property", prop);
@@ -3616,7 +3611,7 @@ add_system_root_certificates(cacert_stack *stack)
   int index = 0;
 
   if ( !system_certs )
-    return FALSE;			/* exception pending */
+    return false;			/* exception pending */
 
   while( index < sk_X509_num(system_certs) )
   { X509 *cert = X509_dup(sk_X509_value(system_certs, index++));
@@ -3627,7 +3622,7 @@ add_system_root_certificates(cacert_stack *stack)
     }
   }
 
-  return TRUE;
+  return true;
 }
 
 
@@ -3644,13 +3639,13 @@ get_cacerts_roots_only(term_t term, cacert_stack **stackp)
     if ( PL_get_atom(head, &a) && a == ATOM_root_certificates )
     { if ( root_cacert_stack )
       { *stackp = dup_cacert_stack(root_cacert_stack);
-	return TRUE;
+	return true;
       } else
       { cacert_stack *stack;
 
 	if ( !(stack=new_cacert_stack()) ||
 	     !add_system_root_certificates(stack) )
-	  return FALSE;
+	  return false;
 	if ( COMPARE_AND_SWAP_PTR(&root_cacert_stack, NULL, stack) )
 	{ (void)dup_cacert_stack(root_cacert_stack);
 	} else
@@ -3658,12 +3653,12 @@ get_cacerts_roots_only(term_t term, cacert_stack **stackp)
 	}
 
 	*stackp = dup_cacert_stack(root_cacert_stack);
-	return TRUE;
+	return true;
       }
     }
   }
 
-  return FALSE;
+  return false;
 }
 
 
@@ -3679,14 +3674,14 @@ get_cacerts(term_t CATail, cacert_stack **stackp)
   cacert_stack *stack;
 
   if ( get_cacerts_roots_only(CATail, stackp) )
-    return TRUE;
+    return true;
 
   if ( !(CAHead = PL_new_term_ref()) )
-    return FALSE;
+    return false;
 
   if ( !(stack=new_cacert_stack()) )
   { PL_resource_error("memory");
-    return FALSE;
+    return false;
   }
 
   while( PL_get_list_ex(CATail, CAHead, CATail) )
@@ -3698,7 +3693,7 @@ get_cacerts(term_t CATail, cacert_stack **stackp)
       if ( !get_certificate_blob(CAHead, &cert) )
       { error:
 	free_cacert_stack(stack);
-	return FALSE;
+	return false;
       }
       sk_X509_push(stack->cacerts, X509_dup(cert));
     } else if ( PL_is_functor(CAHead, FUNCTOR_file1) )
@@ -3728,7 +3723,7 @@ get_cacerts(term_t CATail, cacert_stack **stackp)
     goto error;
 
   *stackp = stack;
-  return TRUE;
+  return true;
 }
 
 
@@ -3759,11 +3754,11 @@ get_crls(term_t list, STACK_OF(X509_CRL) **crlp)
   }
   if ( !PL_get_nil_ex(list_tail) )
   { sk_X509_CRL_pop_free(crls, X509_CRL_free);
-    return FALSE;
+    return false;
   }
 
   *crlp = crls;
-  return TRUE;
+  return true;
 }
 
 
@@ -3789,9 +3784,9 @@ get_cert_key_pairs(term_t list, PL_SSL *conf, term_t options)
       return PL_type_error("pair", cert_head);
 
     if ( !get_char_arg(1, cert_head, &certificate) )
-      return FALSE;
+      return false;
     if ( !get_char_arg(2, cert_head, &key) )
-      return FALSE;
+      return false;
 
     conf->cert_key_pairs[idx].certificate = ssl_strdup(certificate);
     conf->cert_key_pairs[idx].key         = ssl_strdup(key);
@@ -3826,10 +3821,10 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   term_t keyfile_t = 0, pem_hook_t = 0;
 
   if ( !PL_strip_module(options, &module, options) )
-    return FALSE;
+    return false;
 
   if ( !PL_get_atom_ex(role, &a) )
-    return FALSE;
+    return false;
   if ( a == ATOM_server )
     r = PL_SSL_SERVER;
   else if ( a == ATOM_client )
@@ -3838,7 +3833,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
     return PL_domain_error("ssl_role", role);
 
   if ( !(ssl_method = get_ssl_method(method)) )
-    return FALSE;
+    return false;
 
   if ( !(conf = ssl_init(r, ssl_method)) )
     return PL_resource_error("memory");
@@ -3847,7 +3842,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
 			context_options,
 			&password, &conf->crl_required, &crl_t, &certfile_t,
 			&cacerts_t, &ckp_t, &keyfile_t, &pem_hook_t) )
-    return FALSE;
+    return false;
 
   if ( password )
     set_string(conf, password, password);
@@ -3855,7 +3850,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   { STACK_OF(X509_CRL) *crls = NULL;
 
     if ( !get_crls(crl_t, &crls) )
-      return FALSE;
+      return false;
     if ( conf->crl_list )
       sk_X509_CRL_pop_free(conf->crl_list, X509_CRL_free);
     conf->crl_list = crls;
@@ -3864,24 +3859,24 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   { char *file;
 
     if ( !PL_get_file_name(certfile_t, &file, PL_FILE_EXIST) )
-      return FALSE;
+      return false;
     set_string(conf, certificate_file, file);
   }
   if ( cacerts_t )
   { cacert_stack *stack;
 
     if ( !get_cacerts(cacerts_t, &stack) )
-      return FALSE;
+      return false;
     free_cacert_stack(conf->cacerts);
     conf->cacerts = stack;
   }
   if ( ckp_t && !get_cert_key_pairs(ckp_t, conf, options) )
-    return FALSE;
+    return false;
   if ( keyfile_t )
   { char *file;
 
     if ( !PL_get_file_name(keyfile_t, &file, PL_FILE_EXIST) )
-      return FALSE;
+      return false;
     set_string(conf, key_file, file);
   }
   if ( pem_hook_t )
@@ -3890,7 +3885,7 @@ pl_ssl_context(term_t role, term_t config, term_t options, term_t method)
   }
 
   if ( !parse_malleable_options(conf, module, options) )
-    return FALSE;
+    return false;
 
   return unify_conf(config, conf) && ssl_config(conf);
 }
@@ -3978,10 +3973,10 @@ pl_ssl_negotiate(term_t config,
   IOSTREAM *sorg_in = NULL, *sorg_out = NULL;
   IOSTREAM *i, *o;
   PL_SSL_INSTANCE * instance = NULL;
-  int rc = FALSE;
+  int rc = false;
 
   if ( !get_conf(config, &conf) )
-    return FALSE;
+    return false;
   if ( !PL_get_stream_handle(org_in, &sorg_in) ||
        !PL_get_stream_handle(org_out, &sorg_out) )
     goto out;
@@ -3990,7 +3985,7 @@ pl_ssl_negotiate(term_t config,
   { rc = raise_ssl_error(ERR_get_error());
     goto out;
   }
-  rc = FALSE;
+  rc = false;
 
   /* Increase atom reference count so that the context is not
      GCd until this session is complete.  Released by ssl_close() */
@@ -4015,7 +4010,7 @@ pl_ssl_negotiate(term_t config,
     goto error;
   Sset_filter(sorg_in, i);
   Sset_filter(sorg_out, o);
-  rc = TRUE;
+  rc = true;
   goto out;
 
 error:				/* release the wire streams before closing */
@@ -4028,7 +4023,7 @@ error:				/* release the wire streams before closing */
   } else
   { ssl_close(instance);
   }
-  return FALSE;
+  return false;
 
 out:
   if ( sorg_in  )
@@ -4064,14 +4059,14 @@ pl_ssl_copy_context(term_t term_old, term_t term_new)
     return PL_uninstantiation_error(term_new);
 
   if ( !get_conf(term_old, &old) )
-    return FALSE;
+    return false;
 
   if ( !(ssl_method = get_ssl_method(0)) )
-    return FALSE;
+    return false;
   if ( !(new = ssl_init(old->role, ssl_method)) )
     return PL_resource_error("memory");
   if ( !unify_conf(term_new, new) )
-    return FALSE;				/* TBD: cleanup */
+    return false;				/* TBD: cleanup */
 
   new->role                = old->role;
   new->close_parent        = old->close_parent;
@@ -4129,7 +4124,7 @@ pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
   X509 *certX509;
 
   if ( !get_conf(config, &conf) )
-    return FALSE;
+    return false;
 
   idx = conf->num_cert_key_pairs;
   if ( idx < SSL_MAX_CERT_KEY_PAIRS &&
@@ -4142,10 +4137,10 @@ pl_ssl_add_certificate_key(term_t config, term_t cert_arg, term_t key_arg)
     conf->cert_key_pairs[idx].certificate_X509 = certX509;
 
     conf->num_cert_key_pairs++;
-    return TRUE;
+    return true;
   }
 
-  return FALSE;
+  return false;
 }
 
 
@@ -4154,11 +4149,11 @@ pl_ssl_debug(term_t level)
 { int l;
 
   if ( !PL_get_integer_ex(level, &l) )
-    return FALSE;
+    return false;
 
   ssl_set_debug(l);
 
-  return TRUE;
+  return true;
 }
 
 
@@ -4186,12 +4181,12 @@ pl_system_root_certificates(term_t list)
   int index = 0;
 
   if ( !(certs=system_root_certificates()) )
-    return FALSE;			/* exception pending */
+    return false;			/* exception pending */
 
   while (index < sk_X509_num(certs))
   { if ( !(PL_unify_list(tail, head, tail) &&
            unify_certificate_blob_copy(head, sk_X509_value(certs, index++))) )
-    { return FALSE;
+    { return false;
     }
   }
 
@@ -4210,23 +4205,23 @@ pl_verify_certificate(term_t Cert, term_t Chain, term_t Roots)
   int index = 0;
 
   if ( !get_certificate_blob(Cert, &cert))
-    return FALSE;
+    return false;
 
   if ( PL_is_functor(Roots, FUNCTOR_system1) )
   { _PL_get_arg(1, Roots, Roots);
     atom_t a;
 
     if ( !PL_get_atom_ex(Roots, &a) )
-      return FALSE;
+      return false;
     if ( a == ATOM_root_certificates )
       roots = system_root_certificates();
     else
       return PL_domain_error("certificate_list", Roots);
   } else if ( !get_certificate_blobs(Roots, &roots))
-    return FALSE;
+    return false;
 
   if ( !get_certificate_blobs(Chain, &chain))
-    rc = FALSE;
+    rc = false;
 
   rc &= ((ctx = X509_STORE_CTX_new()) != NULL);
   rc &= ((store = X509_STORE_new()) != NULL);
@@ -4261,7 +4256,7 @@ get_ssl_stream(term_t stream_t, IOSTREAM **locked, IOSTREAM **ssl)
 { IOSTREAM *stream, *ssl_stream;
 
   if ( !PL_get_stream(stream_t, &stream, SIO_INPUT) )
-    return FALSE;
+    return false;
 
   for( ssl_stream = stream;
        ssl_stream && ssl_stream->functions != &ssl_funcs;
@@ -4272,13 +4267,13 @@ get_ssl_stream(term_t stream_t, IOSTREAM **locked, IOSTREAM **ssl)
   { *locked = stream;
     *ssl    = ssl_stream;
 
-    return TRUE;
+    return true;
   }
 
   PL_release_stream(stream);
   PL_domain_error("ssl_stream", stream_t);
 
-  return FALSE;
+  return false;
 }
 
 
@@ -4287,10 +4282,10 @@ pl_ssl_peer_certificate(term_t stream_t, term_t Cert)
 { IOSTREAM *stream, *ssl_stream;
   PL_SSL_INSTANCE *instance;
   X509 *cert;
-  int rc = FALSE;
+  int rc = false;
 
   if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
-    return FALSE;
+    return false;
 
   instance = ssl_stream->handle;
   if ( (cert = ssl_peer_certificate(instance)) )
@@ -4309,7 +4304,7 @@ pl_ssl_peer_certificate_chain(term_t stream_t, term_t chain)
   int rc;
 
   if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
-    return FALSE;
+    return false;
 
   instance = ssl_stream->handle;
   rc = unify_certificate_copies_inorder(chain,
@@ -4334,7 +4329,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
   const char *cipher;
 
   if ( !get_ssl_stream(stream_t, &stream, &ssl_stream) )
-     return FALSE;
+     return false;
 
   instance = ssl_stream->handle;
   PL_release_stream(stream);
@@ -4396,7 +4391,7 @@ pl_ssl_session(term_t stream_t, term_t session_t)
 
 err:
   SSL_SESSION_free(session);
-  return FALSE;
+  return false;
 }
 
 

@@ -113,7 +113,7 @@ pl_crypto_n_random_bytes(term_t tn, term_t tout)
   unsigned char *buffer;
 
   if ( !PL_get_size_ex(tn, &len) )
-    return FALSE;
+    return false;
 
   if ( len > INT_MAX )
     return PL_domain_error("random_bytes_length", tn);
@@ -184,7 +184,7 @@ release_hash_context(atom_t atom)
 
   ssl_deb(4, "Releasing PL_CRYPTO_HASH_CONTEXT %p\n", c);
   free_crypto_hash_context(c);
-  return TRUE;
+  return true;
 }
 
 static int
@@ -206,7 +206,7 @@ write_hash_context(IOSTREAM *s, atom_t symbol, int flags)
 
   Sfprintf(s, "<crypto_hash_context>(%p)", c);
 
-  return TRUE;
+  return true;
 }
 
 static void
@@ -231,13 +231,13 @@ static PL_blob_t crypto_hash_context_type =
 static int
 unify_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT *context)
 { if ( PL_unify_blob(tcontext, &context, sizeof(context), &crypto_hash_context_type) )
-    return TRUE;
+    return true;
 
   free_crypto_hash_context(context);
   if ( !PL_exception(0) )
     return PL_uninstantiation_error(tcontext);
 
-  return FALSE;
+  return false;
 }
 
 
@@ -285,11 +285,11 @@ get_hash_algorithm(atom_t a_algorithm, const EVP_MD **algorithm)
   for (i = 0; i < NELEMS(algorithms); i++)
   { if (a_algorithm == algorithms[i].a_algorithm)
     { *algorithm = algorithms[i].algorithm;
-      return TRUE;
+      return true;
     }
   }
 
-  return FALSE;
+  return false;
 }
 
 static bool
@@ -327,13 +327,13 @@ hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
 
   if ( !PL_scan_options(options, 0, "hash_option", hash_options_spec,
 			&algorithm, &hmac, &result->close_parent, &encoding) )
-    return FALSE;
+    return false;
 
   if ( algorithm )
   { atom_t a_algorithm;
 
     if ( !PL_get_atom_ex(algorithm, &a_algorithm) )
-      return FALSE;
+      return false;
     if ( !get_hash_algorithm(a_algorithm, &result->algorithm) )
       return PL_domain_error("algorithm", algorithm);
   }
@@ -343,7 +343,7 @@ hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
 
     if ( !PL_get_nchars(hmac, &key_len, &key,
 			CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|BUF_MALLOC) )
-      return FALSE;
+      return false;
     result->mac_key = key;
     result->mac_key_len = key_len;
   }
@@ -355,7 +355,7 @@ hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
     result->encoding = ( rep == REP_UTF8 ) ? REP_UTF8 : REP_ISO_LATIN_1;
   }
 
-  return TRUE;
+  return true;
 }
 
 
@@ -369,19 +369,19 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   context->magic = HASH_CONTEXT_MAGIC;
 
   if ( !hash_options(options, context) )
-    return FALSE;
+    return false;
 
 #ifdef USE_EVP_API
   if ( context->mac_key )
   { OSSL_PARAM params[2];
     context->mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
     if ( context->mac == NULL )
-    { return FALSE;
+    { return false;
     }
     context->mac_ctx = EVP_MAC_CTX_new(context->mac);
     if ( context->mac_ctx == NULL )
     { EVP_MAC_free(context->mac);
-      return FALSE;
+      return false;
     }
     params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)EVP_MD_name(context->algorithm), 0);
     params[1] = OSSL_PARAM_construct_end();
@@ -390,7 +390,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
                        params) )
     { EVP_MAC_CTX_free(context->mac_ctx);
       EVP_MAC_free(context->mac);
-      return FALSE;
+      return false;
     }
   }
 #elif defined HAVE_HMAC_CTX_NEW
@@ -400,7 +400,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
                        context->mac_key, context->mac_key_len,
                        context->algorithm, NULL) )
     { HMAC_CTX_free(context->mac_ctx);
-      return FALSE;
+      return false;
     }
   }
 #endif
@@ -409,7 +409,7 @@ pl_crypto_hash_context_new(term_t tcontext, term_t options)
   { context->ctx = EVP_MD_CTX_new();
     if ( !EVP_DigestInit_ex(context->ctx, context->algorithm, NULL) )
     { EVP_MD_CTX_free(context->ctx);
-      return FALSE;
+      return false;
     }
   }
 
@@ -423,7 +423,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
   int rc = 0;
 
   if ( !get_hash_context(tin, &in) )
-    return FALSE;
+    return false;
 
   if ( !(out = malloc(sizeof(*out))) )
     return PL_resource_error("memory");
@@ -443,7 +443,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
   if ( out->ctx )
   { if ( !EVP_DigestInit_ex(out->ctx, out->algorithm, NULL) )
     { EVP_MD_CTX_free(out->ctx);
-      return FALSE;
+      return false;
     }
     rc = EVP_MD_CTX_copy_ex(out->ctx, in->ctx);
   }
@@ -453,7 +453,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
   { EVP_MAC_up_ref(in->mac);
   }
   out->mac_ctx = in->mac_ctx ? EVP_MAC_CTX_dup(in->mac_ctx) : NULL;
-  rc = TRUE;
+  rc = true;
 #elif defined(HAVE_HMAC_CTX_NEW) && defined(HAVE_HMAC_CTX_FREE)
   out->mac_ctx = in->mac_ctx ? HMAC_CTX_new() : NULL;
 
@@ -462,7 +462,7 @@ pl_crypto_hash_context_copy(term_t tin, term_t tout)
                        out->mac_key, out->mac_key_len,
                        out->algorithm, NULL) )
     { HMAC_CTX_free(out->mac_ctx);
-      return FALSE;
+      return false;
     }
     rc = HMAC_CTX_copy(out->mac_ctx, in->mac_ctx);
   }
@@ -498,11 +498,11 @@ pl_crypto_update_hash_context(term_t from, term_t tcontext)
   char *data;
 
   if ( !get_hash_context(tcontext, &context) )
-    return FALSE;
+    return false;
 
   if ( !PL_get_nchars(from, &datalen, &data,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|context->encoding) )
-    return FALSE;
+    return false;
 
 
   return hash_append(context, data, datalen);
@@ -515,7 +515,7 @@ pl_crypto_hash_context_hash(term_t tcontext, term_t hash)
   unsigned char digest[EVP_MAX_MD_SIZE];
   size_t len;
   if ( !get_hash_context(tcontext, &context) )
-    return FALSE;
+    return false;
 
   if ( context->mac_ctx )
   {
@@ -624,10 +624,10 @@ pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
   IOSTREAM *s, *s2;
 
   if ( !get_hash_context(tcontext, &context) )
-    return FALSE;
+    return false;
 
   if ( !PL_get_stream_handle(org, &s) )
-    return FALSE;                       /* Error */
+    return false;                       /* Error */
 
   context->parent_encoding = s->encoding;
   context->parent_stream = s;
@@ -637,7 +637,7 @@ pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
                    &hash_functions))    )
   { PL_release_stream(s);
 
-    return FALSE;
+    return false;
   }
 
   s2->encoding = s->encoding;
@@ -651,7 +651,7 @@ pl_crypto_open_hash_stream(term_t org, term_t new, term_t tcontext)
        GCd until this session is complete */
     PL_register_atom(context->atom);
 
-    return TRUE;
+    return true;
   } else
   { int close_parent = context->close_parent;
 
@@ -681,7 +681,7 @@ pl_crypto_stream_hash_context(term_t stream, term_t tcontext)
     return rc;
   }
 
-  return FALSE;
+  return false;
 }
 
                  /***************************
@@ -703,7 +703,7 @@ pl_crypto_password_hash_pbkdf2(term_t tpw, term_t tsalt, term_t titer, term_t td
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) ||
        !PL_get_nchars(tsalt, &saltlen, &salt, CVT_LIST) ||
        !PL_get_integer_ex(titer, &iter) )
-    return FALSE;
+    return false;
   if ( iter < 1 || iter > PBKDF2_MAX_ITERATIONS )
     return PL_domain_error("pbkdf2_iterations", titer);
   if ( pwlen > INT_MAX || saltlen > INT_MAX )
@@ -729,7 +729,7 @@ pl_crypto_password_hash_bcrypt(term_t tpw, term_t tsetting, term_t tdigest)
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) ||
        !PL_get_nchars(tsetting, &settinglen, &setting,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|REP_UTF8) )
-    return FALSE;
+    return false;
   if ( strlen(pw) != pwlen )		/* bcrypt stops at the first NUL */
     return PL_domain_error("bcrypt_password", tpw);
   if ( settinglen >= 7 && setting[0] == '$' && setting[1] == '2' &&
@@ -762,7 +762,7 @@ pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
   if ( !PL_get_nchars(tsalt, &saltlen, &salt, CVT_LIST) ||
        !PL_get_size_ex(toutlen, &outlen) ||
        !PL_get_atom_ex(talg, &a_algorithm) )
-    return FALSE;
+    return false;
 
   if ( !get_text_representation(tencoding, &rep) )
     return PL_domain_error("encoding", tencoding);
@@ -771,7 +771,7 @@ pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION|rep) ||
        !PL_get_nchars(tinfo, &infolen, &info,
                       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
 
   if ( !get_hash_algorithm(a_algorithm, &alg) )
     return PL_domain_error("algorithm", a_algorithm);
@@ -819,10 +819,10 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
     else
       BN_hex2bn(bn, hex);
 
-    return TRUE;
+    return true;
   }
 
-  return FALSE;
+  return false;
 }
 
 #ifndef OPENSSL_NO_EC
@@ -847,7 +847,7 @@ recover_ec(term_t t, ECKEY **rec)
   OSSL_PARAM *params = NULL;
   EVP_PKEY_CTX *ctx = NULL;
   int selection;
-  int rc = FALSE;
+  int rc = false;
 
   if ( !((tcurve = PL_new_term_ref()) &&
 	 (pubkey = PL_new_term_ref()) &&
@@ -857,7 +857,7 @@ recover_ec(term_t t, ECKEY **rec)
 	 PL_get_nchars(pubkey, &codes_len, (char **) &codes,
 		       CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) &&
 	 get_bn_arg(1, t, &privkey)) )
-    return FALSE;
+    return false;
 
   if ( !(bld = OSSL_PARAM_BLD_new()) ||
        !OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PKEY_PARAM_GROUP_NAME,
@@ -879,7 +879,7 @@ recover_ec(term_t t, ECKEY **rec)
   }
 
   *rec = key;
-  rc = TRUE;
+  rc = true;
 
 cleanup:
   if ( ctx ) EVP_PKEY_CTX_free(ctx);
@@ -900,11 +900,11 @@ cleanup:
 	 PL_get_arg(3, t, tcurve) &&
 	 PL_get_chars(tcurve, &curve, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) &&
 	 (key = EC_KEY_new_by_curve_name(OBJ_sn2nid(curve)))) )
-    return FALSE;
+    return false;
 
   if ( !get_bn_arg(1, t, &privkey) )
   { EC_KEY_free(key);
-    return FALSE;
+    return false;
   }
 
   if ( privkey )
@@ -916,11 +916,11 @@ cleanup:
 		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) &&
        (key = o2i_ECPublicKey(&key, (const unsigned char**) &codes, codes_len)) )
   { *rec = key;
-    return TRUE;
+    return true;
   }
 
   EC_KEY_free(key);
-  return FALSE;
+  return false;
 #endif
 }
 #endif
@@ -935,7 +935,7 @@ recover_rsa(term_t t, RSAKEY** keyp)
   OSSL_PARAM_BLD *param_builder = NULL;
   OSSL_PARAM *params = NULL;
   EVP_PKEY_CTX* ctx = NULL;
-  int rc = FALSE;
+  int rc = false;
 
   if ( !(get_bn_arg(1, t, &n) &&
 	 get_bn_arg(2, t, &e) &&
@@ -968,7 +968,7 @@ recover_rsa(term_t t, RSAKEY** keyp)
   }
 
   *keyp = key;
-  rc = TRUE;
+  rc = true;
 
 out:
   OSSL_PARAM_free(params);
@@ -993,13 +993,13 @@ out:
          ( (dmp1 || dmq1 || iqmp) &&
            !RSA_set0_crt_params(key, dmp1, dmq1, iqmp)) )
     { RSA_free(key);
-      return FALSE;
+      return false;
     }
     *keyp = key;
-    return TRUE;
+    return true;
   }
   RSA_free(key);
-  return FALSE;
+  return false;
 #endif
 }
 
@@ -1013,7 +1013,7 @@ recover_private_key(term_t t, RSAKEY** rsap)
 	 PL_get_arg(1, t, arg) )
       return recover_rsa(arg, rsap);
 
-    return FALSE;
+    return false;
   }
 
   return PL_type_error("private_key", t);
@@ -1029,7 +1029,7 @@ recover_public_key(term_t t, RSAKEY** rsap)
 	 PL_get_arg(1, t, arg) )
       return recover_rsa(arg, rsap);
 
-    return FALSE;
+    return false;
   }
 
   return PL_type_error("public_key", t);
@@ -1055,10 +1055,10 @@ get_padding(term_t t, crypt_mode_t mode, int *padding)
     else if ( a == ATOM_block  && mode == EVP_MODE )     *padding = 1;
     else return PL_domain_error("padding", t);
 
-    return TRUE;
+    return true;
   }
 
-  return FALSE;
+  return false;
 }
 
 
@@ -1071,7 +1071,7 @@ get_enc_text(term_t text, term_t enc, size_t *len, unsigned char **data)
     return PL_get_nchars(text, len, (char**)data, flags);
   }
 
-  return FALSE;
+  return false;
 }
 
 
@@ -1085,22 +1085,22 @@ static int
 parse_options(term_t options_t, crypt_mode_t mode, int* rep, int* padding)
 { if (PL_is_atom(options_t)) /* Is really an encoding */
   { if (rep == NULL)
-      return TRUE;
+      return true;
     else if ( !get_text_representation(options_t, rep) )
-      return FALSE;
+      return false;
   } else
   { term_t encoding = 0, pad = 0;
 
     if ( !PL_scan_options(options_t, 0, "crypt_option", crypt_options,
 			  &encoding, &pad) )
-      return FALSE;
+      return false;
     if ( encoding && !get_text_representation(encoding, rep) )
-      return FALSE;
+      return false;
     if ( pad && padding != NULL && !get_padding(pad, mode, padding) )
-      return FALSE;
+      return false;
   }
 
-  return TRUE;
+  return true;
 }
 
 
@@ -1129,7 +1129,7 @@ pl_ecdsa_sign(term_t Private, term_t Data, term_t Enc, term_t Signature)
 
   if ( !recover_ec(Private, &key) ||
        !get_enc_text(Data, Enc, &data_len, &data) )
-    return FALSE;
+    return false;
 
 #ifdef USE_EVP_API
   if ( !(sign_ctx = EVP_PKEY_CTX_new(key, NULL)) ||
@@ -1178,12 +1178,12 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
   if ( !recover_ec(Public, &key) ||
        !get_enc_text(Data, Enc, &data_len, &data) ||
        !PL_get_nchars(Signature, &signature_len, (char **) &signature, REP_ISO_LATIN_1|CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
 
   copy = signature;
 
   if ( !(sig = d2i_ECDSA_SIG(NULL, &copy, (int)signature_len)) )
-    return FALSE;
+    return false;
 
 #ifdef USE_EVP_API
   EVP_PKEY_CTX *verify_ctx = EVP_PKEY_CTX_new(key, NULL);
@@ -1248,14 +1248,14 @@ get_octets_ex(term_t t, size_t expected, unsigned char **data)
 
   if ( !PL_get_nchars(t, &len, (char**)data,
 		      CVT_LIST|CVT_EXCEPTION|REP_ISO_LATIN_1) )
-    return FALSE;
+    return false;
 
   if ( len != expected )
   { Ssprintf(domain, "bytes(%zd)", expected);
     return PL_domain_error(domain, t);
   }
 
-  return TRUE;
+  return true;
 }
 
 
@@ -1293,8 +1293,8 @@ pl_ed25519_seed_public_key(term_t Seed, term_t Public)
   size_t public_len = sizeof(public);
   int rc;
 
-  if ( !(pkey = raw_key(EVP_PKEY_ED25519, Seed, TRUE)) )
-    return FALSE;
+  if ( !(pkey = raw_key(EVP_PKEY_ED25519, Seed, true)) )
+    return false;
 
   rc = EVP_PKEY_get_raw_public_key(pkey, public, &public_len);
   EVP_PKEY_free(pkey);
@@ -1319,12 +1319,12 @@ pl_ed25519_sign(term_t Seed, term_t Data, term_t Enc, term_t Signature)
   unsigned char signature[ED25519_SIG_LEN];
   size_t signature_len = sizeof(signature);
 
-  if ( !(pkey = raw_key(EVP_PKEY_ED25519, Seed, TRUE)) )
-    return FALSE;
+  if ( !(pkey = raw_key(EVP_PKEY_ED25519, Seed, true)) )
+    return false;
 
   if ( !get_enc_text(Data, Enc, &data_len, &data) )
   { EVP_PKEY_free(pkey);
-    return FALSE;
+    return false;
   }
 
   /* Ed25519 requires the one-shot EVP_DigestSign() with a NULL digest */
@@ -1356,13 +1356,13 @@ pl_ed25519_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
   size_t data_len;
   int rc;
 
-  if ( !(pkey = raw_key(EVP_PKEY_ED25519, Public, FALSE)) )
-    return FALSE;
+  if ( !(pkey = raw_key(EVP_PKEY_ED25519, Public, false)) )
+    return false;
 
   if ( !get_enc_text(Data, Enc, &data_len, &data) ||
        !get_octets_ex(Signature, ED25519_SIG_LEN, &signature) )
   { EVP_PKEY_free(pkey);
-    return FALSE;
+    return false;
   }
 
   if ( !(ctx = EVP_MD_CTX_new()) ||
@@ -1377,10 +1377,10 @@ pl_ed25519_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
   EVP_PKEY_free(pkey);
 
   if ( rc == 1 )
-    return TRUE;
+    return true;
   if ( rc == 0 )			/* invalid signature */
   { ERR_clear_error();
-    return FALSE;
+    return false;
   }
 
   return raise_ssl_error(ERR_get_error());
@@ -1400,11 +1400,11 @@ pl_curve25519_scalar_mult(term_t Scalar, term_t Point, term_t Result)
   size_t result_len = sizeof(result);
   int rc;
 
-  if ( !(pkey = raw_key(EVP_PKEY_X25519, Scalar, TRUE)) )
-    return FALSE;
-  if ( !(peer = raw_key(EVP_PKEY_X25519, Point, FALSE)) )
+  if ( !(pkey = raw_key(EVP_PKEY_X25519, Scalar, true)) )
+    return false;
+  if ( !(peer = raw_key(EVP_PKEY_X25519, Point, false)) )
   { EVP_PKEY_free(pkey);
-    return FALSE;
+    return false;
   }
 
   if ( !(ctx = EVP_PKEY_CTX_new(pkey, NULL)) ||
@@ -1424,7 +1424,7 @@ pl_curve25519_scalar_mult(term_t Scalar, term_t Point, term_t Result)
 
   if ( rc <= 0 )
   { ERR_clear_error();
-    return FALSE;
+    return false;
   }
 
   return PL_unify_list_ncodes(Result, result_len, (char *)result);
@@ -1457,13 +1457,13 @@ pl_rsa_private_decrypt(term_t private_t, term_t cipher_t,
   int retval;
 
   if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
-    return FALSE;
+    return false;
 
   if( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
 		     CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
   if ( !recover_private_key(private_t, &key) )
-    return FALSE;
+    return false;
 #ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
 #else
@@ -1535,12 +1535,12 @@ pl_rsa_public_decrypt(term_t public_t, term_t cipher_t,
   int retval;
 
   if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
-    return FALSE;
+    return false;
   if ( !PL_get_nchars(cipher_t, &cipher_length, (char**)&cipher,
 		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
   if ( !recover_public_key(public_t, &key) )
-    return FALSE;
+    return false;
 #ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
 #else
@@ -1614,15 +1614,15 @@ pl_rsa_public_encrypt(term_t public_t,
   int retval;
 
   if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
-    return FALSE;
+    return false;
 
   ssl_deb(1, "Generating terms");
   ssl_deb(1, "Collecting plaintext");
   if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
 		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION | rep))
-    return FALSE;
+    return false;
   if ( !recover_public_key(public_t, &key) )
-    return FALSE;
+    return false;
 
 #ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
@@ -1697,13 +1697,13 @@ pl_rsa_private_encrypt(term_t private_t,
   int retval;
 
   if ( !parse_options(options_t, RSA_MODE, &rep, &padding))
-    return FALSE;
+    return false;
 
   if ( !PL_get_nchars(plain_t, &plain_length, (char**)&plain,
 		      CVT_ATOM|CVT_STRING|CVT_LIST|CVT_EXCEPTION | rep))
-    return FALSE;
+    return false;
   if ( !recover_private_key(private_t, &key) )
-    return FALSE;
+    return false;
 
 #ifdef USE_EVP_API
   outsize = EVP_PKEY_get_size(key);
@@ -1774,13 +1774,13 @@ get_digest_type(term_t t, int *type)
     else if ( a == ATOM_sha512 ) *type = NID_sha512;
     else
     { PL_domain_error("digest_type", t);
-      return FALSE;
+      return false;
     }
 
-    return TRUE;
+    return true;
   }
 
-  return FALSE;
+  return false;
 }
 
 
@@ -1802,7 +1802,7 @@ pl_rsa_sign(term_t Private, term_t Type, term_t Enc,
   if ( !get_enc_text(Data, Enc, &data_len, &data) ||
        !recover_private_key(Private, &key) ||
        !get_digest_type(Type, &type) )
-    return FALSE;
+    return false;
 
 #ifdef USE_EVP_API
   signature_len = EVP_PKEY_get_size(key);
@@ -1855,7 +1855,7 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
        !recover_public_key(Public, &key) ||
        !get_digest_type(Type, &type) ||
        !PL_get_nchars(Signature, &signature_len, (char**)&signature, REP_ISO_LATIN_1|CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
 #if defined USE_EVP_API
   OSSL_PARAM params[2];
   params[0] = OSSL_PARAM_construct_utf8_string("digest", (char *)OBJ_nid2ln(type), 0);
@@ -1903,7 +1903,7 @@ init_cipher(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
 
   if ( !PL_get_nchars(key_t, &keylen, &key, cvt_flags) ||
        !PL_get_nchars(iv_t, &ivlen, &iv, cvt_flags) )
-    return FALSE;
+    return false;
 
   if ( EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL, enc) != 1 )
     return raise_ssl_error(ERR_get_error());
@@ -1931,7 +1931,7 @@ init_cipher(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
 			 (const unsigned char*)iv, enc) != 1 )
     return raise_ssl_error(ERR_get_error());
 
-  return TRUE;
+  return true;
 }
 
 
@@ -1982,21 +1982,21 @@ pl_crypto_data_decrypt(term_t ciphertext_t, term_t algorithm_t,
   int padding = 1;
   char *authtag;
   size_t authlen;
-  int rc = FALSE;
+  int rc = false;
 
   if ( !parse_options(options_t, EVP_MODE, &rep, &padding) )
-    return FALSE;
+    return false;
 
   if ( !PL_get_nchars(ciphertext_t, &cipher_length, &ciphertext, cvt_flags) ||
        !PL_get_chars(algorithm_t, &algorithm, cvt_flags) )
-    return FALSE;
+    return false;
   if ( cipher_length > INT_MAX )
     return PL_representation_error("cipher_length");
 
   if ( (cipher = EVP_get_cipherbyname(algorithm)) == NULL )
     return PL_domain_error("cipher", algorithm_t);
   if ( !PL_get_nchars(authtag_t, &authlen, &authtag, CVT_LIST|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
   if ( is_aead_cipher(cipher) && authlen == 0 )
   { term_t ex;
     return ( (ex=PL_new_term_ref()) &&
@@ -2062,17 +2062,17 @@ pl_crypto_data_encrypt(term_t plaintext_t, term_t algorithm_t,
   int padding = 1;
   int authlen;
   char authtag[MAX_AUTHLEN];
-  int rc = FALSE;
+  int rc = false;
 
   if ( !parse_options(options_t, EVP_MODE, &rep, &padding) ||
        !PL_get_integer_ex(authlen_t, &authlen) )
-    return FALSE;
+    return false;
   if ( authlen > MAX_AUTHLEN )
     return PL_domain_error("tag_length", authlen_t);
 
   if ( !PL_get_nchars(plaintext_t, &plain_length, &plaintext, cvt_flags | rep) ||
        !PL_get_chars(algorithm_t, &algorithm, cvt_flags) )
-    return FALSE;
+    return false;
   if ( plain_length > INT_MAX - EVP_MAX_BLOCK_LENGTH )
     return PL_representation_error("plain_length");
 
@@ -2134,7 +2134,7 @@ pl_crypto_modular_inverse(term_t tx, term_t tm, term_t tout)
 { BIGNUM *x = NULL, *m = NULL, *r = NULL;
   BN_CTX *ctx = NULL;
   char *hex = NULL;
-  int rc, ssl_err = FALSE;
+  int rc, ssl_err = false;
 
   if ( get_bn_arg(1, tx, &x) &&
        get_bn_arg(1, tm, &m)  &&
@@ -2143,7 +2143,7 @@ pl_crypto_modular_inverse(term_t tx, term_t tm, term_t tout)
        ( hex = BN_bn2hex(r) ) )
   { rc = PL_unify_chars(tout, PL_STRING|REP_ISO_LATIN_1, strlen(hex), hex);
   } else
-  { ssl_err = TRUE;
+  { ssl_err = true;
   }
 
   OPENSSL_free(hex);
@@ -2179,22 +2179,22 @@ pl_crypto_generate_prime(term_t tbits, term_t tprime, term_t tsafe,
   BN_GENCB *gcb = NULL;
   int bits, safe;
   char *hex = NULL;
-  int rc = FALSE, ssl_err = FALSE;
+  int rc = false, ssl_err = false;
 
   if ( !PL_get_integer_ex(tbits, &bits) )
-    return FALSE;
+    return false;
 
   if ( !PL_get_bool_ex(tsafe, &safe) )
-    return FALSE;
+    return false;
 
   if ( ( prime = BN_new() ) &&
        ( gcb = BN_GENCB_new() ) &&
-       ( BN_GENCB_set(gcb, bn_gencb, NULL), TRUE ) &&
+       ( BN_GENCB_set(gcb, bn_gencb, NULL), true ) &&
        ( BN_generate_prime_ex(prime, bits, safe, NULL, NULL, gcb ) ) &&
        ( hex = BN_bn2hex(prime) ) )
   { rc = PL_unify_chars(tprime, PL_STRING|REP_ISO_LATIN_1, strlen(hex), hex);
   } else if ( !PL_exception(0) )
-  { ssl_err = TRUE;
+  { ssl_err = true;
   }
 
   OPENSSL_free(hex);
@@ -2216,7 +2216,7 @@ pl_crypto_is_prime(term_t tprime, term_t tnchecks)
   int ret = -1;
 
   if ( !PL_get_integer_ex(tnchecks, &nchecks) )
-    return FALSE;
+    return false;
 
   nchecks = ( nchecks < 0 ) ? BN_prime_checks : nchecks;
 
@@ -2245,7 +2245,7 @@ pl_crypto_is_prime(term_t tprime, term_t tnchecks)
 
   if ( ret == -1 )
   { if ( PL_exception(0) )
-      return FALSE;
+      return false;
     return raise_ssl_error(ERR_get_error());
   }
 
@@ -2274,7 +2274,7 @@ free_crypto_curve(PL_CRYPTO_CURVE *c)
 { BN_CTX_free(c->ctx);
   EC_GROUP_free(c->group);
   free(c);
-  return TRUE;
+  return true;
 }
 
 static int
@@ -2284,7 +2284,7 @@ release_curve(atom_t atom)
   PL_CRYPTO_CURVE *c = *cp;
   ssl_deb(4, "Releasing PL_CRYPTO_CURVE %p\n", c);
   free_crypto_curve(c);
-  return TRUE;
+  return true;
 }
 
 static int
@@ -2307,7 +2307,7 @@ write_curve(IOSTREAM *s, atom_t symbol, int flags)
 
   Sfprintf(s, "<crypto_curve>(%s, %p)", name, c);
 
-  return TRUE;
+  return true;
 }
 
 static void
@@ -2331,14 +2331,14 @@ static PL_blob_t crypto_curve_type =
 static int
 unify_curve(term_t tcurve, PL_CRYPTO_CURVE *curve)
 { if ( PL_unify_blob(tcurve, &curve, sizeof(curve), &crypto_curve_type) )
-    return TRUE;
+    return true;
 
   free_crypto_curve(curve);
 
   if ( !PL_exception(0) )
     return PL_uninstantiation_error(tcurve);
 
-  return FALSE;
+  return false;
 }
 
 static int
@@ -2353,7 +2353,7 @@ get_curve(term_t tcurve, PL_CRYPTO_CURVE **curve)
     assert(c->magic == CURVE_MAGIC);
     *curve = c;
 
-    return TRUE;
+    return true;
   }
 
   return PL_type_error("crypto_curve", tcurve);
@@ -2369,7 +2369,7 @@ pl_crypto_name_curve(term_t tname, term_t tcurve)
   char *name;
 
   if ( !PL_get_chars(tname, &name, CVT_ATOM|CVT_STRING|CVT_EXCEPTION) )
-    return FALSE;
+    return false;
 
   if ( !(curve = malloc(sizeof(*curve))) )
     return PL_resource_error("memory");
@@ -2400,17 +2400,17 @@ pl_crypto_curve_order(term_t tcurve, term_t torder)
   PL_CRYPTO_CURVE *curve = NULL;
   BIGNUM *order = NULL;
   char *hex = NULL;
-  int rc = FALSE, ssl_err = FALSE;
+  int rc = false, ssl_err = false;
 
   if ( !get_curve(tcurve, &curve) )
-    return FALSE;
+    return false;
 
   if ( ( order = BN_new() ) &&
        EC_GROUP_get_order(curve->group, order, curve->ctx) &&
        ( hex = BN_bn2hex(order) ) )
   { rc = PL_unify_chars(torder, PL_STRING|REP_ISO_LATIN_1, strlen(hex), hex);
   } else
-  { ssl_err = TRUE;
+  { ssl_err = true;
   }
 
   OPENSSL_free(hex);
@@ -2434,10 +2434,10 @@ pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
   PL_CRYPTO_CURVE *curve = NULL;
   BIGNUM *x = NULL, *y = NULL;
   char *xhex = NULL, *yhex = NULL;
-  int rc = FALSE, ssl_err = FALSE;
+  int rc = false, ssl_err = false;
 
   if ( !get_curve(tcurve, &curve) )
-    return FALSE;
+    return false;
 
   if ( ( x = BN_new() ) &&
        ( y = BN_new() ) &&
@@ -2449,7 +2449,7 @@ pl_crypto_curve_generator(term_t tcurve, term_t tx, term_t ty)
   { rc = PL_unify_chars(tx, PL_STRING|REP_ISO_LATIN_1, strlen(xhex), xhex)
       && PL_unify_chars(ty, PL_STRING|REP_ISO_LATIN_1, strlen(yhex), yhex);
   } else
-  { ssl_err = TRUE;
+  { ssl_err = true;
   }
 
   OPENSSL_free(xhex); OPENSSL_free(yhex);
@@ -2476,10 +2476,10 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
   EC_POINT *r = NULL, *q = NULL;
   char *ahex = NULL, *bhex = NULL;
   PL_CRYPTO_CURVE *curve = NULL;
-  int rc, ssl_err = FALSE;
+  int rc, ssl_err = false;
 
   if ( !get_curve(tcurve, &curve) )
-    return FALSE;
+    return false;
 
   if ( get_bn_arg(1, ts, &s) &&
        get_bn_arg(1, tx, &x) &&
@@ -2496,8 +2496,8 @@ pl_crypto_curve_scalar_mult(term_t tcurve, term_t ts,
   { rc = PL_unify_chars(ta, PL_STRING|REP_ISO_LATIN_1, strlen(ahex), ahex)
       && PL_unify_chars(tb, PL_STRING|REP_ISO_LATIN_1, strlen(bhex), bhex);
   } else
-  { rc = FALSE;					/* silence compiler */
-    ssl_err = TRUE;
+  { rc = false;					/* silence compiler */
+    ssl_err = true;
   }
 
   OPENSSL_free(ahex); OPENSSL_free(bhex);
@@ -2527,7 +2527,7 @@ plugin.
 
 static int
 crypto_lib_init(void)
-{ return TRUE;
+{ return true;
 }
 
 
@@ -2541,11 +2541,11 @@ crypto_set_debug(term_t level)
 { int l;
 
   if ( !PL_get_integer_ex(level, &l) )
-    return FALSE;
+    return false;
 
   ssl_set_debug(l);
 
-  return TRUE;
+  return true;
 }
 
 		 /*******************************

@@ -53,7 +53,7 @@ right module.
 #define APPMACROS_ONLY 1
 #include <openssl/applink.c>
 
-static int applink_done = FALSE;
+static int applink_done = false;
 static void **applink_table = NULL;
 
 static void*
@@ -63,7 +63,7 @@ applink(int n)
     void**(*f)(void) = (void*)GetProcAddress(mod, "OPENSSL_Applink");
     if ( f )
       applink_table = f();
-    applink_done = TRUE;
+    applink_done = true;
   }
 
   if ( applink_table )
