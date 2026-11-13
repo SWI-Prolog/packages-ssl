@@ -61,7 +61,7 @@
 #define Soutput         stdout
 #define Serror          stderr
 #define Svfprintf       vfprintf
-static int PL_handle_signals(void) { return 0; }
+static bool PL_handle_signals(void) { return 0; }
 #ifndef __WINDOWS__
 #define closesocket	close
 #endif

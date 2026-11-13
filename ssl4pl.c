@@ -376,7 +376,7 @@ free_cacert_stack(cacert_stack *s)
 		 *   GET TYPED TERM ARGUMENTS	*
 		 *******************************/
 
-static int
+static bool
 get_char_arg(int a, term_t t, char **s)
 { term_t t2 = PL_new_term_ref();
 
@@ -385,7 +385,7 @@ get_char_arg(int a, term_t t, char **s)
 }
 
 
-static int
+static bool
 get_bool_arg(int a, term_t t, int *i)
 { term_t t2 = PL_new_term_ref();
 
@@ -394,7 +394,7 @@ get_bool_arg(int a, term_t t, int *i)
 }
 
 
-static int
+static bool
 unify_bignum(term_t t, const BIGNUM *bn)
 { int rc;
 
@@ -433,7 +433,7 @@ unify_bignum_arg(int a, term_t t, const BIGNUM *bn)
    Fractional seconds are ignored. This is also largely untested - there
    may be a lot of edge cases that dont work!
 */
-static int
+static bool
 unify_asn1_time(term_t term, const ASN1_TIME *time)
 { ASN1_TIME *epoch;
   int day, sec;
@@ -487,7 +487,7 @@ hash_X509_crl_digest_wrapper(const void *data, const EVP_MD *type,
 { return X509_CRL_digest((X509_CRL *) data, type, md, l);
 }
 
-static int
+static bool
 unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
            int (*data_to_digest)(const void*, const EVP_MD *,
 				 unsigned char*, unsigned int*),
@@ -509,7 +509,7 @@ unify_hash(term_t hash, const ASN1_OBJECT* algorithm,
 }
 
 
-static int
+static bool
 unify_name(term_t term, const X509_NAME* name)
 { int ni;
   term_t list = PL_copy_term_ref(term);
@@ -543,7 +543,7 @@ unify_name(term_t term, const X509_NAME* name)
 }
 
 
-static int
+static bool
 unify_crl(term_t term, X509_CRL* crl)
 { const ASN1_BIT_STRING *psig;
   const X509_ALGOR *palg;
@@ -615,7 +615,7 @@ unify_crl(term_t term, X509_CRL* crl)
 }
 
 
-static int
+static bool
 unify_rsa(term_t item, RSAKEY* rsa)
 {
 #ifdef USE_EVP_API
@@ -651,7 +651,7 @@ unify_rsa(term_t item, RSAKEY* rsa)
 }
 
 #ifndef OPENSSL_NO_EC
-static int
+static bool
 unify_ec(term_t item, ECKEY *key)
 { unsigned char *buf = NULL;
   int rc;
@@ -718,7 +718,7 @@ unify_ec(term_t item, ECKEY *key)
 
 #define CURVE25519_KEY_LEN 32
 
-static int
+static bool
 unify_hex_key(term_t item, functor_t functor,
 	      size_t len, const unsigned char *data)
 { term_t hex;
@@ -729,7 +729,7 @@ unify_hex_key(term_t item, functor_t functor,
 }
 
 
-static int
+static bool
 unify_raw_public_key(term_t item, EVP_PKEY *key, functor_t functor)
 { unsigned char public[CURVE25519_KEY_LEN];
   size_t public_len = sizeof(public);
@@ -749,7 +749,7 @@ unify_raw_public_key(term_t item, EVP_PKEY *key, functor_t functor)
    and thus can be used for signing with ed25519_sign/4.
 */
 
-static int
+static bool
 unify_ed25519(term_t item, EVP_PKEY *key)
 { static const unsigned char header[] =
     { 0x30,81,			/* SEQUENCE of 81 bytes */
@@ -787,7 +787,7 @@ unify_ed25519(term_t item, EVP_PKEY *key)
    by curve25519_scalar_mult/3 of library(crypto).
 */
 
-static int
+static bool
 unify_x25519(term_t item, EVP_PKEY *key)
 { unsigned char private[CURVE25519_KEY_LEN];
   size_t private_len = sizeof(private);
@@ -803,7 +803,7 @@ unify_x25519(term_t item, EVP_PKEY *key)
 #endif /*HAVE_X25519*/
 
 
-static int
+static bool
 unify_key(EVP_PKEY* key, functor_t type, term_t item)
 { if ( type )
   { term_t arg;
@@ -886,12 +886,12 @@ unify_key(EVP_PKEY* key, functor_t type, term_t item)
 }
 
 
-static int
+static bool
 unify_public_key(EVP_PKEY* key, term_t item)
 { return unify_key(key, FUNCTOR_public_key1, item);
 }
 
-static int
+static bool
 unify_private_key(EVP_PKEY* key, term_t item)
 { return unify_key(key, FUNCTOR_private_key1, item);
 }
@@ -922,14 +922,14 @@ static PL_blob_t certificate_type =
   NULL
 };
 
-static int
+static bool
 unify_certificate_blob(term_t Cert, X509* cert)
 { term_t blob = PL_new_term_ref();
   PL_put_blob(blob, cert, sizeof(void*), &certificate_type);
   return PL_unify(Cert, blob);
 }
 
-static int
+static bool
 unify_certificate_blob_copy(term_t Cert, X509* cert)
 { term_t blob = PL_new_term_ref();
   PL_put_blob(blob, X509_dup(cert), sizeof(void*), &certificate_type);
@@ -937,7 +937,7 @@ unify_certificate_blob_copy(term_t Cert, X509* cert)
 }
 
 
-static int
+static bool
 get_certificate_blob(term_t Cert, X509** cert)
 { PL_blob_t* type;
   if (PL_get_blob(Cert, (void**)cert, NULL, &type) && type == &certificate_type)
@@ -946,7 +946,7 @@ get_certificate_blob(term_t Cert, X509** cert)
 }
 
 
-static int
+static bool
 unify_certificate_copies(term_t certs, term_t tail, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
@@ -967,7 +967,7 @@ unify_certificate_copies(term_t certs, term_t tail, STACK_OF(X509)* stack)
   return retval && PL_unify_nil(list);
 }
 
-static int
+static bool
 unify_certificate_copies_inorder(term_t certs, STACK_OF(X509)* stack)
 { term_t item = PL_new_term_ref();
   term_t list = PL_copy_term_ref(certs);
@@ -1373,7 +1373,7 @@ struct
 			      {NULL, NULL}};
 
 
-static int fetch_field(field_enum *state)
+static bool fetch_field(field_enum *state)
 { if (certificate_fields[state->index].name != 0)
   { term_t arg = PL_new_term_ref();
     foreign_t rc = certificate_fields[state->index].fetch(arg, state->cert);
@@ -1563,7 +1563,7 @@ static PL_blob_t ssl_context_type =
 };
 
 
-static int
+static bool
 unify_conf(term_t config, PL_SSL *conf)
 { if ( PL_unify_blob(config, &conf, sizeof(conf), &ssl_context_type) )
     return true;
@@ -2800,7 +2800,7 @@ get_dh2048(void)
 #define SSL_CTX_add0_chain_cert(CTX, C) SSL_CTX_add_extra_chain_cert(CTX, C)
 #endif
 
-static int
+static bool
 ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
 {
   X509 *certX509;
@@ -2834,7 +2834,7 @@ ssl_use_certificate(PL_SSL *config, char *certificate, X509 **ret)
   return true;
 }
 
-static int
+static bool
 ssl_use_key(PL_SSL *config, char *key)
 {
   BIO* bio = BIO_new_mem_buf(key, -1);
@@ -2863,7 +2863,7 @@ ssl_use_key(PL_SSL *config, char *key)
    certificate_key_pairs/1.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-static int
+static bool
 ssl_use_certificates(PL_SSL *config)
 {
   int cert_idx;
@@ -3032,7 +3032,7 @@ ssl_init_alpn_protos(PL_SSL *config)
   }
 }
 
-static int
+static bool
 set_malleable_options(PL_SSL *config)
 {
 
@@ -3089,7 +3089,7 @@ set_malleable_options(PL_SSL *config)
 }
 
 
-static int
+static bool
 ssl_config(PL_SSL *config)
 /*
  * Initialize various SSL layer parameters using the supplied
@@ -3163,7 +3163,7 @@ ssl_lib_init(void)
     return 0;
 }
 
-static int
+static bool
 ssl_lib_exit(void)
 /*
  * One-time library exit calls
@@ -3177,7 +3177,7 @@ ssl_lib_exit(void)
  * Establish an SSL session using the given read and write streams
  * and the role
  */
-static int
+static bool
 ssl_ssl_bio(PL_SSL *config, IOSTREAM* sread, IOSTREAM* swrite,
             PL_SSL_INSTANCE** instancep)
 { PL_SSL_INSTANCE *instance;
@@ -3374,7 +3374,7 @@ protocol_version_to_integer(const term_t symbol, int *version)
    extremely tempting to modify some paramaters destructively.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-static int
+static bool
 parse_malleable_options(PL_SSL *conf, module_t module, term_t options)
 { term_t tail = PL_copy_term_ref(options);
   term_t head = PL_new_term_ref();
@@ -3605,7 +3605,7 @@ get_ssl_method(term_t method)
 
 static cacert_stack *root_cacert_stack = NULL;
 
-static int
+static bool
 add_system_root_certificates(cacert_stack *stack)
 { STACK_OF(X509) *system_certs = system_root_certificates();
   int index = 0;
@@ -3626,7 +3626,7 @@ add_system_root_certificates(cacert_stack *stack)
 }
 
 
-static int
+static bool
 get_cacerts_roots_only(term_t term, cacert_stack **stackp)
 { term_t tail = PL_copy_term_ref(term);
   term_t head = PL_new_term_ref();
@@ -3668,7 +3668,7 @@ certificates are all duplicated using X509_dup()   such that they can be
 freed uniformely when the stack is freed.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-static int
+static bool
 get_cacerts(term_t CATail, cacert_stack **stackp)
 { term_t CAHead;
   cacert_stack *stack;
@@ -3727,7 +3727,7 @@ get_cacerts(term_t CATail, cacert_stack **stackp)
 }
 
 
-static int
+static bool
 get_crls(term_t list, STACK_OF(X509_CRL) **crlp)
 { STACK_OF(X509_CRL) *crls = sk_X509_CRL_new_null();
   term_t list_head = PL_new_term_ref();
@@ -3762,7 +3762,7 @@ get_crls(term_t list, STACK_OF(X509_CRL) **crlp)
 }
 
 
-static int
+static bool
 get_cert_key_pairs(term_t list, PL_SSL *conf, term_t options)
 { term_t cert_head = PL_new_term_ref();
   term_t cert_tail = PL_copy_term_ref(list);
@@ -4157,7 +4157,7 @@ pl_ssl_debug(term_t level)
 }
 
 
-static int
+static bool
 add_key_string(term_t list, functor_t f, size_t len, const unsigned char*s)
 { term_t tmp;
   int rc;
@@ -4251,7 +4251,7 @@ pl_verify_certificate(term_t Cert, term_t Chain, term_t Roots)
   return rc;
 }
 
-static int
+static bool
 get_ssl_stream(term_t stream_t, IOSTREAM **locked, IOSTREAM **ssl)
 { IOSTREAM *stream, *ssl_stream;
 

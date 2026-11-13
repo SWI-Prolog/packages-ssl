@@ -43,7 +43,7 @@
 #include "cryptolib.h"
 
 
-static int
+static bool
 unify_bytes_hex(term_t t, size_t len, const unsigned char *data)
 { char tmp[512];
   char *out, *o;
@@ -189,7 +189,7 @@ ssl_deb(int level, char *fmt, ...)
 #endif
 }
 
-static inline int
+static inline bool
 ssl_missing(const char *feature)
 { term_t t = PL_new_term_ref();
 

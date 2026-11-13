@@ -228,7 +228,7 @@ static PL_blob_t crypto_hash_context_type =
 };
 
 
-static int
+static bool
 unify_hash_context(term_t tcontext, PL_CRYPTO_HASH_CONTEXT *context)
 { if ( PL_unify_blob(tcontext, &context, sizeof(context), &crypto_hash_context_type) )
     return true;
@@ -267,7 +267,7 @@ typedef struct algorithm_pair {
 #define ALGO(a) { ATOM_## a , EVP_## a() }
 #define NELEMS(array) (sizeof(array)/sizeof((array)[0]))
 
-static int
+static bool
 get_hash_algorithm(atom_t a_algorithm, const EVP_MD **algorithm)
 { int i;
   ALGORITHM_PAIR algorithms[] =
@@ -317,7 +317,7 @@ static PL_option_t hash_options_spec[] =
   PL_OPTIONS_END
 };
 
-static int
+static bool
 hash_options(term_t options, PL_CRYPTO_HASH_CONTEXT *result)
 { term_t algorithm = 0, hmac = 0, encoding = 0;
 
@@ -805,7 +805,7 @@ pl_crypto_data_hkdf(term_t tkey, term_t tsalt, term_t tinfo, term_t talg,
                  *       Bignums & Keys     *
                  ****************************/
 
-static int
+static bool
 get_bn_arg(int a, term_t t, BIGNUM **bn)
 { term_t arg;
   char *hex;
@@ -833,7 +833,7 @@ get_bn_arg(int a, term_t t, BIGNUM **bn)
 #define ECKEY EC_KEY
 #endif
 
-static int
+static bool
 recover_ec(term_t t, ECKEY **rec)
 {
 #ifdef USE_EVP_API
@@ -926,7 +926,7 @@ cleanup:
 #endif
 
 
-static int
+static bool
 recover_rsa(term_t t, RSAKEY** keyp)
 { BIGNUM *n = NULL, *e = NULL, *d = NULL, *p = NULL,
     *q = NULL, *dmp1 = NULL, *dmq1 = NULL, *iqmp = NULL;
@@ -1004,7 +1004,7 @@ out:
 }
 
 
-static int
+static bool
 recover_private_key(term_t t, RSAKEY** rsap)
 { if ( PL_is_functor(t, FUNCTOR_private_key1) )
   { term_t arg;
@@ -1020,7 +1020,7 @@ recover_private_key(term_t t, RSAKEY** rsap)
 }
 
 
-static int
+static bool
 recover_public_key(term_t t, RSAKEY** rsap)
 { if ( PL_is_functor(t, FUNCTOR_public_key1) )
   { term_t arg;
@@ -1040,7 +1040,7 @@ recover_public_key(term_t t, RSAKEY** rsap)
                  *       OPTION PROCESSING      *
                  *******************************/
 
-static int
+static bool
 get_padding(term_t t, crypt_mode_t mode, int *padding)
 { atom_t a;
 
@@ -1062,7 +1062,7 @@ get_padding(term_t t, crypt_mode_t mode, int *padding)
 }
 
 
-static int
+static bool
 get_enc_text(term_t text, term_t enc, size_t *len, unsigned char **data)
 { int flags;
 
@@ -1081,7 +1081,7 @@ static PL_option_t crypt_options[] =
   PL_OPTIONS_END
 };
 
-static int
+static bool
 parse_options(term_t options_t, crypt_mode_t mode, int* rep, int* padding)
 { if (PL_is_atom(options_t)) /* Is really an encoding */
   { if (rep == NULL)
@@ -1241,7 +1241,7 @@ pl_ecdsa_verify(term_t Public, term_t Data, term_t Enc, term_t Signature)
 
 #ifdef HAVE_RAW_KEYS
 
-static int
+static bool
 get_octets_ex(term_t t, size_t expected, unsigned char **data)
 { size_t len;
   char domain[32];
@@ -1762,7 +1762,7 @@ pl_rsa_private_encrypt(term_t private_t,
 }
 
 
-static int
+static bool
 get_digest_type(term_t t, int *type)
 { atom_t a;
 
@@ -1893,7 +1893,7 @@ pl_rsa_verify(term_t Public, term_t Type, term_t Enc,
    length.  The IV is ignored for ciphers that do not use an IV.
 */
 
-static int
+static bool
 init_cipher(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
 	    term_t key_t, term_t iv_t, int enc)
 { char *key, *iv;
@@ -1940,7 +1940,7 @@ init_cipher(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
    the error does not reveal the reason.
 */
 
-static int
+static bool
 raise_decrypt_failed(void)
 { term_t ex;
 
@@ -1958,7 +1958,7 @@ raise_decrypt_failed(void)
 }
 
 
-static int
+static bool
 is_aead_cipher(const EVP_CIPHER *cipher)
 { return (EVP_CIPHER_flags(cipher) & EVP_CIPH_FLAG_AEAD_CIPHER) != 0;
 }
@@ -2269,7 +2269,7 @@ typedef struct curve
   BN_CTX         *ctx;
 } PL_CRYPTO_CURVE;
 
-static int
+static bool
 free_crypto_curve(PL_CRYPTO_CURVE *c)
 { BN_CTX_free(c->ctx);
   EC_GROUP_free(c->group);
@@ -2328,7 +2328,7 @@ static PL_blob_t crypto_curve_type =
   acquire_curve
 };
 
-static int
+static bool
 unify_curve(term_t tcurve, PL_CRYPTO_CURVE *curve)
 { if ( PL_unify_blob(tcurve, &curve, sizeof(curve), &crypto_curve_type) )
     return true;
@@ -2341,7 +2341,7 @@ unify_curve(term_t tcurve, PL_CRYPTO_CURVE *curve)
   return false;
 }
 
-static int
+static bool
 get_curve(term_t tcurve, PL_CRYPTO_CURVE **curve)
 { PL_blob_t *type;
   void *data;
@@ -2525,13 +2525,13 @@ required here.  The init/exit stubs are kept for symmetry with the SSL
 plugin.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-static int
+static bool
 crypto_lib_init(void)
 { return true;
 }
 
 
-static int
+static bool
 crypto_lib_exit(void)
 { return 0;
 }
