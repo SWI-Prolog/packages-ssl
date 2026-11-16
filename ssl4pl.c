@@ -2205,6 +2205,11 @@ ssl_cb_cert_verify(int preverify_ok, X509_STORE_CTX *ctx)
             error = "hostname_mismatch";
             break;
 #endif
+#ifdef X509_V_ERR_IP_ADDRESS_MISMATCH
+          case X509_V_ERR_IP_ADDRESS_MISMATCH:
+            error = "hostname_mismatch";
+            break;
+#endif
           default:
             error_unknown = 1;
             error = X509_verify_cert_error_string(err);
