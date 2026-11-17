@@ -35,6 +35,7 @@
 #cmakedefine HAVE_TIMEGM @HAVE_TIMEGM@
 #cmakedefine HAVE_X509_CHECK_HOST @HAVE_X509_CHECK_HOST@
 #cmakedefine HAVE_ASN1_STRING_get0_data @HAVE_ASN1_STRING_get0_data@
+#cmakedefine HAVE_ASN1_STRING_get_length @HAVE_ASN1_STRING_get_length@
 #cmakedefine O_PLMT @O_PLMT@
 #cmakedefine SYSTEM_CACERT_FILENAME "@SYSTEM_CACERT_FILENAME@"
 #cmakedefine _REENTRANT @_REENTRANT@
