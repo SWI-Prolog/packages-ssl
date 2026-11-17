@@ -87,6 +87,14 @@
 #define ASN1_STRING_type(x)      (x)->type
 #endif
 
+/* OpenSSL 4.1 deprecates ASN1_STRING_length() in favour of
+ * ASN1_STRING_get_length().  Prefer the new name when available.
+ */
+#if HAVE_ASN1_STRING_get_length
+#undef ASN1_STRING_length
+#define ASN1_STRING_length(x) ASN1_STRING_get_length(x)
+#endif
+
 typedef int BOOL;
 #include <stdbool.h>
 

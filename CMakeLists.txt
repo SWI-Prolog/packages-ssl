@@ -36,6 +36,8 @@ check_c_source_compiles(
 include(CheckSymbolExists)
 check_symbol_exists(ASN1_STRING_get0_data openssl/ssl.h
 		    HAVE_ASN1_STRING_get0_data)
+check_symbol_exists(ASN1_STRING_get_length openssl/ssl.h
+		    HAVE_ASN1_STRING_get_length)
 
 AC_CHECK_FUNCS(timegm)
 AC_CHECK_FUNCS(X509_check_host)
